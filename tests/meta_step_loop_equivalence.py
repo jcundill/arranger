@@ -37,19 +37,19 @@ from typing import List, Optional, Tuple
 from arranger import VoiceLeadingEngine, slots
 from arranger.options import ArrangeOptions, Request
 
-# (melody, quality, name) triples chosen to cover the decision points rather than to
+# (melody, name) pairs chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route
 # at all, a low melody that can only be a shell, and an NC bar.
-TRIPLES: List[Tuple[str, str, str]] = [
-    ("C5", "maj7", "Cmaj7"),   # root
-    ("B4", "maj7", "Cmaj7"),   # leading tone - a chord tone
-    ("D5", "maj7", "Cmaj7"),   # 9th, absorbed by the extension strategy
-    ("A4", "7", "G7"),         # 9th over a dominant
-    ("F4", "m7", "Dm7"),       # low, likely a shell
-    ("C4", "m7b5", "Dm7b5"),   # lowest register in the suite
-    ("G#4", "m7b5", "Dm7b5"),  # no extension route: the fallback warns
-    ("Eb5", "m7", "Cm7"),      # minor 3rd
-    ("B4", "NC", "NC"),        # no harmony at all
+PROGRESSION: List[Tuple[str, str]] = [
+    ("C5", "Cmaj7"),   # root
+    ("B4", "Cmaj7"),   # leading tone - a chord tone
+    ("D5", "Cmaj7"),   # 9th, absorbed by the extension strategy
+    ("A4", "G7"),         # 9th over a dominant
+    ("F4", "Dm7"),       # low, likely a shell
+    ("C4", "Dm7b5"),   # lowest register in the suite
+    ("G#4", "Dm7b5"),  # no extension route: the fallback warns
+    ("Eb5", "Cm7"),      # minor 3rd
+    ("B4", "NC"),        # no harmony at all
 ]
 
 CHORD_CONTENTS = ("full", "targets", "2")
@@ -142,15 +142,15 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
     def test_every_chord_content_over_the_shared_fixtures(self):
         for content in CHORD_CONTENTS:
             with self.subTest(chord_notes=content):
-                self.assert_same_arrangement(TRIPLES, Request(chord_notes=content), content)
+                self.assert_same_arrangement(PROGRESSION, Request(chord_notes=content), content)
 
     def test_each_pair_of_adjacent_triples(self):
         """Every *transition* in the fixture, because most of the decisions compare a
         step with the one before it: the repeated-melody hold, the fill promotion,
         and the NC route all read the previous step."""
         for content in CHORD_CONTENTS:
-            for first in range(len(TRIPLES) - 1):
-                pair = TRIPLES[first: first + 2]
+            for first in range(len(PROGRESSION) - 1):
+                pair = PROGRESSION[first: first + 2]
                 with self.subTest(chord_notes=content, pair=pair):
                     self.assert_same_arrangement(
                         pair, Request(chord_notes=content), content
@@ -161,7 +161,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
         for content in CHORD_CONTENTS:
             with self.subTest(chord_notes=content):
                 self.assert_same_arrangement(
-                    [("F5", "maj7", "Fmaj7")], Request(chord_notes=content), content
+                    [("F5", "Fmaj7")], Request(chord_notes=content), content
                 )
 
     def assert_same_refusal(self, triples, request, label, **kwargs):
@@ -199,7 +199,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
             ("melody", Request(chord_on="none", bass_notes="walk")),
         ):
             with self.subTest(selection=label):
-                self.assert_same_refusal(TRIPLES[:4], request, label)
+                self.assert_same_refusal(PROGRESSION[:4], request, label)
 
     def test_a_narrowed_palette_agrees(self):
         """A narrowed palette is the texture's now, and the thumb line is where it bites.
@@ -213,7 +213,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
         for content in ("targets", "full"):
             with self.subTest(chord_notes=content):
                 self.assert_same_arrangement(
-                    TRIPLES[:4],
+                    PROGRESSION[:4],
                     Request(
                         chord_notes=content, bass_on="every-beat", bass_notes="walk"
                     ),

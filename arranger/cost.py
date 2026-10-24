@@ -124,8 +124,8 @@ def voicing_cost(voicing: Voicing, criteria: SelectionCriteria) -> VoicingScore:
        criterion that outranks every preference, because a wrong note is not playable
        at all while an awkward position is merely awkward. It exists because the
        hand-authored drop-2 tables do not have an inversion for every chord tone - a
-       9th in the melody of a 13 chord, for instance - and the quality-only fallback
-       that covers the gap is free to sound a note the chord does not contain. Several
+       9th in the melody of a 13 chord, for instance - and the fallback that used to cover
+       the gap was free to sound a note the chord does not contain. Several
        of the derived grips always pass this.
 
        **A count, not a yes/no, and `melody_pc` is excluded from it.** Both parts are

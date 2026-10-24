@@ -13,6 +13,7 @@ from typing import List, Tuple
 
 import arranger
 from arranger import TimeSignature
+from arranger.chords import parse_symbol
 from arranger.options import ArrangeOptions, Request
 from arranger.slots import arrange_slots
 from arranger.tuning import NO_CHORD
@@ -195,7 +196,7 @@ class TestReductionAndArranging(unittest.TestCase):
         # Five written notes, five slots - none of them merged away.
         self.assertEqual(len(slots), len(head.notes))
         # The first three are under Cmaj and the last two under F7.
-        self.assertEqual([s[0][2] for s in slots],
+        self.assertEqual([s[0][1] for s in slots],
                          ["Cmaj", "Cmaj", "Cmaj", "F7", "F7"])
         # And each note keeps the beat it was written on, so the change is heard at the
         # fourth quarter (beat 4) rather than being snapped to a grid position.
@@ -333,8 +334,11 @@ class TestReductionAndArranging(unittest.TestCase):
         """The bass rides in the name, as the corpus path keeps it, and rule B
         promotes a triad whose bass is its own seventh."""
         head = self.load(harmony("A", "minor", bass="G") + note("E"))
-        _melody, quality, name = head_skeleton(head)[0][0]
-        self.assertEqual(quality, "m7")  # A minor triad over G is a minor 7th
+        _melody, name = head_skeleton(head)[0][0]
+        # A minor triad over G is a minor 7th, and the promotion is `parse_symbol`'s.
+        symbol = parse_symbol(name)
+        assert symbol is not None
+        self.assertEqual(symbol.quality, "m7")
         self.assertEqual(name, "Am/G")
 
     def test_a_slash_chord_is_voiced_with_its_bass_preferred(self):
@@ -964,7 +968,7 @@ class TestCompoundMetres(unittest.TestCase):
         """The bar's own rhythm is dotted quarters, so the default grid follows it."""
         head, _path = self.load()
         positions = [
-            round(slot[4], 6) for slot in chord_slots(head, (1, 2))
+            round(slot[3], 6) for slot in chord_slots(head, (1, 2))
         ]
         self.assertEqual(positions, [1.0, 4.0, 7.0, 10.0])
 

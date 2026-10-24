@@ -294,12 +294,8 @@ def _selection_for(
         if prepared.harmonized_as is not None
         else prepared.chord_name
     )
-    _sub_root, sub_quality = ChordParser.parse_chord_name(substitute)
-    if sub_quality is None:
-        sub_quality = ChordParser.canonical_quality(prepared.chord_type)
-        substitute = prepared.chord_name
-    allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
-    root_pc = _grips.chord_context(prepared.chord_type, prepared.chord_name)[1]
+    allowed_tones = ChordParser.get_chord_tones(substitute)
+    root_pc = _grips.chord_context(prepared.chord_name)[1]
     assert context.harmony.melody_note is not None
     return _Selection(
         candidates=candidates,

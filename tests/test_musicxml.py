@@ -55,7 +55,7 @@ class MusicXMLTestCase(unittest.TestCase):
         # A ii-V-I, which every chord of it can voice without a non-chord tone, so
         # the tests are about the rendering rather than about the arranger.
         self.steps = engine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")]
+            [("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7")]
         )
 
     def document(self, **kwargs):
@@ -655,7 +655,7 @@ class TestMusicXMLFileOutput(unittest.TestCase):
         from arranger import write_musicxml
         engine = VoiceLeadingEngine()
         steps = engine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")]
+            [("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7")]
         )
         with tempfile.TemporaryDirectory() as folder:
             target = os.path.join(folder, "arrangement.musicxml")
@@ -677,7 +677,7 @@ class TestMusicXMLFileOutput(unittest.TestCase):
         """The renderer is pure: no file appears just because a string was asked for."""
         from arranger import format_musicxml
         engine = VoiceLeadingEngine()
-        steps = engine.arrange_progression([("C5", "maj7", "Cmaj7")])
+        steps = engine.arrange_progression([("C5", "Cmaj7")])
         with tempfile.TemporaryDirectory() as folder:
             before = set(os.listdir(folder))
             format_musicxml(steps)
@@ -713,7 +713,7 @@ class TestMusicXMLWithoutMusic21(unittest.TestCase):
         result = self.run_blocked(
             "import arranger;"
             " e = arranger.VoiceLeadingEngine();"
-            " steps = e.arrange_progression([('C5', 'maj7', 'Cmaj7')]);"
+            " steps = e.arrange_progression([('C5', 'Cmaj7')]);"
             " print(len(arranger.format_tab_staff(steps)))"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -729,7 +729,7 @@ class TestMusicXMLWithoutMusic21(unittest.TestCase):
         statement = (
             "import arranger;"
             " steps = arranger.VoiceLeadingEngine()"
-            ".arrange_progression([('C5', 'maj7', 'Cmaj7')]);"
+            ".arrange_progression([('C5', 'Cmaj7')]);"
             " arranger.format_musicxml(steps)"
         )
         result = self.run_blocked(statement)
@@ -896,9 +896,9 @@ class TestMusicXMLRepeatMarkers(MusicXMLTestCase):
         from arranger import format_musicxml
 
         progression = [
-            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
-            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
-            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+            ("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7"),
+            ("A4", "Am7"), ("C5", "D7"), ("B4", "Fmaj7"),
+            ("A4", "Bm7"), ("C5", "E7"),
         ][:count]
         steps = VoiceLeadingEngine().arrange_progression(progression)
         return ElementTree.fromstring(format_musicxml(steps, markers=markers))
@@ -1002,8 +1002,8 @@ class TestMusicXMLRepeatMarkers(MusicXMLTestCase):
         from headxml import BarMarker, load_musicxml
 
         progression = [
-            ("A4", "m7", "Dm7"), ("C5", "7", "G7"),
-            ("B4", "maj7", "Cmaj7"), ("A4", "m7", "Am7"),
+            ("A4", "Dm7"), ("C5", "G7"),
+            ("B4", "Cmaj7"), ("A4", "Am7"),
         ] * 5
         steps = VoiceLeadingEngine().arrange_progression(progression)
         for index, step in enumerate(steps):

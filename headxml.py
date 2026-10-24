@@ -61,7 +61,7 @@ from arranger import (
     resolve_grouping,
     rhythm_beats,
 )
-from arranger.chords import midi_to_note_name, promote_slash_chord
+from arranger.chords import midi_to_note_name
 from arranger.grid import RHYTHM_EVERY_BEAT, RHYTHM_MELODY, TICKS_PER_BEAT
 from arranger.grouping import COMMON_TIME, GROUPING_AUTO, TimeSignature
 from arranger.options import (
@@ -2583,7 +2583,7 @@ def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
     grouping: Optional[Sequence[int]] = None,
-) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+) -> List[Tuple[Optional[str], str, int, float, float]]:
     """Every position the bar's own rhythm generates, **including positions no melody has**.
 
     **The complement of `head_skeleton`, and the union of the two is what a comping part
@@ -2659,7 +2659,7 @@ def rhythm_slots(
     rhythm: Rhythm,
     section: Optional[Tuple[int, int]] = None,
     grouping: Optional[Sequence[int]] = None,
-) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+) -> List[Tuple[Optional[str], str, int, float, float]]:
     """Every position `rhythm` names, as slots, including positions no note has.
 
     The complement of `head_skeleton` for a **requested** chord rhythm: `1and` in a
@@ -2672,8 +2672,8 @@ def rhythm_slots(
     beats = rhythm_beats(rhythm, head.beats_per_bar, grouping)
     positions = [(bar, beat) for bar in range(lo, hi) for beat in beats]
     return [
-        (_note, _quality, _name, bar, beat, _stab_length(head, beat, length, grouping))
-        for (_note, _quality, _name, bar, beat, length) in _slots_at(
+        (_note, _name, bar, beat, _stab_length(head, beat, length, grouping))
+        for (_note, _name, bar, beat, length) in _slots_at(
             head, positions, int(head.beat_type), head.beats_per_bar
         )
     ]
@@ -2721,14 +2721,14 @@ def _slots_at(
     positions: List[Tuple[int, float]],
     beat_type: int,
     beats_per_bar: int,
-) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+) -> List[Tuple[Optional[str], str, int, float, float]]:
     """One slot per position the caller resolved, with the harmony in force there.
 
     Shared by the two position sources - the generated positions and a rhythm's
     felt beats - so the harmony lookup, the slash-bass promotion and the
     "distance to the next position" duration cannot differ between them.
     """
-    slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    slots: List[Tuple[Optional[str], str, int, float, float]] = []
     for index, (bar, beat) in enumerate(positions):
         change = chord_at(head.chords, bar, beat)
         if change is None or change.quality is None:
@@ -2741,12 +2741,12 @@ def _slots_at(
             length = (following[1] - beat) / beat_type
         else:
             length = (beats_per_bar - beat + 1.0) / beat_type
-        # Rule B, the promotion `head_skeleton` applies, from the same two facts.
-        root_name, _ = ChordParser.parse_chord_name(change.chord)
-        promoted = promote_slash_chord(root_name or "", change.quality, change.bass)
+        # The symbol carries the whole harmony, promotion included: `parse_symbol`
+        # applies Rule B itself, so a triad over its own seventh arrives a seventh
+        # chord without a second spelling to keep in step.
         name = f"{change.chord}/{change.bass}" if change.bass else change.chord
         note = melody_at(head, bar, beat)
-        slots.append((note, promoted, name, bar, beat, length))
+        slots.append((note, name, bar, beat, length))
     return slots
 
 
@@ -2755,7 +2755,7 @@ def fill_slots(
     request: ResolvedRequest,
     section: Optional[Tuple[int, int]] = None,
     grouping: Optional[Sequence[int]] = None,
-) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+) -> List[Tuple[Optional[str], str, int, float, float]]:
     """The chord slots `--chord-fills` puts in the tune's rests.
 
     A **rest-relative policy**, not a rhythm: `--chord-on` names the positions the
@@ -2778,7 +2778,7 @@ def fill_slots(
     lo, hi = section if section is not None else head.bars
     lengths = tuple(grouping) if grouping else (1,) * head.beats_per_bar
     cuts = _fill_cuts(head, request.chord_rhythm, (lo, hi), lengths)
-    slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    slots: List[Tuple[Optional[str], str, int, float, float]] = []
     for rest in melody_rests(head, (lo, hi)):
         begin = beat_offset(rest.bar, rest.beat, head.beats_per_bar)
         end = begin + rest.beats
@@ -2808,7 +2808,7 @@ def _fill_cuts(
         if lo <= change.bar < hi
     }
     if rhythm is not None and not rhythm.is_none:
-        for _melody, _quality, _name, bar, beat, _length in rhythm_slots(
+        for _melody, _name, bar, beat, _length in rhythm_slots(
             head, rhythm, section, grouping
         ):
             points.add(round(beat_offset(bar, beat, head.beats_per_bar), 6))
@@ -2821,25 +2821,22 @@ def _fill_segment(
     stop: float,
     fills: str,
     grouping: Tuple[int, ...],
-) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+) -> List[Tuple[Optional[str], str, int, float, float]]:
     """One un-split stretch of rest: its attacks, each with the harmony in force."""
     positions = [start]
     if fills == CHORD_FILLS_COMP:
         positions.extend(_felt_starts(head, start, stop, grouping))
-    slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    slots: List[Tuple[Optional[str], str, int, float, float]] = []
     for index, position in enumerate(positions):
         bar, beat = _position_at(head, position)
         change = chord_at(head.chords, bar, beat)
         if change is None or change.quality is None:
             continue
         following = positions[index + 1] if index + 1 < len(positions) else stop
-        root_name, _ = ChordParser.parse_chord_name(change.chord)
-        promoted = promote_slash_chord(root_name or "", change.quality, change.bass)
         name = f"{change.chord}/{change.bass}" if change.bass else change.chord
         slots.append(
             (
                 None,
-                promoted,
                 name,
                 bar,
                 beat,
@@ -2875,7 +2872,7 @@ def _felt_starts(
 def head_skeleton(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
-) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+) -> List[Tuple[Tuple[Optional[str], str], int, float, float]]:
     """A loaded head as slots: (triple, bar, beat, duration), **one per written note**.
 
     The melody half is typed `Optional[str]` although every note *this* function
@@ -2919,7 +2916,7 @@ def head_skeleton(
     # `chosen.beat`, the note's own float, and only the grouping is rounded.
     groups = {(note.bar, round(note.beat, 6)): note for note in notes}
 
-    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]] = []
+    slots: List[Tuple[Tuple[Optional[str], str], int, float, float]] = []
     for key in sorted(groups):
         chosen = groups[key]
         # `key[0]` rather than unpacking: the bar is an int and needs no rounding, and
@@ -2929,20 +2926,17 @@ def head_skeleton(
         if chosen.quality is None:
             if chosen.chord == NO_CHORD:
                 slots.append(
-                    ((chosen.note_name, NO_CHORD, NO_CHORD), bar, beat, chosen.duration)
+                    ((chosen.note_name, NO_CHORD), bar, beat, chosen.duration)
                 )
             # Otherwise the chord was untranslatable and the slot is dropped; the
             # loader counted it in `Head.unmapped`, so the gap is reported rather
             # than silent.
             continue
-        # A triad whose bass
-        # is its own seventh implies the seventh chord. It takes the *root*, not
-        # the full chord name, which is why the root is split off here rather
-        # than rebuilt from `chosen.chord` at the call site.
-        root_name, _ = ChordParser.parse_chord_name(chosen.chord)
-        promoted = promote_slash_chord(root_name or "", chosen.quality, chosen.bass)
+        # A triad whose bass is its own seventh implies the seventh chord, and
+        # `parse_symbol` applies that promotion to the symbol itself - so the name
+        # carries both facts and there is no second spelling to keep in step.
         name = f"{chosen.chord}/{chosen.bass}" if chosen.bass else chosen.chord
-        slots.append(((chosen.note_name, promoted, name), bar, beat, chosen.duration))
+        slots.append(((chosen.note_name, name), bar, beat, chosen.duration))
     return slots
 
 
@@ -3053,7 +3047,7 @@ def _head_slots(
     section: Optional[Tuple[int, int]],
     options: ArrangeOptions,
     grouping: Tuple[int, ...],
-) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+) -> List[Tuple[Tuple[Optional[str], str], int, float, float]]:
     """The head's melody slots, with the projected chord positions unioned in.
 
     **The union is gated on whether the guitar comps at all - not on the route.**
@@ -3080,7 +3074,7 @@ def _head_slots(
     # enters.
     request = axes
     chord_on = request.chord_rhythm
-    extra: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    extra: List[Tuple[Optional[str], str, int, float, float]] = []
     if not chord_on.is_none and not (chord_on.wants_melody and not chord_on.positions):
         # `melody` alone adds nothing: the skeleton already has one chord per
         # written note. A **positions** rhythm adds the attacks the caller named.
@@ -3091,7 +3085,7 @@ def _head_slots(
     if head.first_bar_implicit:
         # The anacrusis is not comping space, for the reason `_merge_chord_slots`
         # gives: a chord there fills the pickup and moves the head's downbeat.
-        extra = [slot for slot in extra if slot[3] != head.bars[0]]
+        extra = [slot for slot in extra if slot[2] != head.bars[0]]
     return _unioned(slots, extra)
 
 
@@ -3157,7 +3151,7 @@ def arrange_xml_head(
     # calls, so the two cannot disagree.
     resolved_grouping = options.time_signature.resolved_grouping
     slots = _head_slots(head, section, options, resolved_grouping)
-    triples = [slot[0] for slot in slots]
+    progression = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     # §9.3 step C: which slots the melody **articulates** on. On the note path every
     # slot is a written note, so every one is an onset; the comping union adds
@@ -3174,7 +3168,7 @@ def arrange_xml_head(
     # the denominator says how long one lasts, and `arrange_xml_head` took them from
     # the head above. The walking bass is the only engine rule that needs the second.
     steps, _rescued, notes = arrange_slots(
-        triples,
+        progression,
         timings,
         fallback=fallback,
         onsets=onsets,
@@ -3187,11 +3181,11 @@ def arrange_xml_head(
 
 
 def _merge_chord_slots(
-    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
+    slots: List[Tuple[Tuple[Optional[str], str], int, float, float]],
     head: Head,
     section: Optional[Tuple[int, int]],
     grouping: Optional[Sequence[int]] = None,
-) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+) -> List[Tuple[Tuple[Optional[str], str], int, float, float]]:
     """`head_skeleton`'s slots plus `chord_slots`', in one ordered list.
 
     **A union on `(bar, beat)`, and the melody slot wins a collision.** A position that
@@ -3232,7 +3226,7 @@ def _merge_chord_slots(
         # the whole head to a different downbeat. The melody's own slots stay - they
         # are what the pickup *is* - and the accompaniment starts in bar 2.
         first = head.bars[0]
-        extra = [slot for slot in extra if slot[3] != first]
+        extra = [slot for slot in extra if slot[2] != first]
     # **§9.2, and the whole of what this union holds back.** The positions
     # `_generated_beats` produced are candidates for slots, and the tune's own written
     # positions are already in `slots` - so all that is left to refuse is a position where
@@ -3247,15 +3241,15 @@ def _merge_chord_slots(
     extra = [
         slot
         for slot in extra
-        if melody_state(head, slot[3], slot[4]) != "held"
+        if melody_state(head, slot[2], slot[3]) != "held"
     ]
     return _unioned(slots, extra)
 
 
 def _unioned(
-    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
-    extra: List[Tuple[Optional[str], str, str, int, float, float]],
-) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+    slots: List[Tuple[Tuple[Optional[str], str], int, float, float]],
+    extra: List[Tuple[Optional[str], str, int, float, float]],
+) -> List[Tuple[Tuple[Optional[str], str], int, float, float]]:
     """The skeleton with `extra` positions added, one step per `(bar, beat)`.
 
     A position the melody already has a slot on keeps the skeleton's - it is the
@@ -3264,12 +3258,12 @@ def _unioned(
     """
     if not extra:
         return slots
-    existing = {_tick_key(bar, beat) for _triple, bar, beat, _dur in slots}
+    existing = {_tick_key(bar, beat) for _pair, bar, beat, _dur in slots}
     merged = list(slots)
-    for melody, quality, name, bar, beat, length in extra:
+    for melody, name, bar, beat, length in extra:
         if _tick_key(bar, beat) in existing:
             continue
-        merged.append(((melody, quality, name), bar, beat, length))
+        merged.append(((melody, name), bar, beat, length))
     merged.sort(key=lambda slot: (slot[1], slot[2]))
     return merged
 

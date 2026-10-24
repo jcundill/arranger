@@ -37,6 +37,7 @@ from musthe import Note
 
 import arranger
 from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, get_comping_voicings
+from arranger.chords import quality_of as _quality_of
 from arranger.grip_tables import SHELL_DEGREES
 from arranger.options import ArrangeOptions, Request
 from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
@@ -68,17 +69,17 @@ BUT_NOT_FOR_ME = os.path.join(DATA, "synthetic_cut_time.mxl")
 # already asserted elsewhere in the suite, so they double as the fixture here: if the
 # metric layer ever leaked into the default path, these strings would move.
 MINOR_CADENCE = [
-    ("D5", "m7", "Dm7"),
-    ("C5", "maj7", "Cmaj7"),
-    ("B4", "7", "G7"),
-    ("C5", "maj7", "Cmaj7"),
+    ("D5", "Dm7"),
+    ("C5", "Cmaj7"),
+    ("B4", "G7"),
+    ("C5", "Cmaj7"),
 ]
 
 MAJOR_CADENCE = [
-    ("D5", "m7", "Dm7"),
-    ("C#5", "7", "A7"),
-    ("C#5", "m7", "A-7"),
-    ("D5", "mMaj7", "Dm(maj7)"),
+    ("D5", "Dm7"),
+    ("C#5", "A7"),
+    ("C#5", "A-7"),
+    ("D5", "Dm(maj7)"),
 ]
 
 def minor_cadence_tabs():
@@ -113,6 +114,13 @@ def major_cadence_tabs():
     cause. It is the ban's one audible cost in the demos, and it is pinned rather than
     re-pinned away - if that chord is judged worth more than the ban, the alternative is
     to keep the sets and let the *selector* rank them last (measured in §4.4).
+
+    The last bar is `x-x-11-10-10-10`, the `mMaj7` drop-2 under D5. Its symbol is
+    `Dm(maj7)`, which is how the notation writes a minor-major seventh with the
+    major seventh in parentheses; `ChordParser.QUALITY_ALIASES` carries that spelling,
+    so the bar reaches the shape `DmMaj7` does. The spelling has to be a key there
+    rather than left unreadable, because an unreadable suffix does not refuse the bar -
+    it drops the chord and leaves the tune alone.
     """
     return [
         "x-x-10-10-10-10", "x-10-x-9-10-9", "x-x-x-x-x-9", "x-x-11-10-10-10",
@@ -310,11 +318,11 @@ WITNESS: Dict[str, Dict[int, List[int]]] = {
 
 # The four bars the comping, parts and harmony tests all arrange. Shared because the
 # three files assert different things about the same progression.
-PROGRESSION: List[Tuple[str, str, str]] = [
-    ("D5", "m7", "Dm7"),
-    ("C5", "maj7", "Cmaj7"),
-    ("A4", "7", "A7"),
-    ("G4", "maj7", "Gmaj7"),
+PROGRESSION: List[Tuple[str, str]] = [
+    ("D5", "Dm7"),
+    ("C5", "Cmaj7"),
+    ("A4", "A7"),
+    ("G4", "Gmaj7"),
 ]
 
 # The two selections these tests are about, spelled **the way a caller passes them**,
@@ -325,8 +333,13 @@ VOICES_ARG = "chord"
 
 
 def quality_of(name: str) -> str:
-    """The quality half of a chord name, which is what the generators want."""
-    return ChordParser.parse_chord_name(name)[1] or ""
+    """The canonical quality a symbol spells - the engine's own reading of it.
+
+    Delegated rather than re-derived: a second reading of a chord name is the split
+    this whole change closes, and the tolerant splitter would call a bare `C` quality-less
+    where the engine calls it a major triad.
+    """
+    return _quality_of(name)
 
 def guide_pcs(name: str) -> set:
     """The two guide tones of a chord as absolute pitch classes.
@@ -345,17 +358,15 @@ def guide_pcs(name: str) -> set:
 
 def chord_pcs(name: str) -> set:
     """Every tone a chord allows, as absolute pitch classes."""
-    root, quality = ChordParser.parse_chord_name(name)
-    root_pc = Note(f"{root}4").midi_note() % 12 if root else 0
-    return {(root_pc + tone) % 12 for tone in ChordParser.get_chord_tones(quality or "")}
+    return set(ChordParser.get_chord_tones(name))
 
 def comping(name: str):
     """Every comping candidate for a chord name."""
-    return get_comping_voicings(quality_of(name), name)
+    return get_comping_voicings(name)
 
 def bass_comping(name: str):
     """Every candidate for a chord name as a **lone bass voice**."""
-    return get_comping_voicings(quality_of(name), name, notes=1, bass_voice=True)
+    return get_comping_voicings(name, notes=1, bass_voice=True)
 
 def root_of(name: str) -> int:
     """A chord name's root as an absolute pitch class, or raise.
@@ -591,7 +602,7 @@ def clear_arrangements() -> None:
 
 
 def walk(
-    progression: List[Tuple[str, str, str]],
+    progression: List[Tuple[str, str]],
     onsets: Optional[List[Tuple[int, float]]] = None,
 ) -> List[arranger.ArrangementStep]:
     """A walking-bass arrangement of `progression`, with or without a beat grid.
@@ -679,7 +690,7 @@ def every_chord_tone(chord_name, quality):
     is not C a tritone or more out, and a ninth would arrive as a non-chord tone.
     """
     root_pc = root_midi_of(chord_name) % 12
-    degrees = {(pc - root_pc) % 12 for pc in ChordParser.get_chord_tones(quality, chord_name)}
+    degrees = {(pc - root_pc) % 12 for pc in ChordParser.get_chord_tones(chord_name)}
     return [
         note_name(root_midi_of(chord_name) + degree)
         for degree in sorted(degrees)

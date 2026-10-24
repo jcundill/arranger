@@ -52,7 +52,7 @@ from .bass_rules import (
     BASS_STYLE_NONE,
     parse_bass_style,
 )
-from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
+from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony, parse_symbol
 from .grid import BEAT_EPSILON, Rhythm, beat_offset, rhythm_beats
 from .grips import BASS_DEGREES_6432
 from .grouping import group_starts
@@ -124,12 +124,31 @@ class Slot:
     bass_only: bool = False
 
 
+def _walked_chords(
+    progression: Sequence[Tuple[Optional[str], str]],
+) -> List[Tuple[Optional[str], str, str]]:
+    """The walk's own view of each slot: its root, its quality, and the symbol.
+
+    One reading of the symbol - the same one the voicing path uses - so the walk cannot
+    disagree with the shape about what the chord is. A symbol asking for no chord carries
+    the marker through, so the line has something to be silent about.
+    """
+    chords: List[Tuple[Optional[str], str, str]] = []
+    for _note, name in progression:
+        symbol = parse_symbol(name)
+        chords.append(
+            (symbol.root, symbol.quality, name) if symbol
+            else (None, NO_CHORD, name)
+        )
+    return chords
+
+
 def walking_slots(
     # `Sequence` + `Optional`, for the same reason as `timings` below: the engine's
-    # triples carry an `Optional` melody (§9.3 step B), and `List` is invariant - the
+    # pairs carry an `Optional` melody (§9.3 step B), and `List` is invariant - the
     # covariance note on `timings` is this signature's whole reason for spelling both
     # this way.
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the two
     # callers hold *different* timing types. `arrange_progression` supplies
     # `Tuple[int, float, ...]`, while `arrange_slots` builds
@@ -181,10 +200,7 @@ def walking_slots(
     With `timings=None` there is no beat grid to place four quarters on, so this
     degrades to one note per slot: the documented gridless case.
     """
-    chords: List[Tuple[Optional[str], str, str]] = []
-    for _note, _quality, name in progression:
-        root, quality = ChordParser.parse_chord_name(name)
-        chords.append((root, quality or "", name))
+    chords = _walked_chords(progression)
 
     onsets: List[Optional[Tuple[int, float]]] = []
     for index in range(len(progression)):
@@ -288,7 +304,7 @@ _SlotEntry = Tuple[Tuple[int, float], int, Optional[BassNote], bool]
 
 
 def _located_slots(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
 ) -> List[Tuple[int, int, float, Optional[float]]]:
     """Every progression index whose slot the caller could place, with its timing."""
@@ -309,7 +325,7 @@ def _located_slots(
 
 
 def _gridless_slots(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     bass_line: List[BassNote],
 ) -> List[Slot]:
     """One slot per progression entry, when there is no beat grid to union against."""
@@ -380,7 +396,7 @@ def _bass_only_entries(
 
 
 def _bass_slots(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     bass_line: List[BassNote],
     beats_per_bar: int = 4,
@@ -881,7 +897,7 @@ def bass_line_for(
     bass: str,
     # `Sequence`, not `List`, for the reason `walking_slots` gives in full: `List` is
     # invariant, so a caller holding a `List[Tuple[str, str, str]]` is not assignable
-    # to a `List[Tuple[Optional[str], str, str]]` and pyright rejects it over a *narrower*
+    # to a `List[Tuple[Optional[str], str]]` and pyright rejects it over a *narrower*
     # type that means the same thing. `Sequence` is covariant and both fit.
     chords: Sequence[Tuple[Optional[str], str, str]],
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],

@@ -151,7 +151,7 @@ from .tuning import GuitarFretboard
 
 # Library version. The single source of truth: `pyproject.toml` reads it through
 # [tool.setuptools.dynamic] rather than duplicating the number.
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 
 # The whole-progression staff renderers live in `tabstaff`, which imports

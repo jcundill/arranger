@@ -707,7 +707,7 @@ class TestBassPlacement(unittest.TestCase):
         written cannot disagree with the fact it reads.
         """
         steps = walk(
-            [("F5", "maj7", "Fmaj7"), ("A4", "7", "G7")],
+            [("F5", "Fmaj7"), ("A4", "G7")],
             [(0, 1.0), (0, 2.0), (0, 3.0), (0, 4.0), (1, 1.0)],
         )
         self.assertTrue(any(step.bass is not None for step in steps))
@@ -832,8 +832,8 @@ class TestTheInvariant(unittest.TestCase):
     def test_the_upper_voices_are_one_supported_set_and_the_thumb_is_outside_it(self):
         """Swept over a real arrangement rather than one hand-built shape."""
         progression = [
-            ("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
-            ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+            ("F5", "Fmaj7"), ("D5", "Dm7"),
+            ("C5", "G7"), ("B4", "Cmaj7"),
         ]
         onsets = [(bar, 1.0 + 0.5 * n) for bar in range(4) for n in range(4)]
         checked = 0
@@ -1005,7 +1005,7 @@ class TestTheInvariant(unittest.TestCase):
         into the winning shape afterwards, which is why `missing = 4 - len(active)` is
         measured on the upper voices alone.
         """
-        triple = [("F5", "maj7", "Fmaj7")]
+        triple = [("F5", "Fmaj7")]
         palette = texture_palette(ROLE_TARGET, "chord2", PART_NAMES)
         walking = VoiceLeadingEngine.prepare_step(triple, 0, grips=palette)
         assert walking is not None
@@ -1045,11 +1045,11 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
         """
         return VoiceLeadingEngine.arrange_progression(
             [
-                ("G4", "maj", "Ebmaj"),   # bar 2 beat 1.0
-                ("F4", "maj", "Ebmaj"),   # bar 2 beat 2.0
-                ("Eb4", "m7", "Cm7"),     # bar 2 beat 2.5 - the melody-alone fill
-                ("Eb4", "m7", "Cm7"),     # bar 3 beat 1.0 - the target that repeats it
-                ("F4", "7", "Bb7"),
+                ("G4", "Ebmaj"),   # bar 2 beat 1.0
+                ("F4", "Ebmaj"),   # bar 2 beat 2.0
+                ("Eb4", "Cm7"),     # bar 2 beat 2.5 - the melody-alone fill
+                ("Eb4", "Cm7"),     # bar 3 beat 1.0 - the target that repeats it
+                ("F4", "Bb7"),
             ],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.25), (2, 2.5, 0.375), (3, 1.0, 0.375), (3, 1.5, 0.25)],
             request=Request(

@@ -14,7 +14,7 @@ from typing import Container, Optional, Tuple
 from musthe import Note
 
 from .bass import Slot
-from .chords import normalised_harmony
+from .chords import normalised_harmony, quality_of
 from .context import (
     SlotArrangementFacts,
     SlotBassFacts,
@@ -125,7 +125,7 @@ class SlotInputs:
 def _slot_context(
     inputs: SlotInputs,
     slot: Slot,
-    triple: Tuple[Optional[str], str, str],
+    pair: Tuple[Optional[str], str],
     role: str,
 ) -> SlotContext:
     """The route-facing view of one slot, from the arrangement and the slot.
@@ -137,7 +137,7 @@ def _slot_context(
     The weight is derived here from the slot and the metre, so the caller does not
     pass a value the context can compute from the same facts.
     """
-    note_str, chord_type, name = triple
+    note_str, name = pair
     melody_note = Note(note_str) if note_str is not None else None
     return SlotContext(
         timing=SlotTiming(
@@ -147,7 +147,7 @@ def _slot_context(
         ),
         harmony=SlotHarmony(
             name=name,
-            chord_type=chord_type,
+            chord_type=quality_of(name),
             note_str=note_str,
             melody_note=melody_note,
         ),
@@ -200,7 +200,6 @@ def _sings_here(
 def _tune_silent_plan(
     car: Carried,
     slot: Slot,
-    chord_type: str,
     name: str,
     inputs: SlotInputs,
 ) -> SlotPlan:
@@ -235,7 +234,7 @@ def _tune_silent_plan(
         melody_only=inputs.arrangement.melody_only,
     )[0]
     return SlotPlan(
-        context=_slot_context(inputs, slot, (None, chord_type, name), role),
+        context=_slot_context(inputs, slot, (None, name), role),
         rhythm=inputs.rhythm,
         sings_here=False,
         slot_grips=(),
@@ -423,13 +422,13 @@ def slot_state(
     updated in place.
     """
     index = slot.index
-    note_str, chord_type, name = inputs.arrangement.progression[index]
+    note_str, name = inputs.arrangement.progression[index]
     if note_str is None:
         # A melody-only selection's note-less slot is **tune silent** unless the thumb
         # has something there: `chord_on="none"` with a thumb plays the bass part, and a
         # position the walk invented is the one place it sounds anything at all.
         if inputs.arrangement.melody_only and slot.bass is None:
-            return _tune_silent_plan(car, slot, chord_type, name, inputs)
+            return _tune_silent_plan(car, slot, name, inputs)
         melody_note = None
     else:
         melody_note = Note(note_str)
@@ -463,7 +462,7 @@ def slot_state(
     # got. §9.3 step D.
     chord_here = _chord_here(inputs.rhythm, beat, melody_note is None)
     melody_alone = melody_alone_case(
-        inputs.arrangement.texture, role, slot_grips, chord_type, name,
+        inputs.arrangement.texture, role, slot_grips, quality_of(name), name,
         inputs.arrangement.has_thumb, melody_voiced=sings_here, on_grid=chord_here,
     )
     # **The bass part's own claim on the slot**, and it is asked *after* the four
@@ -480,7 +479,7 @@ def slot_state(
     ):
         melody_alone = MELODY_ALONE_BASS
     return SlotPlan(
-        context=_slot_context(inputs, slot, (note_str, chord_type, name), role),
+        context=_slot_context(inputs, slot, (note_str, name), role),
         rhythm=inputs.rhythm, sings_here=sings_here, slot_grips=slot_grips,
         melody_alone=melody_alone,
     )

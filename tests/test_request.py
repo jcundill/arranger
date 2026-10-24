@@ -357,10 +357,10 @@ class TestTheCanonicalSpelling(unittest.TestCase):
 #: chord part has something to change and a walk has a next chord to move toward.
 #: The timings are `(bar, beat, duration)`: bar 1, one felt beat per slot.
 _PROGRESSION = (
-    ("C5", "maj7", "Cmaj7"),
-    ("B4", "m7", "Cm7"),
-    ("A4", "7", "A7"),
-    ("G4", "maj7", "Gmaj7"),
+    ("C5", "Cmaj7"),
+    ("B4", "Cm7"),
+    ("A4", "A7"),
+    ("G4", "Gmaj7"),
 )
 _TIMINGS = ((1, 1.0, 1.0), (1, 2.0, 1.0), (1, 3.0, 1.0), (1, 4.0, 1.0))
 
@@ -368,10 +368,10 @@ _TIMINGS = ((1, 1.0, 1.0), (1, 2.0, 1.0), (1, 3.0, 1.0), (1, 4.0, 1.0))
 #: with a chord per beat there is one attack per chord, so a line can only reach
 #: toward the next chord rather than move inside this one.
 _HELD = (
-    ("C5", "maj7", "Cmaj7"),
-    ("B4", "maj7", "Cmaj7"),
-    ("A4", "maj7", "Cmaj7"),
-    ("G4", "maj7", "Cmaj7"),
+    ("C5", "Cmaj7"),
+    ("B4", "Cmaj7"),
+    ("A4", "Cmaj7"),
+    ("G4", "Cmaj7"),
 )
 
 
@@ -460,7 +460,7 @@ class TestTheLibrarySpelling(unittest.TestCase):
 
     def test_chord_fills_states_the_chord_in_a_rest_the_tune_left(self):
         """A slot with no melody note is silent by default, and sounds with `hold`."""
-        rests = (("C5", "maj7", "Cmaj7"), (None, "m7", "Cm7"))
+        rests = (("C5", "Cmaj7"), (None, "Cm7"))
         timings = ((1, 1.0, 1.0), (1, 2.0, 1.0))
         silent = _arrange(rests, timings, request=Request(chord_on="none"))
         filled = _arrange(

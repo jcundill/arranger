@@ -16,7 +16,7 @@ import headxml
 from arranger import Request
 from arranger.options import _CHORD_FILLS_HOLD, CHORD_FILLS_COMP, CHORD_FILLS_NONE, resolve_request
 from headxml import Head, HeadChange, HeadNote, melody_rests
-from tests.support import arranged
+from tests.support import arranged, quality_of
 
 SLASH = "tests/data/synthetic_repeat_slash.musicxml"
 
@@ -120,7 +120,7 @@ class TestHold(unittest.TestCase):
         """Bar 1's three beats of silence are one attack, not three."""
         slots = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual(
-            [(bar, beat, quality) for _m, quality, _n, bar, beat, _d in slots],
+            [(bar, beat, quality_of(name)) for _m, name, bar, beat, _d in slots],
             [(1, 2.0, "maj"), (3, 3.0, "maj7")],
         )
 
@@ -134,7 +134,7 @@ class TestHold(unittest.TestCase):
         head.chords.insert(1, HeadChange(bar=1, beat=3.0, chord="Dm7", quality="m7"))
         slots = fills(head, chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual(
-            [(bar, beat, name) for _m, _q, name, bar, beat, _d in slots],
+            [(bar, beat, name) for _m, name, bar, beat, _d in slots],
             [(1, 2.0, "C"), (1, 3.0, "Dm7"), (3, 3.0, "Cmaj7")],
         )
 
@@ -146,14 +146,14 @@ class TestHold(unittest.TestCase):
         still there, and the fill that would have begun at beat 3 is the target.
         """
         slots = fills(hand_head(), chord_on="3", chord_fills=_CHORD_FILLS_HOLD)
-        positions = [(bar, beat) for _m, _q, _n, bar, beat, _d in slots]
+        positions = [(bar, beat) for _m, _n, bar, beat, _d in slots]
         self.assertEqual(positions, [(1, 2.0), (1, 3.0), (3, 3.0)])
         self.assertEqual(positions.count((1, 3.0)), 1)
 
     def test_a_rest_with_no_chord_gets_no_fill(self):
         """Bar 4 is silent under `NC`: there is no chord to state."""
         slots = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
-        self.assertEqual([bar for _m, _q, _n, bar, _b, _d in slots], [1, 3])
+        self.assertEqual([bar for _m, _n, bar, _b, _d in slots], [1, 3])
 
     def test_the_fill_lasts_to_the_end_of_the_rest(self):
         """A held fill's duration is the rest's, so it cannot ring past it.
@@ -165,7 +165,7 @@ class TestHold(unittest.TestCase):
         head = hand_head()
         head.chords.insert(1, HeadChange(bar=1, beat=3.0, chord="Dm7", quality="m7"))
         slots = fills(head, chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
-        self.assertEqual([round(slot[5], 6) for slot in slots], [0.25, 0.5, 0.5])
+        self.assertEqual([round(slot[4], 6) for slot in slots], [0.25, 0.5, 0.5])
 
     def test_no_fill_slot_carries_a_melody(self):
         """A fill states the chord and never invents a note: the tune is resting."""
@@ -181,18 +181,18 @@ class TestComp(unittest.TestCase):
         comp = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_COMP)
         hold = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual(
-            [(bar, beat) for _m, _q, _n, bar, beat, _d in comp],
+            [(bar, beat) for _m, _n, bar, beat, _d in comp],
             [(1, 2.0), (1, 3.0), (1, 4.0), (3, 3.0), (3, 4.0)],
         )
         self.assertEqual(
-            [(bar, beat) for _m, _q, _n, bar, beat, _d in hold],
+            [(bar, beat) for _m, _n, bar, beat, _d in hold],
             [(1, 2.0), (3, 3.0)],
         )
 
     def test_each_comp_lasts_to_the_next_attack(self):
         """The attacks tile the rest: no gap, and nothing rings into the melody."""
         comp = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_COMP)
-        self.assertEqual([round(slot[5], 6) for slot in comp], [0.25] * 5)
+        self.assertEqual([round(slot[4], 6) for slot in comp], [0.25] * 5)
 
     def test_comp_states_every_attack_hold_does(self):
         """`comp` is `hold` plus the interior beats: the same onsets, the same chords.
@@ -203,9 +203,9 @@ class TestComp(unittest.TestCase):
         """
         comp = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_COMP)
         hold = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
-        by_position = {(slot[3], slot[4]): slot for slot in comp}
+        by_position = {(slot[2], slot[3]): slot for slot in comp}
         for slot in hold:
-            self.assertEqual(by_position[(slot[3], slot[4])][1], slot[1])
+            self.assertEqual(by_position[(slot[2], slot[3])][1], slot[1])
 
     def test_the_grouping_decides_where_a_felt_beat_is(self):
         """A 6/8 bar has two pulses, so a four-eighth rest holds one attack, not four.
@@ -229,7 +229,7 @@ class TestComp(unittest.TestCase):
             grouping=(3, 3),
         )
         self.assertEqual(
-            [(bar, round(beat, 6)) for _m, _q, _n, bar, beat, _d in slots],
+            [(bar, round(beat, 6)) for _m, _n, bar, beat, _d in slots],
             [(1, 2.0), (1, 4.0)],
         )
 

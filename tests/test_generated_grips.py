@@ -112,9 +112,12 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
         """A quality spelled another way gets the same shapes, through the same rule.
 
         The aliases (`min7`, `dom7`, `min7b5`, `mmaj7` and the rest) have no priority row
-        of their own, so the rule itself answers nothing for them. They work because
-        `chord_context` canonicalises the quality before the rule is asked, and this is
+        of their own, so the rule itself answers nothing for them. They work because the
+        quality is canonicalised out of the symbol before the rule is asked, and this is
         what says so - on the route a caller takes, not on a table key.
+
+        The alias is spelled in the **name** now, which is the only place a caller can
+        spell it: the two spellings are two chord names, and the test compares their tabs.
         """
         aliases = [
             name for name in ChordParser.QUALITY_ALIASES if name not in TONE_PRIORITY
@@ -129,13 +132,13 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
                         [
                             voicing.tab_string()
                             for voicing in VoiceLeadingEngine.get_drop2_voicings(
-                                Note(melody), name
+                                Note(melody), chord_name="C" + name
                             )
                         ],
                         [
                             voicing.tab_string()
                             for voicing in VoiceLeadingEngine.get_drop2_voicings(
-                                Note(melody), canonical
+                                Note(melody), chord_name="C" + canonical
                             )
                         ],
                         name,

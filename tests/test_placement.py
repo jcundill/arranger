@@ -78,7 +78,7 @@ def _context(chord_name: str) -> Tuple[str, int, Tuple[int, ...]]:
     request, not how the request is derived.
     """
     _, quality = ChordParser.parse_chord_name(chord_name)
-    canonical, root_pc, tones = chord_context(quality or chord_name, chord_name)
+    canonical, root_pc, tones = chord_context(chord_name)
     assert root_pc is not None
     return canonical, root_pc, tones
 
@@ -233,7 +233,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                     generated = {
                         tuple(voicing.frets)
                         for voicing in get_grip_voicings(
-                            Note(melody), canonical, chord_name, top_string, (grip,)
+                            Note(melody), chord_name, top_string, (grip,)
                         )
                     }
                     searched = set()

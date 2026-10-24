@@ -425,7 +425,7 @@ class TestChordSlots(unittest.TestCase):
 
     def _chord_positions(self, head):
         """The `(bar, beat)` set `chord_slots` generates: one per bar's own rhythm."""
-        return {(s[3], round(s[4], 6)) for s in chord_slots(head)}
+        return {(s[2], round(s[3], 6)) for s in chord_slots(head)}
 
     def _rhythm_positions(self, head, spelling):
         """The same set for a **requested** rhythm, which places its named positions.
@@ -434,7 +434,7 @@ class TestChordSlots(unittest.TestCase):
         `every-beat` is every felt beat of every bar, `1and,2and` the ands of a 2/2 one.
         """
         rhythm = parse_rhythm(spelling, head.beats_per_bar, None)
-        return {(s[3], round(s[4], 6)) for s in rhythm_slots(head, rhythm)}
+        return {(s[2], round(s[3], 6)) for s in rhythm_slots(head, rhythm)}
 
     def test_a_bar_with_no_notes_now_gets_its_chords(self):
         """Bar 6 of `synthetic_repeat_slash`: the defect, and the reason for the phase.
@@ -444,7 +444,7 @@ class TestChordSlots(unittest.TestCase):
         """
         self.assertEqual([n.bar for n in self.rainy.notes if n.bar == 6], [])
         positions = sorted(
-            (beat, chord) for _m, _q, chord, bar, beat, _d in
+            (beat, chord) for _m, chord, bar, beat, _d in
             chord_slots(self.rainy) if bar == 6
         )
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
@@ -709,12 +709,12 @@ class TestChordSlots(unittest.TestCase):
         rather than one chord per bar: `every-beat` is `{0.5}` and the ands `{0.25}`.
         Two producers, three numbers, and no whole note anywhere.
         """
-        generated = {round(s[5], 6) for s in chord_slots(self.rainy)}
+        generated = {round(s[4], 6) for s in chord_slots(self.rainy)}
         self.assertEqual(generated, {0.5, 0.25})
         for spelling, expected in (("every-beat", {0.5}), ("1and,2and", {0.25})):
             with self.subTest(chord_on=spelling):
                 rhythm = parse_rhythm(spelling, self.rainy.beats_per_bar, None)
-                durations = {round(s[5], 6) for s in rhythm_slots(self.rainy, rhythm)}
+                durations = {round(s[4], 6) for s in rhythm_slots(self.rainy, rhythm)}
                 self.assertEqual(durations, expected, f"chord_on={spelling}")
                 self.assertNotIn(1.0, durations, f"chord_on={spelling} produced a whole note")
         self.assertNotIn(1.0, generated, "a generated stab was a whole note")
@@ -754,10 +754,10 @@ class TestChordSlots(unittest.TestCase):
         slots = [
             s
             for s in chord_slots(self.rainy)
-            if s[3] == 6 and abs(s[4] - 2.0) < 1e-9
+            if s[2] == 6 and abs(s[3] - 2.0) < 1e-9
         ]
         self.assertTrue(slots, "bar 6 beat 2 must place its chord")
-        for melody, _quality, _name, _bar, _beat, _duration in slots:
+        for melody, _name, _bar, _beat, _duration in slots:
             self.assertIsNone(melody)
 
 
@@ -989,7 +989,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         renderers print blank.
         """
         steps, _rescued, _notes = arrange_slots(
-            [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
+            [(None, "Dm7"), ("C5", "Cmaj7")],
             [(1, 1.0, 0.5), (1, 2.0, 0.5)],
         )
         self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])

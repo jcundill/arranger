@@ -37,11 +37,11 @@ HEADS: List[str] = sorted(
 ) + sorted(glob.glob(str(ROOT / "tests" / "data" / "*.mxl")))
 
 
-PROGRESSION: Tuple[Tuple[str, str, str], ...] = (
-    ("D5", "m7", "Dm7"),
-    ("C5", "maj7", "Cmaj7"),
-    ("A4", "7", "A7"),
-    ("G4", "maj7", "Gmaj7"),
+PROGRESSION: Tuple[Tuple[str, str], ...] = (
+    ("D5", "Dm7"),
+    ("C5", "Cmaj7"),
+    ("A4", "A7"),
+    ("G4", "Gmaj7"),
 )
 
 #: The same progression on the metre's own felt beats, four to the bar. Written out

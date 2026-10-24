@@ -69,7 +69,7 @@ class GuitarProTestCase(unittest.TestCase):
         # A ii-V-I, which every chord of it voices without a non-chord tone, so the
         # tests are about the rendering rather than about the arranger.
         self.steps = engine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")]
+            [("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7")]
         )
 
     def data(self, **kwargs):
@@ -219,7 +219,7 @@ class TestRoundTrip(GuitarProTestCase):
         # three bars, rather than borrowed. Asserting on a single bar would have
         # passed against the broken exporter.
         steps = VoiceLeadingEngine().arrange_progression(
-            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")],
+            [("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7")],
             timings=[(1, 1.0, 1.0), (2, 1.0, 1.0), (3, 1.0, 1.0)],
         )
         song = self.song(steps=steps, fifths=-3, mode="major")
@@ -401,7 +401,7 @@ class TestRhythm(GuitarProTestCase):
         steps = []
         for _ in range(4):
             steps.extend(engine.arrange_progression(
-                [("A4", "m7", "Dm7"), ("C5", "7", "G7")]
+                [("A4", "Dm7"), ("C5", "G7")]
             ))
         # Two steps share each beat, so each is an eighth. The beats are 1,1,2,2
         # within a bar, which is what makes two steps land on the same onset.
@@ -1205,7 +1205,7 @@ class TestOptions(GuitarProTestCase):
         """
         engine = VoiceLeadingEngine()
         held = engine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("A4", "m7", "Dm7")]
+            [("A4", "Dm7"), ("A4", "Dm7")]
         )
         self.assertTrue(held[1].repeated)
         beat = self.beats(steps=held)[1]
@@ -1259,7 +1259,7 @@ class TestWalkingBass(GuitarProTestCase):
 
         self.gp = guitarpro
         self.walk_steps = VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7")],
+            [("F5", "Fmaj7")],
             timings=[(0, 1.0, None)],
             options=ArrangeOptions(
                         request=Request(
@@ -1525,10 +1525,10 @@ class TestARingingThumbIsNotRestruck(GuitarProTestCase):
         self.gp = guitarpro
         self.request_steps = VoiceLeadingEngine.arrange_progression(
             [
-                ("C5", "maj7", "Cmaj7"),
-                ("D5", "maj7", "Cmaj7"),
-                ("E5", "maj7", "Cmaj7"),
-                ("F5", "maj7", "Cmaj7"),
+                ("C5", "Cmaj7"),
+                ("D5", "Cmaj7"),
+                ("E5", "Cmaj7"),
+                ("F5", "Cmaj7"),
             ],
             timings=[(1, 1.0, 0.25), (1, 2.0, 0.25), (1, 3.0, 0.25), (1, 4.0, 0.25)],
             request=Request(bass_on="1"),
@@ -1613,9 +1613,9 @@ class TestRepeatMarkers(GuitarProTestCase):
         from tabgp import format_gp5
 
         progression = ([
-            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
-            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
-            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+            ("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7"),
+            ("A4", "Am7"), ("C5", "D7"), ("B4", "Fmaj7"),
+            ("A4", "Bm7"), ("C5", "E7"),
         ] * (count // 8 + 1))[:count]
         steps = VoiceLeadingEngine().arrange_progression(progression)
         return _parse(io.BytesIO(format_gp5(steps, markers=markers)))

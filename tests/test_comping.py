@@ -43,7 +43,6 @@ from tests.support import (
     chord_pcs,
     comping,
     guide_pcs,
-    quality_of,
 )
 
 
@@ -60,7 +59,7 @@ class TestCompingGenerator(unittest.TestCase):
         missing = [
             quality
             for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT)
-            if not get_comping_voicings(quality, f"C{quality}")
+            if not get_comping_voicings(f"C{quality}")
         ]
         self.assertEqual(missing, [], f"no comping shape for {missing}")
 
@@ -128,16 +127,20 @@ class TestCompingGenerator(unittest.TestCase):
         sets = comping_string_sets(1)
         self.assertEqual(len(sets), len(set(sets)), sets)
 
-    def test_a_chord_with_no_root_gets_nothing(self):
+    def test_a_chord_with_no_root_is_refused(self):
         """A guide tone is a claim about *this* chord, so no root means no claim.
 
-        The same rule `get_grip_voicings` applies to its shell and duo branches, and
-        for the same reason: guessing the 3rd and 7th without a root is how a wrong
-        note gets into the tab.
+        The rule survives as a refusal rather than an empty list, which is what the
+        quality field used to make it: a symbol with no readable root has no quality
+        either, so there is nothing to state and the resolver says so rather than
+        guessing the 3rd and 7th and putting a wrong note in the tab.
         """
-        self.assertEqual(get_comping_voicings("maj7", None), [])
-        self.assertEqual(get_comping_voicings("maj7", "H7"), [])
-        self.assertEqual(get_comping_voicings("", "C"), [])
+        with self.assertRaises(ValueError):
+            get_comping_voicings(None)
+        with self.assertRaises(ValueError):
+            get_comping_voicings("H7")
+        # A bare root is not rootless - it is a major triad, and it is voiced.
+        self.assertTrue(get_comping_voicings("C"))
 
     def test_the_window_is_a_preference_and_never_a_filter(self):
         """Narrowing it may cost shapes, but it must never cost the chord.
@@ -145,8 +148,8 @@ class TestCompingGenerator(unittest.TestCase):
         The rule the whole library states about `fret_min`/`fret_max`: losing a chord of
         the tune is worse than being a fret out of position.
         """
-        wide = get_comping_voicings("maj7", "Cmaj7")
-        narrow = get_comping_voicings("maj7", "Cmaj7", fret_min=0, fret_max=0)
+        wide = get_comping_voicings("Cmaj7")
+        narrow = get_comping_voicings("Cmaj7", fret_min=0, fret_max=0)
         self.assertTrue(wide)
         self.assertTrue(narrow, "a zero-width window must still voice the chord")
 
@@ -187,11 +190,10 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         come out of it.
         """
         checked = 0
-        for quality, name in self.CASES:
+        for _quality, name in self.CASES:
             for notes in (1, 3):
                 for bass_voice in (False, True):
                     request = CompingRequest(
-                        quality,
                         name,
                         NECK_FRET_MIN,
                         NECK_FRET_MAX,
@@ -218,8 +220,8 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         tab, so the identity assertion is the witness: it is the *sharing* that is
         forbidden, not the equality of the two answers.
         """
-        first = get_comping_voicings("maj7", "Cmaj7")
-        second = get_comping_voicings("maj7", "Cmaj7")
+        first = get_comping_voicings("Cmaj7")
+        second = get_comping_voicings("Cmaj7")
         self.assertTrue(first)
         self.assertIsNot(first, second, "the memo handed one list out twice")
         self.assertIsNot(first[0], second[0], "the memo handed one object out twice")
@@ -232,20 +234,20 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         first[0].frets[muted[0]] = 7
         first[0].bass_pc = None if pristine_bass is None else (pristine_bass + 1) % 12
 
-        third = get_comping_voicings("maj7", "Cmaj7")
+        third = get_comping_voicings("Cmaj7")
         self.assertEqual(third[0].tab_string(), pristine_tab)
         self.assertEqual(third[0].bass_pc, pristine_bass)
 
     def test_the_request_is_the_memo_key(self):
         """The object entry point and the primitive one share one memo entry."""
         request = CompingRequest(
-            "maj7", "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False
+            "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False
         )
         before = _comping_palette.cache_info()
         by_object = get_comping_voicings_for(request)
         after = _comping_palette.cache_info()
         self.assertEqual(after.misses - before.misses, 1)
-        by_keyword = get_comping_voicings("maj7", "Cmaj7")
+        by_keyword = get_comping_voicings("Cmaj7")
         self.assertEqual(
             [voicing.tab_string() for voicing in by_object],
             [voicing.tab_string() for voicing in by_keyword],
@@ -259,9 +261,9 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         is exactly what a reader cannot see from the code.
         """
         before = _comping_palette.cache_info()
-        get_comping_voicings("m7", "Dm7")
+        get_comping_voicings("Dm7")
         after_first = _comping_palette.cache_info()
-        get_comping_voicings("m7", "Dm7")
+        get_comping_voicings("Dm7")
         after_second = _comping_palette.cache_info()
         self.assertEqual(after_first.misses - before.misses, 1)
         self.assertEqual(after_first.hits - before.hits, 0)
@@ -275,12 +277,12 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         what makes "the search is still the thing under test" a fact about this file
         rather than a hope.
         """
-        first = get_comping_voicings("7", "A7")
+        first = get_comping_voicings("A7")
         self.assertGreater(_comping_palette.cache_info().currsize, 0)
         _comping_palette.cache_clear()
         self.assertEqual(_comping_palette.cache_info().currsize, 0)
         self.assertEqual(
-            [voicing.tab_string() for voicing in get_comping_voicings("7", "A7")],
+            [voicing.tab_string() for voicing in get_comping_voicings("A7")],
             [voicing.tab_string() for voicing in first],
         )
 
@@ -369,9 +371,8 @@ class TestTheCompingArrangement(unittest.TestCase):
         from arranger.grips import get_comping_voicings
 
         for chord in ("Dm7", "G7", "Fmaj7"):
-            quality = quality_of(chord)
             sets = {
-                tuple(sorted(v.tab_string() for v in get_comping_voicings(quality, chord)))
+                tuple(sorted(v.tab_string() for v in get_comping_voicings(chord)))
                 for _melody in ("D5", "C5", "A4", "F4", "Bb4", "E5", "G3", "D6")
             }
             self.assertEqual(
@@ -450,7 +451,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         given away.
         """
         for step, triple in zip(self.comped(), PROGRESSION):
-            self.assertEqual(step.chord, triple[2])
+            self.assertEqual(step.chord, triple[1])
 
     def test_every_step_is_a_guide_tone_shape_of_the_requested_arity(self):
         """`partial` is set, because the chord name above describes the harmony only.
@@ -477,7 +478,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         many of the chord's other tones join them.
         """
         for step, triple in zip(self.comped(), PROGRESSION):
-            name = triple[2]
+            name = triple[1]
             sounding = {midi % 12 for midi in step.voicing.upper_midi_notes()}
             self.assertTrue(
                 guide_pcs(name) <= sounding,
@@ -585,7 +586,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         what the tab's line reads for the reason, so it is what is asserted.
         """
         steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("C5", "NC", "NC"), ("A4", "7", "A7")],
+            [("D5", "Dm7"), ("C5", "NC"), ("A4", "A7")],
             options=ArrangeOptions(request=Request(melody=False)),
         )
         self.assertEqual([step.chord for step in steps], ["Dm7", "NC", "A7"])
@@ -897,7 +898,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         return steps
 
     def test_extension_absorbs_the_note_as_an_extension(self):
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "extension")
+        steps = self._comp([("D5", "Cmaj7")], "extension")
         self.assertEqual([s.harmonized_as for s in steps], ["Cmaj9"])
         # `chord` stays the written symbol; `harmonized_as` says what was stated.
         self.assertEqual([s.chord for s in steps], ["Cmaj7"])
@@ -905,7 +906,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         self.assertEqual(steps[0].strategy, "extension")
 
     def test_diminished_states_the_dim7_a_semitone_below_the_resolution(self):
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7"])
         self.assertEqual(steps[0].strategy, "diminished")
 
@@ -916,7 +917,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         for coinciding with the tune - every sounding pitch must be a tone of the chord
         actually stated, `Bdim7`.
         """
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertFalse(steps[0].melody_voiced)
         sounding = {pitch % 12 for pitch in steps[0].voicing.midi_notes()}
         self.assertTrue(sounding <= chord_pcs("Bdim7"), steps[0].tab_line())
@@ -927,7 +928,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         A comping shape is built fresh on every slot, so `sustain`'s hold-the-previous
         move has nothing to act on and it must fall through to no substitution.
         """
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "sustain")
+        steps = self._comp([("D5", "Cmaj7")], "sustain")
         self.assertIsNone(steps[0].harmonized_as)
         self.assertIsNone(steps[0].strategy)
         self.assertFalse(steps[0].non_chord_tone)
@@ -936,7 +937,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         """A melody the chord already contains is not reharmonised under any strategy."""
         for strategy in ("extension", "diminished"):
             with self.subTest(strategy=strategy):
-                steps = self._comp([("C5", "maj7", "Cmaj7")], strategy)
+                steps = self._comp([("C5", "Cmaj7")], strategy)
                 self.assertIsNone(steps[0].harmonized_as, strategy)
 
     def test_the_onset_guard_skips_a_held_position(self):
@@ -946,14 +947,14 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         carrying the same note - it must be voiced as the written chord, not re-decided
         under a note whose onset already decided it.
         """
-        progression = [("D5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7")]
+        progression = [("D5", "Cmaj7"), ("D5", "Cmaj7")]
         steps = self._comp(progression, "diminished", melody_onsets={0})
         self.assertEqual(steps[0].harmonized_as, "Bdim7")
         self.assertIsNone(steps[1].harmonized_as)
 
     def test_a_bare_call_with_no_timeline_treats_every_slot_as_an_onset(self):
         """`melody_onsets=None` (the default) is all-onsets - the hand-built caller's rule."""
-        progression = [("D5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7")]
+        progression = [("D5", "Cmaj7"), ("D5", "Cmaj7")]
         steps = self._comp(progression, "diminished")
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7", "Bdim7"])
 
@@ -966,7 +967,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         the fixture is a single slot, so a second element would mean the route
         duplicated it.
         """
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertEqual(len(steps), 1)
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7"])
         self.assertTrue(all(s.strategy for s in steps))
@@ -980,7 +981,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         """
         from arranger.slots import arrange_slots
 
-        progression = [("D5", "m7", "Bbm7"), ("D5", "m7", "Bbm7")]
+        progression = [("D5", "Bbm7"), ("D5", "Bbm7")]
         timings = [(0, 1.0, 1.0), (0, 1.5, 0.5)]
         steps, rescued, _notes = arrange_slots(
             progression,

@@ -26,7 +26,6 @@ from tests.support import (
     chord_pcs,
     comping,
     guide_pcs,
-    quality_of,
     root_of,
 )
 
@@ -110,7 +109,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         in `docs/history/one-fact.md`'s build notes shows.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            [("F4", "NC", "NC"), ("E4", "7", "G7")],
+            [("F4", "NC"), ("E4", "G7")],
             options=ArrangeOptions(request=Request(chord_on="none")),
         )
         self.assertEqual([s.chord for s in steps], ["NC", "G7"])
@@ -134,8 +133,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
         beside a melody-only selection has no chord to place.
         """
         progression = [
-            ("F5", "maj7", "Fmaj7"), ("E5", "7", "A7"),
-            ("D5", "NC", "NC"), ("C5", "m7", "Dm7"),
+            ("F5", "Fmaj7"), ("E5", "A7"),
+            ("D5", "NC"), ("C5", "Dm7"),
         ]
         timings = [(0, 1.0, 1.0), (0, 2.5, 0.5), (1, 1.0, 1.0), (1, 3.0, 1.0)]
         steps = VoiceLeadingEngine.arrange_progression(
@@ -373,7 +372,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         for name in ("Cmaj7", "A7", "Dm7b5"):
             for bass_voice in (False, True):
                 for voicing in get_comping_voicings(
-                    quality_of(name), name, notes=1, bass_voice=bass_voice
+                    name, notes=1, bass_voice=bass_voice
                 ):
                     self.assertIn(
                         frozenset(voicing.active_strings),
@@ -427,20 +426,19 @@ class TestABassPartIsABassNote(unittest.TestCase):
             "a pair is not the lone-bass case: the chord part plus the thumb",
         )
 
-    def test_an_unreadable_chord_still_gets_no_bass_note(self):
+    def test_an_unreadable_chord_is_refused(self):
         """No root, no claim - the same rule, on the branch that was added.
 
         A bass note is *more* dependent on the root than a guide-tone shape is, not less:
         it is the root or the 5th **of that root**, so a guessed one is not a weak claim,
-        it is a wrong one. Asserted because the new branch reads `root_pc` directly, and a
-        regression there would be silent rather than loud.
+        it is a wrong one. It is a refusal rather than an empty list now that the quality
+        is read off the name. Asserted because the new branch reads `root_pc` directly,
+        and a regression there would be silent rather than loud.
         """
-        self.assertEqual(
-            get_comping_voicings("maj7", None, notes=1, bass_voice=True), []
-        )
-        self.assertEqual(
-            get_comping_voicings("maj7", "H7", notes=1, bass_voice=True), []
-        )
+        with self.assertRaises(ValueError):
+            get_comping_voicings(None, notes=1, bass_voice=True)
+        with self.assertRaises(ValueError):
+            get_comping_voicings("H7", notes=1, bass_voice=True)
 
     def test_the_default_generates_no_singletons_on_its_own(self):
         """`supported_string_sets()` grew; nothing else did.

@@ -215,14 +215,14 @@ class TestStringSetTable(unittest.TestCase):
         ninths = set()
         for quality in SHELL_DEGREES:
             chord_name = "C" + quality
-            for pc in ChordParser.get_chord_tones(quality, chord_name):
+            for pc in ChordParser.get_chord_tones(chord_name):
                 for octave in range(2, 6):
                     midi = 12 * octave + pc
                     if not Note("G3").midi_note() <= midi <= Note("Bb5").midi_note():
                         continue
                     melody = note_name(midi)
                     for v in engine.get_all_grip_voicings(
-                        Note(melody), quality, chord_name=chord_name, grips=("duo",)
+                        Note(melody), chord_name=chord_name, grips=("duo",)
                     ):
                         upper = sorted(v.midi_notes())
                         if upper[-1] - upper[0] < 12:
@@ -285,7 +285,7 @@ class TestStringSetTable(unittest.TestCase):
             for chord_name, quality in (("Cmaj7", "maj7"), ("Gm7", "m7"), ("G7", "7"))
             for melody in every_chord_tone(chord_name, quality)
             for v in VoiceLeadingEngine.get_grip_voicings(
-                Note(melody), quality, chord_name=chord_name,
+                Note(melody), chord_name=chord_name,
                 top_string=3, grips=("shell",),
             )
             if v.active_strings == [0, 2, 3]
@@ -327,7 +327,7 @@ class TestStringSetTable(unittest.TestCase):
         for chord_name, quality in (("Cmaj7", "maj7"), ("Dm7", "m7"), ("G7", "7")):
             for melody in every_chord_tone(chord_name, quality):
                 steps = VoiceLeadingEngine.arrange_progression(
-                    [(melody, quality, chord_name)]
+                    [(melody, chord_name)]
                 )
                 for step in steps:
                     if step.voicing.soprano_string() != 3:
@@ -356,7 +356,7 @@ class TestSopranoStringChoices(unittest.TestCase):
         though that costs a string.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7"), ("C4", "maj7", "Cmaj7")]
+            [("D4", "Dm7"), ("C4", "Cmaj7")]
         )
         self.assertEqual(len(steps), 2)
         for step in steps:
@@ -379,7 +379,7 @@ class TestSopranoStringChoices(unittest.TestCase):
         `no_shape` rather than a pitch no string reaches.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7")], top_strings=(5,)
+            [("D4", "Dm7")], top_strings=(5,)
         )
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].silence, "no_shape")
@@ -391,7 +391,7 @@ class TestFretWindow(unittest.TestCase):
 
     def test_the_arrangement_sits_inside_the_window(self):
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")]
         )
         for step in steps:
             for fret in step.voicing.active_frets():
@@ -406,7 +406,7 @@ class TestFretWindow(unittest.TestCase):
         selector looks back *past* the silent step to the last sounding shape.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C6", "m7", "Dm7"), ("D5", "m7", "Dm7")]
+            [("C6", "Dm7"), ("D5", "Dm7")]
         )
         self.assertEqual(len(steps), 2)
         self.assertEqual(steps[0].silence, "out_of_reach")
@@ -416,7 +416,7 @@ class TestFretWindow(unittest.TestCase):
     def test_the_window_bounds_are_honoured_when_narrowed(self):
         """A caller can ask for a different window and the selector obeys it."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7")], fret_min=1, fret_max=4
+            [("D5", "Dm7"), ("B4", "G7")], fret_min=1, fret_max=4
         )
         self.assertTrue(steps)
         for step in steps:
@@ -444,11 +444,11 @@ class TestKnownTableGaps(unittest.TestCase):
         voicing_cost's first criterion is tone purity, so the arrangement never picks
         one while a correct shape exists.
         """
-        tones = set(ChordParser.get_chord_tones("13", "C13"))
+        tones = set(ChordParser.get_chord_tones("C13"))
         impure = [
             v
             for v in self.engine.get_all_drop2_voicings(
-                Note("D5"), "13", chord_name="C13"
+                Note("D5"), chord_name="C13"
             )
             if not set(v.pitch_classes()) <= tones
         ]
@@ -463,7 +463,7 @@ class TestKnownTableGaps(unittest.TestCase):
             f"the 13-chord 9th gap reopened: {[v.tab_string() for v in impure]}",
         )
         for v in self.engine.get_all_drop2_voicings(
-            Note("D5"), "13", chord_name="C13"
+            Note("D5"), chord_name="C13"
         ):
             self.assertEqual(
                 self.engine.voicing_cost(
@@ -484,9 +484,9 @@ class TestKnownTableGaps(unittest.TestCase):
         further down the neck. If either pool ever empties the ordering stops being
         tested, so both are asserted present.
         """
-        tones = set(ChordParser.get_chord_tones("13", "C13"))
+        tones = set(ChordParser.get_chord_tones("C13"))
         candidates = self.engine.get_all_drop2_voicings(
-            Note("D5"), "13", chord_name="C13"
+            Note("D5"), chord_name="C13"
         )
         # Every one is a correct voicing of C13 - that is the point of the fix - and they
         # differ in where they sit, so this still has both pools to rank.
@@ -518,9 +518,9 @@ class TestKnownTableGaps(unittest.TestCase):
         """
         for chord_name, quality in QUALITIES:
             for melody in every_chord_tone(chord_name, quality):
-                tones = set(ChordParser.get_chord_tones(quality, chord_name))
+                tones = set(ChordParser.get_chord_tones(chord_name))
                 for step in VoiceLeadingEngine.arrange_progression(
-                    [(melody, quality, chord_name)]
+                    [(melody, chord_name)]
                 ):
                     self.assertTrue(
                         set(step.voicing.pitch_classes()) <= tones,

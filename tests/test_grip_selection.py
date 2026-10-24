@@ -47,8 +47,8 @@ class TestPositionContinuity(unittest.TestCase):
         Measured worst jump over this progression: 2.5 before, 3.75 now.
         """
         progression = [
-            ("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7"),
-            ("E5", "m7", "Am7"), ("D5", "7", "G7"), ("C5", "maj7", "Cmaj7"),
+            ("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7"),
+            ("E5", "Am7"), ("D5", "G7"), ("C5", "Cmaj7"),
         ]
         steps = VoiceLeadingEngine.arrange_progression(progression)
         self.assertEqual(len(steps), len(progression))
@@ -61,7 +61,7 @@ class TestPositionContinuity(unittest.TestCase):
     def test_a_repeated_melody_keeps_its_fret(self):
         """A melody that repeats keeps its place rather than sliding down the neck."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("D5", "7", "G7"), ("D5", "m7b5", "Dm7b5")]
+            [("D5", "Dm7"), ("D5", "G7"), ("D5", "Dm7b5")]
         )
         frets = [s.voicing.fret_on_soprano for s in steps]
         self.assertLessEqual(max(frets) - min(frets), 5, frets)
@@ -73,7 +73,7 @@ class TestPositionContinuity(unittest.TestCase):
         it is a legitimate answer to a melody the high E cannot reach.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("A4", "7", "G7"), ("A4", "maj7", "Cmaj7")]
+            [("A4", "Dm7"), ("A4", "G7"), ("A4", "Cmaj7")]
         )
         self.assertTrue(steps)
         for step in steps:
@@ -85,7 +85,7 @@ class TestSelectionDeterminism(unittest.TestCase):
 
     def test_the_same_progression_arranges_identically_twice(self):
         progression = [
-            ("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7"),
+            ("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7"),
         ]
         first = VoiceLeadingEngine.arrange_progression(progression)
         second = VoiceLeadingEngine.arrange_progression(progression)
@@ -103,7 +103,7 @@ class TestSelectionDeterminism(unittest.TestCase):
         sounds an F# the chord does not contain.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")],
             top_strings=(5,),
         )
         self.assertEqual(
@@ -162,14 +162,14 @@ class TestVoicingCost(unittest.TestCase):
         values, and `decisive_criterion` zips them, so a score that stopped being a
         tuple would change the selection rather than the spelling.
         """
-        v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
+        v = self.engine.get_drop2_voicings(Note("C5"), chord_name="Cmaj7")[0]
         score = self.engine.voicing_cost(v, SelectionCriteria(previous=v))
         self.assertIsInstance(score, tuple)
         self.assertEqual(tuple(score), tuple(score._asdict().values()))
         self.assertLessEqual(score, score)
 
     def test_a_voicing_inside_the_window_pays_no_window_penalty(self):
-        v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
+        v = self.engine.get_drop2_voicings(Note("C5"), chord_name="Cmaj7")[0]
         self.assertEqual(
             self.engine.voicing_cost(v, SelectionCriteria(previous=v)).outside, 0.0
         )
@@ -178,7 +178,7 @@ class TestVoicingCost(unittest.TestCase):
         """F5 sits at fret 13 on the high E (inside the window) but at fret 18 on the B
         string, which is not. A candidate that far out has to be marked as such."""
         candidates = self.engine.get_drop2_voicings(
-            Note("F5"), "maj7", chord_name="Cmaj7", top_string=4
+            Note("F5"), chord_name="Cmaj7", top_string=4
         )
         self.assertTrue(candidates)
         costs = [
@@ -190,7 +190,7 @@ class TestVoicingCost(unittest.TestCase):
     def test_missing_voices_come_last(self):
         """A partial harmonisation is only ever chosen when nothing fuller fits."""
         shells = self.engine.get_grip_voicings(
-            Note("B4"), "maj7", chord_name="Cmaj7", grips=("shell",)
+            Note("B4"), chord_name="Cmaj7", grips=("shell",)
         )
         self.assertTrue(shells)
         self.assertEqual(
@@ -199,7 +199,7 @@ class TestVoicingCost(unittest.TestCase):
 
     def test_the_selector_really_is_the_argmin_of_the_cost(self):
         candidates = self.engine.get_all_grip_voicings(
-            Note("C5"), "maj7", chord_name="Cmaj7"
+            Note("C5"), chord_name="Cmaj7"
         )
         self.assertTrue(candidates)
         best = self.engine._best_voicing(candidates, previous=None)
@@ -221,7 +221,7 @@ class TestVoicingCost(unittest.TestCase):
         shape with a root bass is not penalised either.
         """
         candidates = self.engine.get_grip_voicings(
-            Note("F4"), "m7", chord_name="Dm7", top_string=4,
+            Note("F4"), chord_name="Dm7", top_string=4,
             grips=("drop2", "drop2_6432"),
         )
         self.assertTrue(candidates)
@@ -248,7 +248,7 @@ class TestVoicingCost(unittest.TestCase):
         behaviour rather than a guessed bass.
         """
         candidates = self.engine.get_grip_voicings(
-            Note("F4"), "m7", chord_name="Dm7", top_string=4, grips=("drop2",)
+            Note("F4"), chord_name="Dm7", top_string=4, grips=("drop2",)
         )
         self.assertTrue(candidates)
         v = candidates[0]
@@ -272,7 +272,7 @@ class TestVoicingCost(unittest.TestCase):
             root_pc = root_midi_of(chord) % 12
             for melody in every_chord_tone(chord, quality):
                 for v in self.engine.get_grip_voicings(
-                    Note(melody), quality, chord_name=chord, top_string=4,
+                    Note(melody), chord_name=chord, top_string=4,
                     grips=("drop2",),
                 ):
                     assert v.bass_pc is not None, f"{v.tab_string()} has no bass"
@@ -289,7 +289,7 @@ class TestVoicingCost(unittest.TestCase):
 
     def test_the_first_chord_starts_near_the_middle_of_the_neck(self):
         """With nothing to lead from, "stay in position" becomes "start somewhere sane"."""
-        steps = VoiceLeadingEngine.arrange_progression([("D5", "m7", "Dm7")])
+        steps = VoiceLeadingEngine.arrange_progression([("D5", "Dm7")])
         self.assertEqual(len(steps), 1)
         self.assertLessEqual(abs(steps[0].voicing.avg_fret - 9), 4.0)
 
@@ -303,7 +303,7 @@ class TestVoicingCost(unittest.TestCase):
         `8-x-8-8-13-x`, index at 8 and pinky at 13, because it kept the hand where the
         previous chord was. The shape that actually gets chosen now spans one fret.
         """
-        steps = VoiceLeadingEngine.arrange_progression([("C5", "m7b5", "Cm7b5")])
+        steps = VoiceLeadingEngine.arrange_progression([("C5", "Cm7b5")])
         self.assertEqual(len(steps), 1)
         chosen = steps[0].voicing
         self.assertEqual(chosen.tab_string(), "x-x-8-8-7-8")
@@ -311,7 +311,7 @@ class TestVoicingCost(unittest.TestCase):
         # The wide shape is still *offered* - the cap is what bounds it, not the
         # ranking - and the cost tuple is what prefers the narrow one.
         candidates = self.engine.get_all_grip_voicings(
-            Note("C5"), "m7b5", chord_name="Cm7b5"
+            Note("C5"), chord_name="Cm7b5"
         )
         self.assertTrue(candidates)
         best = self.engine._best_voicing(candidates, previous=chosen)
@@ -384,7 +384,7 @@ class TestVoicingCost(unittest.TestCase):
         # the tuple prefers on criterion 2 - so the claim this test makes is the one it
         # always made: the hand does not jump.
         steps = VoiceLeadingEngine.arrange_progression(
-            [("F4", "7", "Bb7"), ("G4", "7", "Bb7"), ("F4", "7", "Bb7")]
+            [("F4", "Bb7"), ("G4", "Bb7"), ("F4", "Bb7")]
         )
         self.assertEqual(
             [s.voicing.tab_string() for s in steps],
@@ -406,10 +406,10 @@ class TestVoicingCost(unittest.TestCase):
         any positive count and "clean" is exactly zero.
         """
         candidates = self.engine.get_all_grip_voicings(
-            Note("C5"), "m7b5", chord_name="Cm7b5"
+            Note("C5"), chord_name="Cm7b5"
         )
         self.assertTrue(candidates)
-        tones = set(ChordParser.get_chord_tones("m7b5", "Cm7b5"))
+        tones = set(ChordParser.get_chord_tones("Cm7b5"))
         clean = [v for v in candidates if set(v.pitch_classes()) <= tones]
         self.assertTrue(clean)
         for v in candidates:
@@ -439,13 +439,13 @@ class TestVoicingCost(unittest.TestCase):
         obliged to be wider but tends to be. Counting is what lets the selector prefer
         the less wrong shape when no correct one is on offer.
         """
-        tones = {t % 12 for t in ChordParser.get_chord_tones("maj7", "Cmaj7")}
+        tones = {t % 12 for t in ChordParser.get_chord_tones("Cmaj7")}
         counts = {}
-        for melody, quality, chord in (
-            ("F#5", "7", "G7"), ("C5", "maj7", "Cmaj7"), ("A4", "7", "G7"),
+        for melody, chord in (
+            ("F#5", "G7"), ("C5", "Cmaj7"), ("A4", "G7"),
         ):
             for v in self.engine.get_grip_voicings(
-                Note(melody), quality, chord_name=chord, top_string=5,
+                Note(melody), chord_name=chord, top_string=5,
                 grips=("drop2",),
             ):
                 others = [p for p in v.midi_notes() if p % 12 != Note(melody).midi_note() % 12]
@@ -479,12 +479,12 @@ class TestVoicingCost(unittest.TestCase):
         the melody like any other note, which is the previous behaviour and is what a
         caller that does not know the melody gets.
         """
-        tones = {t % 12 for t in ChordParser.get_chord_tones("7", "G7")}
+        tones = {t % 12 for t in ChordParser.get_chord_tones("G7")}
         melody_pc = Note("F#5").midi_note() % 12
         self.assertNotIn(melody_pc, tones, "the fixture must be a non-chord melody")
         found = False
         for v in self.engine.get_grip_voicings(
-            Note("F#5"), "7", chord_name="G7", top_string=5, grips=("drop24",)
+            Note("F#5"), chord_name="G7", top_string=5, grips=("drop24",)
         ):
             found = True
             others = [p % 12 for p in v.midi_notes() if p % 12 != melody_pc]
@@ -517,7 +517,7 @@ class TestVoicingCost(unittest.TestCase):
         term could only choose a *name*, or paper over a genuine tie. The width is pinned
         because bass function must stay where it is: a term added at the end would move it.
         """
-        v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
+        v = self.engine.get_drop2_voicings(Note("C5"), chord_name="Cmaj7")[0]
         self.assertEqual(
             len(self.engine.voicing_cost(v, SelectionCriteria(root_pc=0))), 7
         )

@@ -16,9 +16,9 @@ class TestProgressions(unittest.TestCase):
         Melody: F5 -> F5 -> Eb5
         """
         progression = [
-            ("F5", "m7b5", "Dm7b5"),
-            ("F5", "7b9", "G7b9"),
-            ("Eb5", "m7", "Cm7")
+            ("F5", "Dm7b5"),
+            ("F5", "G7b9"),
+            ("Eb5", "Cm7")
         ]
         result = self.engine.arrange_progression(progression)
 
@@ -60,9 +60,9 @@ class TestProgressions(unittest.TestCase):
         Melody: C5 -> C5 -> Bb4
         """
         progression = [
-            ("C5", "m7b5", "Am7b5"),
-            ("C5", "7b9", "D7b9"),
-            ("Bb4", "m6", "Gm6"),
+            ("C5", "Am7b5"),
+            ("C5", "D7b9"),
+            ("Bb4", "Gm6"),
         ]
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
@@ -95,9 +95,9 @@ class TestProgressions(unittest.TestCase):
         Melody: D5 -> B4 -> C5
         """
         progression = [
-            ("D5", "m7", "Dm7"),
-            ("B4", "7", "G7"),
-            ("C5", "maj7", "Cmaj7")
+            ("D5", "Dm7"),
+            ("B4", "G7"),
+            ("C5", "Cmaj7")
         ]
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
@@ -117,9 +117,9 @@ class TestProgressions(unittest.TestCase):
         bottom four strings.
         """
         progression = [
-            ("D4", "m7", "Dm7"),
-            ("D4", "7", "G7"),
-            ("C4", "maj7", "Cmaj7"),
+            ("D4", "Dm7"),
+            ("D4", "G7"),
+            ("C4", "Cmaj7"),
         ]
         result = self.engine.arrange_progression(progression)
 
@@ -173,9 +173,9 @@ class TestProgressions(unittest.TestCase):
         pitch is reachable, but not on the strings this caller named.
         """
         progression = [
-            ("D4", "m7", "Dm7"),
-            ("D4", "7", "G7"),
-            ("C4", "maj7", "Cmaj7"),
+            ("D4", "Dm7"),
+            ("D4", "G7"),
+            ("C4", "Cmaj7"),
         ]
         steps = self.engine.arrange_progression(progression, top_strings=(5,))
         self.assertEqual(len(steps), 3)
@@ -189,8 +189,8 @@ class TestProgressions(unittest.TestCase):
         exactly as it was when the B5 position was dropped outright.
         """
         progression = [
-            ("B5", "m7", "Dm7"),  # Above fret 18 on both the high E and B strings
-            ("D5", "m7", "Dm7"),
+            ("B5", "Dm7"),  # Above fret 18 on both the high E and B strings
+            ("D5", "Dm7"),
         ]
         result = self.engine.arrange_progression(progression)
 

@@ -43,7 +43,7 @@ class TestDrop2Voicings(unittest.TestCase):
         ]
 
         for mel_str, _ in test_melodies:
-            voicings = self.engine.get_drop2_voicings(Note(mel_str), "m7b5", chord_name="Dm7b5")
+            voicings = self.engine.get_drop2_voicings(Note(mel_str), chord_name="Dm7b5")
             self.assertTrue(len(voicings) >= 1, f"Expected at least 1 voicing for Dm7b5 with melody {mel_str}")
 
             for v in voicings:
@@ -75,8 +75,14 @@ class TestDrop2Voicings(unittest.TestCase):
         """Verify that all essential minor tune chord qualities return valid fingerings."""
         qualities = ["m7b5", "dim7", "m6", "mMaj7", "m7", "7b9", "7alt"]
         for q in qualities:
-            voicings = self.engine.get_drop2_voicings(Note("G5"), q)
-            self.assertGreater(len(voicings), 0, f"Expected voicings for quality {q} with melody G5")
+            chord_name = "C" + q
+            voicings = self.engine.get_drop2_voicings(
+                Note("G5"), chord_name=chord_name
+            )
+            self.assertGreater(
+                len(voicings), 0,
+                f"Expected voicings for {chord_name} with melody G5",
+            )
             for v in voicings:
                 self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
                 self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
@@ -85,8 +91,14 @@ class TestDrop2Voicings(unittest.TestCase):
         """Verify major family qualities (maj7, 6, 7)."""
         qualities = ["maj7", "6", "7"]
         for q in qualities:
-            voicings = self.engine.get_drop2_voicings(Note("C5"), q)
-            self.assertGreater(len(voicings), 0, f"Expected voicings for quality {q} with melody C5")
+            chord_name = "C" + q
+            voicings = self.engine.get_drop2_voicings(
+                Note("C5"), chord_name=chord_name
+            )
+            self.assertGreater(
+                len(voicings), 0,
+                f"Expected voicings for {chord_name} with melody C5",
+            )
 
     def test_voicing_dataclass_methods(self):
         """Test Voicing helper methods."""
@@ -114,8 +126,8 @@ class TestExtendedQualities(unittest.TestCase):
         ]
         for quality, melody in cases:
             chord_name = "C" + quality
-            tones = set(ChordParser.get_chord_tones(quality, chord_name))
-            voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
+            tones = set(ChordParser.get_chord_tones(chord_name))
+            voicings = self.engine.get_drop2_voicings(Note(melody), chord_name=chord_name)
             self.assertTrue(voicings, f"Expected a voicing for {chord_name} with melody {melody}")
             for v in voicings:
                 self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
@@ -124,32 +136,35 @@ class TestExtendedQualities(unittest.TestCase):
                     f"{v.tab_string()} sounds {sorted(v.pitch_classes())} outside {sorted(tones)}",
                 )
 
-    def test_extension_quality_without_chord_name_offers_every_inversion(self):
+    def test_every_block_the_melody_reaches_is_offered(self):
         """
-        Without a chord name all five inversions are offered, on every string block the
-        melody can reach. D5 is reachable on the high E (fret 10) and on the B (fret 15),
-        and each block now also offers a bass-skipping set, so the total is larger than
-        five templates times two blocks. The count is therefore not pinned: what is
-        pinned is that every template appears on both blocks, which is the property the
-        count was standing in for.
+        A melody that states a chord tone is offered on every string block it can reach.
+
+        D5 is the 9th of Cmaj9, reachable on the high E (fret 10) and on the B (fret 15),
+        so each block offers the drop-2 for that degree. The count is not pinned - a block
+        may offer a bass-skipping set beside it - which is why what is asserted is that
+        both blocks appear and that every shape states the chord and keeps the melody on
+        top. The *five* inversions the count used to stand for were a property of the
+        rootless reading: with no root the templates were unfiltered, so all five degrees
+        came back whatever the melody was. A root makes the reading answer for the chord.
         """
-        voicings = self.engine.get_all_drop2_voicings(Note("D5"), "maj9")
+        voicings = self.engine.get_all_drop2_voicings(Note("D5"), chord_name="Cmaj9")
         self.assertTrue(voicings)
+        tones = set(ChordParser.get_chord_tones("Cmaj9"))
         for soprano in (5, 4):
             on_block = [v for v in voicings if v.soprano_string() == soprano]
             self.assertTrue(on_block, f"nothing offered on string {soprano}")
-            # Every template reachable on the block appears there.
-            self.assertGreaterEqual(len(on_block), 5, f"string {soprano}")
             for v in on_block:
                 self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
                 self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
+                self.assertTrue(set(v.pitch_classes()) <= tones, v.tab_string())
 
     def test_rootless_dominant_root_in_top_inversion(self):
         """7b9 and 7alt are voiced rootless, so each has a root-in-top inversion that
         contains its root - otherwise a root melody falls through to a wrong chord."""
         for quality, chord_name in (("7b9", "G7b9"), ("7alt", "G7alt")):
-            tones = set(ChordParser.get_chord_tones(quality, chord_name))
-            voicings = self.engine.get_drop2_voicings(Note("G5"), quality, chord_name=chord_name)
+            tones = set(ChordParser.get_chord_tones(chord_name))
+            voicings = self.engine.get_drop2_voicings(Note("G5"), chord_name=chord_name)
             self.assertEqual([v.tab_string() for v in voicings], ["x-x-15-13-12-15"], quality)
             self.assertTrue(set(voicings[0].pitch_classes()) <= tones)
             self.assertIn(7, voicings[0].pitch_classes())  # the root sounds
@@ -162,8 +177,8 @@ class TestExtendedQualities(unittest.TestCase):
         may also be offered on a lower string than the block uses; the alias has to
         select the same shapes as the canonical spelling, and the idiom is the first one.
         """
-        canonical = self.engine.get_drop2_voicings(Note("B4"), "maj7", chord_name="Cmaj7")
-        alias = self.engine.get_drop2_voicings(Note("B4"), "M7", chord_name="Cmaj7")
+        canonical = self.engine.get_drop2_voicings(Note("B4"), chord_name="Cmaj7")
+        alias = self.engine.get_drop2_voicings(Note("B4"), chord_name="Cmaj7")
         self.assertEqual(canonical[0].tab_string(), "x-x-5-5-5-7")
         self.assertEqual(
             [v.tab_string() for v in alias],
@@ -185,7 +200,7 @@ class TestMelodyStringChoices(unittest.TestCase):
         With top_string=4 the melody sounds on the B string (index 4) and the voicing
         uses strings 1-4 (A, D, G, B); the low E and high E strings are muted.
         """
-        voicings = self.engine.get_drop2_voicings(Note("D5"), "m7", chord_name="Dm7", top_string=4)
+        voicings = self.engine.get_drop2_voicings(Note("D5"), chord_name="Dm7", top_string=4)
         self.assertEqual([v.tab_string() for v in voicings], ["x-15-15-14-15-x"])
 
         v = voicings[0]
@@ -204,8 +219,8 @@ class TestMelodyStringChoices(unittest.TestCase):
         Fingering the same inversion on either four-string block sounds the same four
         pitches - only the position on the neck changes.
         """
-        high_e = self.engine.get_drop2_voicings(Note("D5"), "m7", chord_name="Dm7", top_string=5)
-        b_string = self.engine.get_drop2_voicings(Note("D5"), "m7", chord_name="Dm7", top_string=4)
+        high_e = self.engine.get_drop2_voicings(Note("D5"), chord_name="Dm7", top_string=5)
+        b_string = self.engine.get_drop2_voicings(Note("D5"), chord_name="Dm7", top_string=4)
 
         self.assertEqual(high_e[0].tab_string(), "x-x-10-10-10-10")
         self.assertEqual(b_string[0].tab_string(), "x-15-15-14-15-x")
@@ -216,9 +231,9 @@ class TestMelodyStringChoices(unittest.TestCase):
         D4 sits below the high E string's open pitch (E4), so that family cannot voice
         it at all; the B string plays it in low position instead.
         """
-        self.assertEqual(self.engine.get_drop2_voicings(Note("D4"), "m7", chord_name="Dm7"), [])
+        self.assertEqual(self.engine.get_drop2_voicings(Note("D4"), chord_name="Dm7"), [])
 
-        b_string = self.engine.get_drop2_voicings(Note("D4"), "m7", chord_name="Dm7", top_string=4)
+        b_string = self.engine.get_drop2_voicings(Note("D4"), chord_name="Dm7", top_string=4)
         self.assertEqual([v.tab_string() for v in b_string], ["x-3-3-2-3-x"])
 
     def test_get_all_drop2_voicings_lists_high_e_first(self):
@@ -230,7 +245,7 @@ class TestMelodyStringChoices(unittest.TestCase):
         bass-skipping set - so the ordering is asserted as "every high-E shape precedes
         every B-string shape", which is the property the exact list was standing for.
         """
-        all_voicings = self.engine.get_all_drop2_voicings(Note("D5"), "m7", chord_name="Dm7")
+        all_voicings = self.engine.get_all_drop2_voicings(Note("D5"), chord_name="Dm7")
         self.assertEqual(all_voicings[0].tab_string(), "x-x-10-10-10-10")
         self.assertEqual(all_voicings[0].soprano_string(), 5)
         sopranos = [v.soprano_string() for v in all_voicings]
@@ -244,22 +259,22 @@ class TestMelodyStringChoices(unittest.TestCase):
         offers its bass-skipping variant, which is also on string 5.
         """
         all_voicings = self.engine.get_all_drop2_voicings(
-            Note("D5"), "m7", chord_name="Dm7", top_strings=(5,)
+            Note("D5"), chord_name="Dm7", top_strings=(5,)
         )
         self.assertEqual(all_voicings[0].tab_string(), "x-x-10-10-10-10")
         self.assertEqual({v.soprano_string() for v in all_voicings}, {5})
         for v in all_voicings:
             self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
 
-    def test_get_all_drop2_voicings_without_chord_name_returns_all_inversions(self):
+    def test_get_all_drop2_voicings_returns_all_inversions(self):
         """
-        Without a chord name every inversion is offered on every block, high E before B.
+        Every inversion is offered on every block, high E before B.
 
         The count is not pinned, because each block now also offers a bass-skipping set;
         what is asserted is that all four inversions appear on both blocks and that the
         high E still comes first.
         """
-        all_voicings = self.engine.get_all_drop2_voicings(Note("D5"), "m7")
+        all_voicings = self.engine.get_all_drop2_voicings(Note("D5"), chord_name="Cm7")
 
         self.assertTrue(all_voicings)
         sopranos = [v.soprano_string() for v in all_voicings]
@@ -276,9 +291,18 @@ class TestMelodyStringChoices(unittest.TestCase):
             self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
 
     def test_unsupported_quality_returns_nothing_for_every_family(self):
-        """An unknown chord quality yields no voicings, whichever soprano strings are allowed."""
-        self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "not-a-chord"), [])
-        self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "not-a-chord", "Dm7"), [])
+        """An unknown chord quality yields no voicings, whichever soprano strings are allowed.
+
+        Unreadable *suffix*, readable root: the family has nothing to build from and says
+        so with an empty list, rather than the refusal a symbol with no root gets.
+        """
+        self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "Dnot-a-chord"), [])
+        self.assertEqual(
+            self.engine.get_all_drop2_voicings(
+                Note("D5"), "Dnot-a-chord", top_strings=(5, 4)
+            ),
+            [],
+        )
 
 
 class TestHighFretOctaveDown(unittest.TestCase):
@@ -303,7 +327,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
         entirely. The G string is also offered - it is a string further down still, so a
         note that is comfortable there is genuinely lower on the neck.
         """
-        candidates = self.engine.get_octave_down_candidates(Note("A5"), "m7", chord_name="Dm7")
+        candidates = self.engine.get_octave_down_candidates(Note("A5"), chord_name="Dm7")
         self.assertTrue(candidates)
         for v in candidates:
             self.assertIn(v.soprano_string(), (4, 3))
@@ -315,7 +339,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
     def test_octave_down_sounds_the_written_pitch_an_octave_lower(self):
         """The B-string shape sounds the melody exactly one octave below the written note."""
         written = Note("A5").midi_note()
-        candidates = self.engine.get_octave_down_candidates(Note("A5"), "m7", chord_name="Dm7")
+        candidates = self.engine.get_octave_down_candidates(Note("A5"), chord_name="Dm7")
         self.assertEqual(max(candidates[0].midi_notes()), written - 12)
 
     def test_octave_down_lands_in_the_window(self):
@@ -325,16 +349,16 @@ class TestHighFretOctaveDown(unittest.TestCase):
         candidate, because the candidate pool is pure by design - it still offers the
         higher G-string position, and it is the selector's job to reject it.
         """
-        candidates = self.engine.get_octave_down_candidates(Note("A5"), "m7", chord_name="Dm7")
+        candidates = self.engine.get_octave_down_candidates(Note("A5"), chord_name="Dm7")
         # The pool is unfiltered, so a high option is still there...
         self.assertTrue(any(v.top_fret > HIGH_FRET_LIMIT for v in candidates))
         # ...but the chosen voicing is inside the window.
-        step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
+        step = self.engine.arrange_progression([("A5", "Dm7")])[0]
         self.assertLessEqual(step.voicing.fret_on_soprano, HIGH_FRET_LIMIT)
 
     def test_progression_transposes_a_high_melody_down_an_octave(self):
         """A5 over Dm7 can only be voiced at fret 17, so it is arranged as A4 in low position."""
-        steps = self.engine.arrange_progression([("A5", "m7", "Dm7")])
+        steps = self.engine.arrange_progression([("A5", "Dm7")])
         self.assertEqual(len(steps), 1)
         step = steps[0]
         self.assertEqual(step.melody, "A4")
@@ -344,28 +368,28 @@ class TestHighFretOctaveDown(unittest.TestCase):
 
     def test_progression_leaves_a_low_melody_alone(self):
         """D5 is playable in low position on the high E, so nothing is transposed."""
-        steps = self.engine.arrange_progression([("D5", "m7", "Dm7")])
+        steps = self.engine.arrange_progression([("D5", "Dm7")])
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].melody, "D5")
         self.assertIsNone(steps[0].original_melody)
 
     def test_transposed_step_sounds_its_reported_melody(self):
         """A transposed step's reported melody is the pitch that actually sounds."""
-        step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
+        step = self.engine.arrange_progression([("A5", "Dm7")])[0]
         self.assertEqual(max(step.voicing.midi_notes()), Note(step.melody).midi_note())
 
     def test_transposition_keeps_the_voicing_playable(self):
         """The ordinary drop-2 invariants still hold after the move down the neck."""
-        step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
+        step = self.engine.arrange_progression([("A5", "Dm7")])[0]
         v = step.voicing
         self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip])
         self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
         self.assertEqual(v.soprano_string(), 4)
-        self.assertTrue(set(v.pitch_classes()) <= set(ChordParser.get_chord_tones("m7", "Dm7")))
+        self.assertTrue(set(v.pitch_classes()) <= set(ChordParser.get_chord_tones("Dm7")))
 
     def test_transposition_is_reported_in_the_annotation(self):
         """format_progression shows the written pitch, since step.melody is the transposed one."""
-        rendered = format_progression(self.engine.arrange_progression([("A5", "m7", "Dm7")]))
+        rendered = format_progression(self.engine.arrange_progression([("A5", "Dm7")]))
         self.assertIn("transposed down an octave from A5", rendered)
 
     def test_unreachable_melody_is_emitted_silent_not_transposed(self):
@@ -375,7 +399,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
         rather than silently respelled an octave down, which would hide the real
         problem: the tab keeps the bar, and `silence` says nothing could be played.
         """
-        steps = self.engine.arrange_progression([("C6", "m7", "Dm7")])
+        steps = self.engine.arrange_progression([("C6", "Dm7")])
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].silence, "out_of_reach")
         self.assertEqual(steps[0].voicing.frets, [-1] * 6)
@@ -383,7 +407,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
 
     def test_melody_only_step_also_moves_down(self):
         """A no-chord step high on the neck is played an octave down on the B string too."""
-        step = self.engine.arrange_progression([("A5", "NC", "NC")])[0]
+        step = self.engine.arrange_progression([("A5", "NC")])[0]
         self.assertTrue(step.melody_only)
         self.assertEqual(step.melody, "A4")
         self.assertEqual(step.original_melody, "A5")
@@ -391,7 +415,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
 
     def test_melody_only_low_note_is_untouched(self):
         """A note already in a low position on the high E still sounds where it was written."""
-        step = self.engine.arrange_progression([("D5", "NC", "NC")])[0]
+        step = self.engine.arrange_progression([("D5", "NC")])[0]
         self.assertIsNone(step.original_melody)
         self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
 
@@ -401,7 +425,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
         the pitch that actually sounds, not from the fret number - the octave-down note
         lands at a *lower* fret, so a fret comparison would wrongly read it as untransposed.
         """
-        step = self.engine.arrange_progression([("G5", "NC", "NC")])[0]
+        step = self.engine.arrange_progression([("G5", "NC")])[0]
         self.assertEqual(step.melody, "G4")
         self.assertEqual(step.original_melody, "G5")
         self.assertEqual(max(step.voicing.midi_notes()), Note("G4").midi_note())
@@ -460,8 +484,8 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
         for chord_name, melody, expected in self.CASES:
             quality = ChordParser.parse_chord_name(chord_name)[1]
             assert quality is not None
-            tones = set(ChordParser.get_chord_tones(quality, chord_name))
-            voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
+            tones = set(ChordParser.get_chord_tones(chord_name))
+            voicings = self.engine.get_drop2_voicings(Note(melody), chord_name=chord_name)
             self.assertTrue(voicings, chord_name)
             self.assertEqual(voicings[0].tab_string(), expected, chord_name)
             for voicing in voicings:
@@ -481,13 +505,21 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
 
     def test_every_chord_tone_is_voiceable_in_the_working_register(self):
         """In the E4-Bb5 register each chord tone of each new quality gets a pure,
-        playable, chord-tone-matched voicing on one of the two blocks."""
+        playable, chord-tone-matched voicing on one of the two blocks.
+
+        Where a chord tone gets nothing, the gap is **recorded and asserted**, not covered:
+        it used to be answered by a quality-only fallback - templates placed relative to the
+        soprano with no root - which is gone with the quality field, and whose shapes did
+        not state the named chord at all (`x-6-3-3-6-x` is D#/F/Bb/F under a `Csus4`). The
+        gap list is pinned so that a *new* one fails here rather than passing quietly.
+        """
         checked = 0
+        gaps = []
         for quality in ("maj", "m", "aug", "sus4", "sus2", "add9", "madd9", "7sus4",
                         "7b5", "7#5", "7#11", "7b13", "maj7#11", "m9b5"):
             for root_str in ("C", "F#"):
                 chord_name = root_str + quality
-                tones = set(ChordParser.get_chord_tones(quality, chord_name))
+                tones = set(ChordParser.get_chord_tones(chord_name))
                 root_pc = Note(root_str + "4").midi_note() % 12
                 for degree in {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT[quality]}:
                     midi = next(m for m in range(64, 83) if m % 12 == (root_pc + degree) % 12)
@@ -495,15 +527,16 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
                     matched = [
                         v for top_string in (5, 4)
                         for v in self.engine.get_drop2_voicings(
-                            Note(melody), quality, chord_name=chord_name, top_string=top_string)
+                            Note(melody), chord_name=chord_name, top_string=top_string)
                     ]
                     if not matched:
-                        # Pre-existing low-register gap, shared with maj7/m7/9/m9:
-                        # the caller falls back to quality-only voicings.
-                        self.assertTrue(
-                            self.engine.get_all_drop2_voicings(Note(melody), quality, chord_name=chord_name),
+                        # A low-register gap with nothing behind it: the symbol is the only
+                        # spelling, so a shape either states this chord or is not offered.
+                        self.assertFalse(
+                            self.engine.get_all_drop2_voicings(Note(melody), chord_name=chord_name),
                             (chord_name, melody),
                         )
+                        gaps.append((chord_name, melody))
                         continue
                     checked += 1
                     for v in matched:
@@ -512,6 +545,9 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
                         self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), (chord_name, melody))
                         self.assertIn(v.soprano_string(), (5, 4), (chord_name, melody))
         self.assertGreater(checked, 100)
+        # Both are a sus quality low in the register, where the shape's span exceeds the
+        # drop-2 budget. Pinned so a third one is a decision rather than a drift.
+        self.assertEqual(gaps, [("Csus4", "F4"), ("F#sus2", "F#4")])
 
     def test_symmetrical_qualities_reuse_their_shapes(self):
         """aug is symmetrical (like dim7), while 7b5/7#11 and 7#5/7b13 need only
@@ -532,20 +568,33 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
         self.assertEqual(shapes("7#5"), shapes("7b13"))
 
     def test_aliases_reach_the_new_qualities(self):
-        """M/min/-/+/sus/7sus resolve to the canonical qualities' voicings."""
+        """M/min/-/+/sus/7sus resolve to the canonical qualities' voicings.
+
+        The alias lives in the *name* now, which is the whole of what the change did:
+        there is no separate quality field to spell it in, so the two spellings are two
+        symbols and the test compares their tabs.
+        """
         cases = [
-            ("M", "maj", "Cmaj", "E5"),
-            ("min", "m", "Cm", "C5"),
-            ("-", "m", "Cm", "C5"),
-            ("+", "aug", "Caug", "E5"),
-            ("sus", "sus4", "Gsus4", "C5"),
-            ("7sus", "7sus4", "G7sus4", "C5"),
+            ("CM", "Cmaj", "E5"),
+            ("Cmin", "Cm", "C5"),
+            ("C-", "Cm", "C5"),
+            ("C+", "Caug", "E5"),
+            ("Gsus", "Gsus4", "C5"),
+            ("G7sus", "G7sus4", "C5"),
         ]
-        for alias, canonical, chord_name, melody in cases:
-            expected = self.engine.get_drop2_voicings(Note(melody), canonical, chord_name=chord_name)
-            aliased = self.engine.get_drop2_voicings(Note(melody), alias, chord_name=chord_name)
-            self.assertTrue(expected, chord_name)
-            self.assertEqual([v.tab_string() for v in aliased], [v.tab_string() for v in expected], alias)
+        for aliased, canonical, melody in cases:
+            expected = self.engine.get_drop2_voicings(
+                Note(melody), chord_name=canonical
+            )
+            aliased_voicings = self.engine.get_drop2_voicings(
+                Note(melody), chord_name=aliased
+            )
+            self.assertTrue(expected, canonical)
+            self.assertEqual(
+                [v.tab_string() for v in aliased_voicings],
+                [v.tab_string() for v in expected],
+                aliased,
+            )
 
 
 class TestQualityTableInvariants(unittest.TestCase):
@@ -573,13 +622,13 @@ class TestQualityTableInvariants(unittest.TestCase):
         for quality, chord_tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
             chord_name = "C" + quality
             root_pc = Note("C4").midi_note() % 12
-            allowed = {pc % 12 for pc in ChordParser.get_chord_tones(quality, chord_name)}
+            allowed = {pc % 12 for pc in ChordParser.get_chord_tones(chord_name)}
             for degree in {t % 12 for t in chord_tones}:
                 midi = next(m for m in range(64, 83) if m % 12 == (root_pc + degree) % 12)
                 melody = PITCH_CLASS_NAMES[midi % 12] + str(midi // 12 - 1)
                 for top_string in (5, 4):
                     for voicing in VoiceLeadingEngine.get_drop2_voicings(
-                        Note(melody), quality, chord_name=chord_name,
+                        Note(melody), chord_name=chord_name,
                         top_string=top_string,
                     ):
                         where = (chord_name, melody, voicing.tab_string())

@@ -68,7 +68,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         # The plan's own worked example, bar 1: one melody slot - a whole note - over
         # one chord, which the union turns into four steps. Chosen because it is the
         # case every rule here exists for: a held melody with a moving thumb.
-        self.steps = walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])
+        self.steps = walk([("F5", "Fmaj7")], [(0, 1.0)])
         self.staff = format_tab_staff(self.steps, show_melody=True)
 
     def sounded(self, step: ArrangementStep) -> List[int]:
@@ -271,7 +271,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         anchor on each chord and a connection between. The degradation in the next test is
         for a caller who *states* no positions, which is a different request.
         """
-        steps = walk([("F5", "maj7", "Fmaj7"), ("G4", "maj7", "Gmaj7")])
+        steps = walk([("F5", "Fmaj7"), ("G4", "Gmaj7")])
         self.assertEqual(
             [(step.bar, step.beat) for step in steps],
             [(1, 1.0), (1, 2.0), (1, 3.0), (1, 4.0)],
@@ -289,7 +289,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         "the feature does nothing" rather than as a documented limit of the grid.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7"), ("G4", "maj7", "Gmaj7")],
+            [("F5", "Fmaj7"), ("G4", "Gmaj7")],
             timings=[(None, None, None)] * 2,
             request=Request(
                 chord_notes="targets", bass_on="every-beat", bass_notes="walk"
@@ -304,7 +304,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         The degradation costs the walk, not the arrangement: one position on a strong beat
         is a target, so it is a shell as it always would be.
         """
-        steps = walk([("F5", "maj7", "Fmaj7")])
+        steps = walk([("F5", "Fmaj7")])
         self.assertEqual(steps[0].role, ROLE_TARGET)
         self.assertEqual(steps[0].voicing.grip, "shell")
         self.assertEqual(len(upper_pitches(steps[0])), 3)

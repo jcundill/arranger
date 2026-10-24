@@ -44,8 +44,7 @@ from .tuning import MELODY_STRING_CHOICES_FULL
 # §"Known limitations" holds the reachability measurement.
 #
 # `drop3` and `drop24` are here because a melody that is *not* a chord tone leaves drop-2
-# with no template and no shell, so its quality-only fallback offers shapes carrying notes
-# the chord does not contain. Both derive from the close stack under the melody, which
+# with no template and no shell, so it offers no drop-2 shape for that melody at all. Both derive from the close stack under the melody, which
 # keeps every *other* voice a chord tone, so offering them is what puts a correct voicing
 # in the candidate set for the selector to find - see `cost.voicing_cost`, whose first
 # criterion counts wrong notes rather than flagging them.

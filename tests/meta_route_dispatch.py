@@ -26,17 +26,17 @@ from arranger.options import ArrangeOptions, Request
 from arranger.route_dispatch import ROUTES, dispatch_step
 from arranger.slot_plan import SlotPlan
 
-PROGRESSION: Sequence[Tuple[str, str, str]] = (
-    ("E4", "maj7", "Cmaj7"),
-    ("F4", "maj7", "Dm7"),
-    ("G4", "7", "G7"),
+PROGRESSION: Sequence[Tuple[str, str]] = (
+    ("E4", "Cmaj7"),
+    ("F4", "Dm7"),
+    ("G4", "G7"),
 )
 
 #: One request per entry of the table, with the progression it needs and the entry
 #: that must take it. `NC` has its own progression because its answer comes from the
 #: chord's own name; the last two share the comping route's request and differ only
 #: in where the chord attacks, which is why they are two rows and one entry.
-CASES: Sequence[Tuple[str, Sequence[Tuple[str, str, str]], Dict[str, Any], Tuple[str, ...]]] = (
+CASES: Sequence[Tuple[str, Sequence[Tuple[str, str]], Dict[str, Any], Tuple[str, ...]]] = (
     # the shipped arrangement: the guitar sings under every written note
     ("shipped", PROGRESSION, {}, ("melody_bearing",)),
     # the guitar comps while somebody else sings
@@ -46,7 +46,7 @@ CASES: Sequence[Tuple[str, Sequence[Tuple[str, str, str]], Dict[str, Any], Tuple
     # an `NC` bar, after a chord: melody and no harmony to voice
     (
         "nc",
-        (("E4", "maj7", "Cmaj7"), ("E4", "NC", "NC")),
+        (("E4", "Cmaj7"), ("E4", "NC")),
         {},
         ("melody_bearing", "no_chord"),
     ),
@@ -73,7 +73,7 @@ class TestTheDispatchTable(unittest.TestCase):
 
     def _dispatch(
         self,
-        progression: Sequence[Tuple[str, str, str]] = PROGRESSION,
+        progression: Sequence[Tuple[str, str]] = PROGRESSION,
         **kwargs: Any,
     ) -> List[Tuple[str, SlotPlan]]:
         """Every slot's `(route name, plan)`, as the loop dispatched it.

@@ -48,7 +48,7 @@ class TestHtmlTab(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
         self.steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")],
             top_strings=(5,),
         )
         self.html = format_tab_html(self.steps, title="Test", subtitle="A subtitle")
@@ -187,7 +187,7 @@ class TestHtmlTab(unittest.TestCase):
         # `_staff_columns` pads the last note out to. The numbering still counts
         # from 1 and still advances by `measures_per_line` per system.
         timed = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7")] * 16 + [("C5", "maj7", "Cmaj7")] * 16
+            [("D5", "Dm7")] * 16 + [("C5", "Cmaj7")] * 16
         )
         for index, step in enumerate(timed):
             step.bar, step.beat = index // 4, 1.0

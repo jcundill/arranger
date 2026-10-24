@@ -52,6 +52,19 @@ class ChordParser:
         "minMaj7": "mMaj7",
         "mmaj7": "mMaj7",
         "min9": "m9",
+        "mi7": "m7",
+        # The minor-major seventh, spelled the way a lead sheet spells it. The
+        # parentheses are part of the notation rather than decoration, so they are
+        # part of the key. This one has to be a key rather than left unreadable:
+        # an unknown suffix does not refuse the bar, it silently drops the chord,
+        # and `Dm(maj7)` is the spelling that does it.
+        "m(maj7)": "mMaj7",
+        "min(maj7)": "mMaj7",
+        "mM7": "mMaj7",
+        "-M7": "mMaj7",
+        # The half-diminished fifth, parenthesised or hyphenated.
+        "m7(b5)": "m7b5",
+        "m7-5": "m7b5",
         # diminished
         "°7": "dim7",
         "°": "dim7",
@@ -64,6 +77,13 @@ class ChordParser:
         "M7": "maj7",
         "M9": "maj9",
         "69": "6/9",
+        # The triangle, which is how a lead sheet writes a major seventh, and the
+        # short forms of "major" that are not the bare "M" (a triad, below).
+        "∆7": "maj7",
+        "Δ7": "maj7",
+        "Ma7": "maj7",
+        "ma7": "maj7",
+        "M6": "6",
         # triads and suspended chords. Note the bare major-third symbol "M" is a
         # triad here while "M7" stays a major seventh; "dim" deliberately keeps
         # resolving to dim7 (the diminished triad is not voiced by this library).
@@ -77,6 +97,10 @@ class ChordParser:
         # like "D-7" parsed to the unusable quality "-7".
         "-7": "m7",
         "+": "aug",
+        # The augmented seventh, under both of its names. The chord is a dominant
+        # with a raised fifth, which is why both spellings are the one quality.
+        "+7": "7#5",
+        "aug7": "7#5",
         "sus": "sus4",
         "7sus": "7sus4",
     }
@@ -127,7 +151,7 @@ class ChordParser:
     }
 
     @staticmethod
-    def canonical_quality(chord_type: Optional[str]) -> str:
+    def canonical_quality(quality: Optional[str]) -> str:
         """
         Normalises a chord quality to its canonical spelling.
 
@@ -135,10 +159,10 @@ class ChordParser:
         'm7'): lower-casing first turns 'mMaj7' into 'mmaj7', which is no key in any
         table. Unknown qualities are returned unchanged so callers can report them.
         """
-        if not chord_type:
+        if not quality:
             return ""
-        quality = chord_type.strip()
-        return ChordParser.QUALITY_ALIASES.get(quality, quality)
+        spelling = quality.strip()
+        return ChordParser.QUALITY_ALIASES.get(spelling, spelling)
 
     @staticmethod
     def parse_chord_name(name: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
@@ -157,20 +181,18 @@ class ChordParser:
         return (melody_note.midi_note() - root_midi) % 12
 
     @staticmethod
-    def get_chord_tones(chord_type: str, chord_name: Optional[str] = None) -> Tuple[int, ...]:
+    def get_chord_tones(chord_name: Optional[str]) -> Tuple[int, ...]:
         """
-        Returns the pitch classes (0-11) of every tone in a chord quality.
+        Returns the absolute pitch classes (0-11) of every tone in a chord.
 
-        With chord_name the pitch classes are absolute; without it they are
-        relative to the root (0 = root). Unknown qualities return an empty tuple.
+        A symbol that asks for no chord has no tones to state, so it returns an empty
+        tuple rather than a chord to guess at.
         """
-        tones = ChordParser.CHORD_TONES_FROM_ROOT.get(ChordParser.canonical_quality(chord_type), ())
-        if not tones or not chord_name:
-            return tones
-        root_str, _ = ChordParser.parse_chord_name(chord_name)
-        if not root_str:
-            return tones
-        root_pc = Note(root_str + "4").midi_note() % 12
+        symbol = parse_symbol(chord_name)
+        if symbol is None:
+            return ()
+        tones = ChordParser.CHORD_TONES_FROM_ROOT.get(symbol.quality, ())
+        root_pc = Note(symbol.root + "4").midi_note() % 12
         return tuple((root_pc + pc) % 12 for pc in tones)
 
 
@@ -200,14 +222,13 @@ def sounding_harmony(step: ArrangementStep) -> Tuple[Optional[str], Optional[str
 
 # Non-chord-tone strategy routing: canonical base quality -> {melody degree
 # (relative to root): extension quality that absorbs it as a chord tone}.
-# Only entries that are musically unambiguous are listed; anything missing
-# leaves the melody to the existing quality-only fallback.
+# Only entries that are musically unambiguous are listed; anything missing leaves the
+# melody with no substitute, so it sounds alone under its chord.
 NON_CHORD_TONE_EXTENSIONS = {
     # A 9th over a plain triad - the two rows this table was missing. A quality
-    # with no row keeps the quality-only fallback, and the three families
-    # that have no fallback at all (`shell`, `duo`, `interval`, whose shapes are
-    # defined by the chord's own degrees) then had nothing to fall back to, so
-    # the step went missing instead: `Ebmaj` under `F4` in "But Not For Me" bar 2
+    # with no row had no substitute, and the three families that build from the
+    # chord's own degrees (`shell`, `duo`, `interval`) had nothing to thin to
+    # either, so the step went missing instead: `Ebmaj` under `F4` in "But Not For Me" bar 2
     # with a shell-only palette produced no candidate and was dropped. `add9` is the
     # narrowest quality that contains the 9th, `madd9` its minor twin, and both
     # are already in CHORD_TONES_FROM_ROOT, SHELL_DEGREES and the drop-2 tables,
@@ -315,40 +336,51 @@ def melody_degree_name(melody_note: Note, chord_name: Optional[str]) -> str:
 # ------------------------------------------------------------------
 # Non-chord melody tones
 # ------------------------------------------------------------------
-def is_chord_tone(melody_note: Note, chord_type: str, chord_name: Optional[str] = None) -> bool:
+def is_chord_tone(melody_note: Note, chord_name: Optional[str]) -> bool:
     """
     True when melody_note is one of the chord's tones.
 
     Detection uses ChordParser.CHORD_TONES_FROM_ROOT (every chord tone) rather than
     the four voices a grip can sound, so the root of a rootless quality such as 7b9
-    still counts as a chord tone and is not needlessly reharmonised. Unknown
-    qualities return False.
+    still counts as a chord tone and is not needlessly reharmonised. A symbol asking
+    for no chord has no tones, so nothing is one.
     """
-    canonical = ChordParser.canonical_quality(chord_type)
-    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical)
+    symbol = parse_symbol(chord_name)
+    if symbol is None:
+        return False
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(symbol.quality)
     if not tones:
         return False
-
-    root_pc = 0
-    if chord_name:
-        root_str, _ = ChordParser.parse_chord_name(chord_name)
-        if root_str:
-            root_pc = Note(root_str + "4").midi_note() % 12
-
+    root_pc = Note(symbol.root + "4").midi_note() % 12
     return ((melody_note.midi_note() - root_pc) % 12) in {t % 12 for t in tones}
+
+
+def quality_of(name: Optional[str]) -> str:
+    """The canonical quality a symbol names, or the no-chord marker.
+
+    The one place a derived quality is read off a name, so a slot's `chord_type` is
+    the same reading wherever it is asked for. A symbol that asks for no chord has no
+    quality, so `NC` comes back rather than an empty string - which is what lets a
+    caller keep asking "is this a no-chord slot?" of one field.
+    """
+    symbol = parse_symbol(name)
+    return symbol.quality if symbol is not None else NO_CHORD
+
 
 def resolve_non_chord_tone(
     melody_note: Note,
-    chord_type: str,
     chord_name: str,
     strategy: str = "extension",
     next_melody: Optional[str] = None,
-) -> Optional[Tuple[str, str]]:
+) -> Optional[str]:
     """
-    Picks a substitute (chord quality, chord name) that turns a non-chord
-    melody note into a genuine chord tone, so get_drop2_voicings can voice it.
+    Picks a substitute chord **name** that turns a non-chord melody note into a
+    genuine chord tone, so get_drop2_voicings can voice it.
     Returns None when the strategy cannot help, leaving the caller's existing
     behaviour untouched.
+
+    The name is the whole answer: the quality is read off it like every other, so it is
+    not returned beside it.
 
     strategy:
       'extension'  - keep the harmony and absorb the note as an extension,
@@ -357,19 +389,17 @@ def resolve_non_chord_tone(
                      semitone below the pitch the line resolves to, e.g. the
                      passing D over Cmaj7 -> Bdim7.
     """
-    if not chord_name:
+    symbol = parse_symbol(chord_name)
+    if symbol is None:
         return None
-
-    canonical = ChordParser.canonical_quality(chord_type)
-    root_str, _ = ChordParser.parse_chord_name(chord_name)
-    if not root_str:
-        return None
+    canonical = symbol.quality
+    root_str = symbol.root
 
     if strategy == "extension":
         degree = ChordParser.get_melody_degree(root_str, melody_note)
         extension = NON_CHORD_TONE_EXTENSIONS.get(canonical, {}).get(degree)
         if extension:
-            return extension, f"{root_str}{extension}"
+            return f"{root_str}{extension}"
         return None
 
     if strategy == "diminished":
@@ -380,19 +410,18 @@ def resolve_non_chord_tone(
         # resolution target is the idiomatic Barry Harris spelling; all four
         # enharmonic roots finger identically.
         dim_root = PITCH_CLASS_NAMES[(target_pc - 1) % 12]
-        return "dim7", f"{dim_root}dim7"
+        return f"{dim_root}dim7"
 
     return None
 
 
 def resolve_substitute_harmony(
     melody_note: Note,
-    chord_type: str,
     name: str,
     strategy: str,
     next_melody: Optional[str] = None,
-) -> Optional[Tuple[str, str, str]]:
-    """The `(quality, name, strategy)` that makes a non-chord melody note a chord tone.
+) -> Optional[Tuple[str, str]]:
+    """The `(name, strategy)` that makes a non-chord melody note a chord tone.
 
     Shared by both routes: the melody route pins the note and
     re-voices a substituted chord around it; the comping route never sounds the note
@@ -402,25 +431,29 @@ def resolve_substitute_harmony(
     to close.
 
     Returns `None` when the note is already a chord tone, when the chord is outside
-    `CHORD_TONES_FROM_ROOT` (nothing to substitute against), when `name` is empty, or
-    when `resolve_non_chord_tone` finds no route for the strategy. `sustain` is
-    deliberately excluded up front: it holds the *previous shape's* inner voices,
-    which is a melody-route move with no meaning where the generator builds a fresh
-    comping shape on every slot.
+    `CHORD_TONES_FROM_ROOT` (nothing to substitute against), when the symbol asks for
+    no chord, or when `resolve_non_chord_tone` finds no route for the strategy.
+    `sustain` is deliberately excluded up front: it holds the *previous shape's* inner
+    voices, which is a melody-route move with no meaning where the generator builds a
+    fresh comping shape on every slot.
+
+    The strategy comes back with the name because the line has to name it: a
+    substitution that was *attempted* and one that was never asked for are different
+    facts, and only the strategy tells them apart.
     """
-    if strategy == "sustain" or not name:
+    if strategy == "sustain":
         return None
-    canonical = ChordParser.canonical_quality(chord_type)
-    if canonical not in ChordParser.CHORD_TONES_FROM_ROOT:
+    symbol = parse_symbol(name)
+    if symbol is None or symbol.quality not in ChordParser.CHORD_TONES_FROM_ROOT:
         return None
-    if is_chord_tone(melody_note, chord_type, name):
+    if is_chord_tone(melody_note, name):
         return None
     resolved = resolve_non_chord_tone(
-        melody_note, chord_type, name, strategy, next_melody=next_melody
+        melody_note, name, strategy, next_melody=next_melody
     )
     if resolved is None:
         return None
-    return resolved[0], resolved[1], strategy
+    return resolved, strategy
 
 
 def _resolution_pitch_class(
@@ -543,9 +576,9 @@ def slash_bass(symbol: str) -> Optional[str]:
     """The bass note a chord symbol asks for, or None when it asks for none.
 
     **This reads the one part of the symbol this call site needs.** The symbol is parsed
-    for its slash bass and nothing else: the quality and the root come from the
-    progression's own triples, so a quality table here would be dead weight - which is
-    why there is none.
+    for its slash bass and nothing else: the root and the quality are read off the symbol
+    where they are wanted, so a quality table here would be dead weight - which is why
+    there is none.
     """
     return split_slash(symbol)[1]
 
@@ -576,9 +609,12 @@ def parse_symbol(name: Optional[str]) -> Optional[ChordSymbol]:
     in the same string.
 
     A bare root is a **major triad**, which is a fact about the notation rather than a guess:
-    a letter on its own in a lead sheet is a major triad. Anything else unreadable - no root
-    at all, or a suffix that is no quality - raises `ValueError` rather than being guessed
-    at, because a wrong chord is worse than a refused one.
+    a letter on its own in a lead sheet is a major triad. A symbol with **no readable root**
+    raises `ValueError` - there is no chord to read a quality from, so there is nothing to
+    arrange. A root whose suffix is no quality this library knows comes back carrying that
+    suffix as its `quality`, which is what lets the callers that can report it do so
+    ("the chord symbol could not be read") instead of aborting an arrangement over one
+    unreadable bar.
     """
     text = (name or "").strip()
     if text == NO_CHORD:
@@ -588,8 +624,6 @@ def parse_symbol(name: Optional[str]) -> Optional[ChordSymbol]:
     if root is None:
         raise ValueError(f"no chord root in {name!r}")
     quality = "maj" if suffix == "" else ChordParser.canonical_quality(suffix)
-    if quality not in ChordParser.CHORD_TONES_FROM_ROOT:
-        raise ValueError(f"unknown chord quality {suffix!r} in {name!r}")
     return ChordSymbol(root, promote_slash_chord(root, quality, bass), bass)
 
 

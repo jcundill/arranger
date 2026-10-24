@@ -1,7 +1,7 @@
-"""The slot layer: turn `(melody, quality, name)` triples into arrangement steps.
+"""The slot layer: turn `(melody, name)` pairs into arrangement steps.
 
 **It is a thin pre-pass, and that is the point.** The engine must see whatever
-triples it is handed, so everything here is a *decision about what to ask for* -
+pairs it is handed, so everything here is a *decision about what to ask for* -
 the diminished retry, the timings, the slash bass - and the voicing itself
 belongs to `steps.py`. Two of those three were corpus requirements that happen to
 be useful to any caller, and one (`_slot_options`) is a named seam rather than a
@@ -26,11 +26,10 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from .chords import bass_pitch_class, slash_bass
+from .chords import bass_pitch_class, parse_symbol, slash_bass
 from .options import ArrangeOptions, resolve_request
 from .step_types import ArrangementStep
 from .steps import VoiceLeadingEngine
-from .tuning import NO_CHORD
 
 __all__ = [
     "arrange_slots",
@@ -67,7 +66,7 @@ def parse_bar_range(text: str) -> Tuple[int, Optional[int]]:
         raise ValueError(f"Bar range {text!r} is empty; HI must be greater than LO")
     return (lo, hi)
 def unresolved_steps(
-    triples: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     non_chord_tone: str = "extension",
     onsets: Optional[Container[int]] = None,
 ) -> List[int]:
@@ -88,24 +87,24 @@ def unresolved_steps(
     comping route the retry must not fire there. `None` scans every slot.
     """
     unresolved: List[int] = []
-    for index, (note, quality, name) in enumerate(triples):
+    for index, (note, name) in enumerate(progression):
         if onsets is not None and index not in onsets:
             continue
-        if quality == NO_CHORD or not name:
+        if parse_symbol(name) is None:
             continue
         if note is None:
             continue
         melody = Note(note)
-        if VoiceLeadingEngine.is_chord_tone(melody, quality, name):
+        if VoiceLeadingEngine.is_chord_tone(melody, name):
             continue
-        resolved = VoiceLeadingEngine.resolve_non_chord_tone(melody, quality, name, non_chord_tone)
+        resolved = VoiceLeadingEngine.resolve_non_chord_tone(melody, name, non_chord_tone)
         if resolved is None:
             unresolved.append(index)
     return unresolved
 
 
 def _next_chord_tone_melody(
-    triples: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     index: int,
     onsets: Optional[Container[int]] = None,
 ) -> Optional[str]:
@@ -123,13 +122,13 @@ def _next_chord_tone_melody(
     *next* note, so the resolution target has to come from the written onsets alone
     (§9.3 step C).
     """
-    for offset in range(index + 1, len(triples)):
+    for offset in range(index + 1, len(progression)):
         if onsets is not None and offset not in onsets:
             continue
-        melody, quality, name = triples[offset]
-        if melody is None or quality == NO_CHORD or not name:
+        melody, name = progression[offset]
+        if melody is None or parse_symbol(name) is None:
             continue
-        if VoiceLeadingEngine.is_chord_tone(Note(melody), quality, name):
+        if VoiceLeadingEngine.is_chord_tone(Note(melody), name):
             return melody
     return None
 
@@ -140,16 +139,16 @@ def _next_chord_tone_melody(
 
 
 def arrange_slots(
-    triples: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
     *,
     options: Optional[ArrangeOptions] = None,
     fallback: Optional[str] = None,
     onsets: Optional[Container[int]] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
-    """Voices a list of (note, quality, name) triples, one step per slot.
+    """Voices a list of (note, name) pairs, one step per slot.
 
-    **This is a pre-pass, not a step loop.** It prepares the triples and then calls
+    **This is a pre-pass, not a step loop.** It prepares the pairs and then calls
     `VoiceLeadingEngine.arrange_progression`, so a head imported from a score and a
     hand-built progression are voiced by exactly the same code - a property of the
     structure rather than a promise in a comment. The decisions it needs are in
@@ -162,7 +161,7 @@ def arrange_slots(
       narrows *which candidates are considered*, and `decisions.select_step_voicing`
       applies the engine's own rule within that narrowed set - so the two selection
       rules stay combined rather than sequential, which is the whole point of the rule.
-    - **the diminished retry** becomes a pre-pass below, rewriting the triples
+    - **the diminished retry** becomes a pre-pass below, rewriting the progression
       before the engine sees them.
     - **the timing** becomes `ArrangeOptions.timings`, normalised to one entry per
       triple so the engine's defensive indexing is the only one that runs.
@@ -217,7 +216,7 @@ def arrange_slots(
     # --- the diminished retry, as a pre-pass -------------------------------------
     #
     # A pre-pass rather than something inside a loop, because there is no loop here:
-    # the engine must see the substituted chord, and it sees whatever triples it is
+    # the engine must see the substituted chord, and it sees whatever pairs it is
     # handed.
     #
     # **The substitution must be applied before the slot's role is computed.** Under
@@ -225,10 +224,10 @@ def arrange_slots(
     # walked route it does, so reordering this would move the walk's roles.
     # `tests/meta_step_loop_equivalence.py` is the standing check that the two entry
     # points still agree.
-    unresolved = unresolved_steps(list(triples), options.non_chord_tone, onsets)
+    unresolved = unresolved_steps(list(progression), options.non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
-    working = list(triples)
+    working = list(progression)
     if retry:
         notes.append(
             f"diminished fallback replaced the written chord on {len(retry)} step(s)"
@@ -241,22 +240,22 @@ def arrange_slots(
             # rescue, so it looked like a corpus bug rather than a shadowing one. The
             # same trap `_slot_options` dodges for `bass`, documented beside its own
             # loop.
-            note, quality, name = triples[index]
+            note, name = progression[index]
             if note is None:
                 # Not produced by `unresolved_steps`, which skips a slot with no
                 # melody - there is no onset for the rescue to fire at. Kept so the
-                # widened triple type's None has an answer that is not `Note(None)`.
+                # widened pair type's None has an answer that is not `Note(None)`.
                 continue
             resolved = engine.resolve_non_chord_tone(
-                Note(note), quality, name, "diminished",
-                next_melody=_next_chord_tone_melody(triples, index, onsets),
+                Note(note), name, "diminished",
+                next_melody=_next_chord_tone_melody(progression, index, onsets),
             )
             if resolved is not None:
-                working[index] = (note, resolved[0], resolved[1])
+                working[index] = (note, resolved)
                 rescued.append(index)
 
     options = _slot_options(
-        triples=working,
+        progression=working,
         timings=timings,
         onsets=onsets,
         options=options,
@@ -268,7 +267,7 @@ def arrange_slots(
     return steps, rescued, notes
 
 def _slot_options(
-    triples: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]],
     onsets: Optional[Container[int]],
     options: ArrangeOptions,
@@ -284,7 +283,7 @@ def _slot_options(
 
     **The timings are normalised to one entry per triple.** Written out rather than
     reusing `timings` because that sequence is a `Sequence` and may be shorter than
-    `triples`, and pyright will not narrow an index it cannot see. The engine guards
+    `progression`, and pyright will not narrow an index it cannot see. The engine guards
     its own indexing too, but establishing the length invariant once is better than
     defending it twice.
 
@@ -303,7 +302,7 @@ def _slot_options(
     # --- the timings, normalised to one entry per triple -------------------------
     #
     # Written out rather than reusing `timings` because that sequence is a `Sequence`
-    # and may be shorter than `triples`, and pyright will not narrow an index it
+    # and may be shorter than `progression`, and pyright will not narrow an index it
     # cannot see. The engine guards its own indexing too, but doing it here means the
     # length invariant is established once rather than defended twice.
     typed_timings: List[Tuple[Optional[int], Optional[float], Optional[float]]] = [
@@ -312,12 +311,12 @@ def _slot_options(
         for index, (bar, beat, duration) in enumerate(timings)
     ]
     typed_timings.extend(
-        [(None, None, None)] * (len(triples) - len(typed_timings))
+        [(None, None, None)] * (len(progression) - len(typed_timings))
     )
 
     # --- the slash bass, as data -------------------------------------------------
     bass_pcs: Dict[int, Optional[int]] = {}
-    for index, (_melody, _quality, name) in enumerate(triples):
+    for index, (_melody, name) in enumerate(progression):
         # Named `slash`, not `bass`: the request's bass policy is a field of
         # `options`, and a loop local of that name would read like the policy while
         # holding a pitch class.

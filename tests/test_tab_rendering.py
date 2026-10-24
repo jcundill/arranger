@@ -151,11 +151,11 @@ class TestFormatProgression(unittest.TestCase):
         # selector - the arity rule offers the whole family set, and this fixture is
         # whatever the tuple prefers inside it.
         self.major = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")],
             top_strings=(5,),
         )
         self.all_of_me = self.engine.arrange_progression(
-            [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
+            [("C5", "Cmaj7"), ("D5", "Cmaj7"), ("C5", "Cmaj7")]
         )
 
     def test_a_short_explanation_is_one_line_per_step(self):
@@ -165,7 +165,7 @@ class TestFormatProgression(unittest.TestCase):
         continues below its step - but nothing about the short case differs: the four
         columns are on the one line, with the annotation trailing them.
         """
-        steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
+        steps = self.engine.arrange_progression([("F4", NO_CHORD)])
         lines = format_progression(steps).split("\n")
         self.assertEqual(len(lines), 1)
         self.assertIn("F4", lines[0])
@@ -256,10 +256,10 @@ class TestTextureAnnotation(unittest.TestCase):
         # test_a_non_chord_tone_annotation_takes_precedence_over_the_fill_note.
         self.steps = VoiceLeadingEngine.arrange_progression(
             [
-                ("C5", "maj7", "Fmaj7"),
-                ("E5", "maj7", "Fmaj7"),
-                ("A4", "maj7", "Fmaj7"),
-                ("F4", "maj7", "Fmaj7"),
+                ("C5", "Fmaj7"),
+                ("E5", "Fmaj7"),
+                ("A4", "Fmaj7"),
+                ("F4", "Fmaj7"),
             ],
             timings=[(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)],
             options=ArrangeOptions(request=Request(chord_notes="targets")),
@@ -284,7 +284,7 @@ class TestTextureAnnotation(unittest.TestCase):
         `step_annotation` - a fill does not get its own exception to it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-                [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], options=ArrangeOptions(
+                [("D5", "Fmaj7")], timings=[(0, 2.0, None)], options=ArrangeOptions(
                     request=Request(chord_notes="targets"),
                 ),
             )
@@ -336,7 +336,7 @@ class TestTextureAnnotation(unittest.TestCase):
         rendering is what it always was.
         """
         plain = VoiceLeadingEngine.arrange_progression(
-            [("C5", "maj7", "Fmaj7"), ("B4", "maj7", "Fmaj7")]
+            [("C5", "Fmaj7"), ("B4", "Fmaj7")]
         )
         self.assertNotIn("interval fill", format_progression(plain))
 
@@ -371,20 +371,20 @@ class TestRepeatedMelody(unittest.TestCase):
     def test_engine_marks_a_repeated_melody(self):
         """arrange_progression flags every step after the first on the same pitch."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("D5", "m7", "Dm7"), ("F5", "maj7", "Fmaj7")]
+            [("D5", "Dm7"), ("D5", "Dm7"), ("F5", "Fmaj7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, True, False])
 
     def test_engine_does_not_flag_a_moving_melody(self):
         """A step whose melody moves is not a repeat, even on the same chord."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("F5", "m7", "Dm7")]
+            [("D5", "Dm7"), ("F5", "Dm7")]
         )
         self.assertFalse(any(step.repeated for step in steps))
 
     def test_a_run_of_repeats_is_all_flagged(self):
         """Four notes on the same pitch: the first is struck, the next three repeat."""
-        progression = [("C4", "m7", "Dm7")] * 4
+        progression = [("C4", "Dm7")] * 4
         steps = VoiceLeadingEngine.arrange_progression(progression)
         self.assertEqual([step.repeated for step in steps], [False, True, True, True])
 
@@ -394,7 +394,7 @@ class TestRepeatedMelody(unittest.TestCase):
         chord the hold started on, so the step is re-harmonised and struck in full.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "m7", "F-7"), ("C4", "m7", "Bb-7"), ("C4", "7", "Eb7")]
+            [("C4", "F-7"), ("C4", "Bb-7"), ("C4", "Eb7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, False, False])
 
@@ -404,7 +404,7 @@ class TestRepeatedMelody(unittest.TestCase):
         is the case that leaves the shape ringing rather than re-fingering it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "7", "Eb7"), ("C4", "7", "Eb7"), ("C4", "7", "Eb7")]
+            [("C4", "Eb7"), ("C4", "Eb7"), ("C4", "Eb7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, True, True])
 
@@ -414,7 +414,7 @@ class TestRepeatedMelody(unittest.TestCase):
         across that change is still a hold. Compared as (root, quality), not as text.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "m7", "D-7"), ("C4", "m7", "Dm7")]
+            [("C4", "D-7"), ("C4", "Dm7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, True])
 
@@ -498,7 +498,7 @@ class TestRepeatedMelody(unittest.TestCase):
         and keeps spelling its own mutes.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "NC", "NC"), ("D5", "NC", "NC")]
+            [("D5", "NC"), ("D5", "NC")]
         )
         self.assertFalse(any(step.repeated for step in steps))
         self.assertTrue(all(step.melody_only for step in steps))
@@ -632,7 +632,7 @@ class TestOneLineColumns(unittest.TestCase):
         since a continuation line carries the explanation alone.
         """
         rendered = self.build(
-            [("D4", "7", "D7"), ("Eb4", "7", "D7"), ("D4", "7", "D7")]
+            [("D4", "D7"), ("Eb4", "D7"), ("D4", "D7")]
         )
         for block in _blocks(rendered):
             self.assertRegex(block[0][_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
@@ -659,19 +659,19 @@ class TestOneLineColumns(unittest.TestCase):
         self.assertEqual(len({block[0].index("(") for block in blocks}), 1, blocks)
 
     def test_the_degree_column_names_the_melody_note(self):
-        rendered = self.build([("G4", "maj7", "Ebmaj7"), ("D4", "maj7", "Ebmaj7")])
+        rendered = self.build([("G4", "Ebmaj7"), ("D4", "Ebmaj7")])
         blocks = _blocks(rendered)
         self.assertEqual(blocks[0][0][_DEGREE_FIELD].strip(), "3")
         self.assertEqual(blocks[1][0][_DEGREE_FIELD].strip(), "7")
 
     def test_a_tension_is_named_in_the_degree_column(self):
         """`Eb` over `D7` is the b9 the reharmonisation below it names."""
-        rendered = self.build([("Eb4", "7", "D7")])
+        rendered = self.build([("Eb4", "D7")])
         self.assertEqual(_blocks(rendered)[0][0][_DEGREE_FIELD].strip(), "b9")
 
     def test_the_annotation_trails_the_tab(self):
         """The explanation is appended after the shape, not between the melody and it."""
-        block = _blocks(self.build([("Eb4", "7", "D7")]))[0]
+        block = _blocks(self.build([("Eb4", "D7")]))[0]
         self.assertLess(_TAB_FIELD.stop, block[0].index("("))
 
     def test_a_slot_with_no_melody_leaves_the_degree_column_blank(self):

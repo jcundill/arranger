@@ -239,9 +239,11 @@ class _CompingHarmony:
     substitution changes what the guitar **states**, not what it sings: the melody
     belongs to the horn here, so `melody_pc` stays None and the comping shape is still
     held to the substitute's full tone set.
+
+    `name` is the whole harmony - the written chord, or the substitute's name - so the
+    quality is read off it rather than carried beside it.
     """
 
-    chord_type: str
     name: str
     strategy: Optional[str]
     harmonized_as: Optional[str]
@@ -251,7 +253,6 @@ class _CompingHarmony:
 def _comping_harmony(
     context: SlotContext,
     *,
-    chord_type: str,
     melody_onsets: Optional[Container[int]],
     non_chord_tone: str,
 ) -> _CompingHarmony:
@@ -266,7 +267,6 @@ def _comping_harmony(
     under the guide-tone voices, exactly as the melody route re-voices it.
     """
     written = _CompingHarmony(
-        chord_type=chord_type,
         name=context.harmony.name,
         strategy=None,
         harmonized_as=None,
@@ -278,7 +278,6 @@ def _comping_harmony(
         return written
     substitute = resolve_substitute_harmony(
         context.harmony.melody_note,
-        chord_type,
         context.harmony.name,
         non_chord_tone,
         next_melody=next_resolution_melody(
@@ -287,12 +286,11 @@ def _comping_harmony(
     )
     if substitute is None:
         return written
-    chord_type, name, strategy = substitute
+    name, strategy = substitute
     # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own part cannot see
     # why the chord moved; the note that forced it is the horn's, so it has to be
     # named here or the part reads wrong.
     return _CompingHarmony(
-        chord_type=chord_type,
         name=name,
         strategy=strategy,
         harmonized_as=name,
@@ -328,7 +326,6 @@ def _comping_candidates(
     cannot disagree.
     """
     return _grips.get_comping_voicings_for(_grips.CompingRequest(
-        chord_type=harmony.chord_type,
         chord_name=harmony.name,
         fret_min=context.neck.fret_min,
         fret_max=context.neck.fret_max,
@@ -358,7 +355,7 @@ def _comping_choice(
     (`Palette.dropped_for_bass`) - a comping step states its voices through
     `_comping_clause`, but *why this shape* is a palette fact like any other.
     """
-    _canonical, root_pc, _tones = _grips.chord_context(harmony.chord_type, harmony.name)
+    _canonical, root_pc, _tones = _grips.chord_context(harmony.name)
     # The last *sounding* shape: a silent position between here and the previous chord
     # is a hole in the tab, not a shape the hand held - see `last_sounding_step`.
     prev_sounding = last_sounding_step(arrangements)
@@ -370,7 +367,7 @@ def _comping_choice(
         # already filters on them: `voicing_cost` counts wrong notes itself, and a
         # generator that could be wrong should not be the only thing standing
         # between a chord symbol and a note that is not in it.
-        allowed_tones=ChordParser.get_chord_tones(harmony.chord_type, harmony.name),
+        allowed_tones=ChordParser.get_chord_tones(harmony.name),
         # The root, which enables the bass-function tie-break. None for a chord
         # whose name will not parse, which leaves that criterion unasked rather
         # than guessing a bass - the same rule the ordinary route follows.
@@ -555,7 +552,6 @@ def comping_step(
     # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
     harmony = _comping_harmony(
         context,
-        chord_type=chord_type,
         melody_onsets=melody_onsets,
         non_chord_tone=context.arrangement.non_chord_tone,
     )

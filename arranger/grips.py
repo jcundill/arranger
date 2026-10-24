@@ -26,7 +26,7 @@ from typing import List, Optional, Tuple
 
 from musthe import Note
 
-from .chords import ChordParser
+from .chords import ChordParser, parse_symbol
 from .grip_place import (
     Placement,
     ShapeSnapshot,
@@ -699,7 +699,7 @@ def string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
 
 
 def chord_context(
-    chord_type: str, chord_name: Optional[str]
+    chord_name: Optional[str]
 ) -> Tuple[str, Optional[int], Tuple[int, ...]]:
     """
     The canonical quality, the root's pitch class, and the chord's tones **as
@@ -709,28 +709,21 @@ def chord_context(
     in intervals - "the 3rd of a minor 7th is three semitones up" - and only the
     final pitch placement wants an absolute note. Keeping one frame throughout means
     there is a single place (the search for a pitch at or below the soprano) where
-    degrees become pitches, and a chord whose root cannot be found simply yields
-    nothing rather than being transposed by accident.
+    degrees become pitches.
 
-    Note this is *not* ChordParser.get_chord_tones(quality, chord_name), which
-    returns absolute pitch classes once a name is supplied. The tones are the full
-    set for the quality, not the four the drop-2 tables voice, so a shell or a duo
-    is built from every tone the chord really has.
+    Note this is *not* ChordParser.get_chord_tones(chord_name), which returns absolute
+    pitch classes. The tones are the full set for the quality, not the four the drop-2
+    tables voice, so a shell or a duo is built from every tone the chord really has.
 
-    A quality with no usable root - a bare quality symbol with no chord name, or an
-    unparseable root - has root_pc of None, and only the drop-2 path still serves it,
-    because those tables are written as offsets from the soprano and need no root.
+    A symbol asking for no chord has no quality, no root and no tones, which is how a
+    caller tells "no chord here" from "a chord I could not voice".
     """
-    canonical = ChordParser.canonical_quality(chord_type)
-    root_pc: Optional[int] = None
-    root_str, _ = ChordParser.parse_chord_name(chord_name) if chord_name else (None, None)
-    if root_str:
-        try:
-            root_pc = Note(f"{root_str}4").midi_note() % 12
-        except (KeyError, ValueError, TypeError):
-            root_pc = None
-    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical, ())
-    return canonical, root_pc, tones
+    symbol = parse_symbol(chord_name)
+    if symbol is None:
+        return "", None, ()
+    root_pc = Note(f"{symbol.root}4").midi_note() % 12
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(symbol.quality, ())
+    return symbol.quality, root_pc, tones
 
 
 def _shell_voicing(
@@ -827,14 +820,13 @@ def _shell_voicing(
 class CompingRequest:
     """One melody-free comping shape request, as a value.
 
-    The six fields are exactly what the enumeration reads - the chord, the neck
+    The five fields are exactly what the enumeration reads - the chord, the neck
     window, the arity and the two degree flags - so the memo key and the request
     cannot drift apart. `frozen` also makes it hashable, which is what lets
     `_comping_palette` cache on the request itself rather than a reconstructed
     tuple.
     """
 
-    chord_type: str
     chord_name: Optional[str] = None
     fret_min: int = NECK_FRET_MIN
     fret_max: int = NECK_FRET_MAX
@@ -895,7 +887,7 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     outside the window is still generated and still playable, because losing a chord
     of the tune is worse than being a fret out of position.
     """
-    canonical, root_pc, tones = chord_context(request.chord_type, request.chord_name)
+    canonical, root_pc, tones = chord_context(request.chord_name)
     # No root, no claim to make: a guide tone is a claim about *this* chord's 3rd and
     # 7th, and guessing them without a root is how a wrong note gets in. The same
     # rule, and the same reason, as `get_grip_voicings`'s shell and duo branches.
@@ -987,7 +979,6 @@ def get_comping_voicings_for(request: CompingRequest) -> List[Voicing]:
 
 
 def get_comping_voicings(
-    chord_type: str,
     chord_name: Optional[str] = None,
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
@@ -1000,7 +991,6 @@ def get_comping_voicings(
     enumerate different shapes.
     """
     return get_comping_voicings_for(CompingRequest(
-        chord_type=chord_type,
         chord_name=chord_name,
         fret_min=fret_min,
         fret_max=fret_max,
@@ -1011,8 +1001,7 @@ def get_comping_voicings(
 
 def get_grip_voicings(
     melody_note: Note,
-    chord_type: str,
-    chord_name: Optional[str] = None,
+    chord_name: str,
     top_string: int = 5,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
 ) -> List[Voicing]:
@@ -1050,7 +1039,7 @@ def get_grip_voicings(
     if top_fret < 0 or top_fret > 18:
         return []
 
-    canonical, root_pc, tones = chord_context(chord_type, chord_name)
+    canonical, root_pc, tones = chord_context(chord_name)
 
     # The chord's tones as pitch classes: what `candidate` holds a searched shape's own
     # notes to. Computed once, because every searched family measures the same chord.
@@ -1085,8 +1074,7 @@ def get_grip_voicings(
     return valid_voicings
 def get_drop2_voicings(
     melody_note: Note,
-    chord_type: str,
-    chord_name: Optional[str] = None,
+    chord_name: str,
     top_string: int = 5,
 ) -> List[Voicing]:
     """
@@ -1094,23 +1082,22 @@ def get_drop2_voicings(
 
     top_string is the index of the string carrying the melody: 5 (high E) yields the
     traditional D-G-B-E shape, while 4 (B) yields the lower A-D-G-B shape used when
-    the melody sits below the high E string's open pitch. When chord_name (e.g.
-    'Dm7b5') is provided, it matches the specific inversion where melody_note
-    functions as the correct chord tone.
+    the melody sits below the high E string's open pitch. The chord_name (e.g.
+    'Dm7b5') is the whole harmony: its quality selects the shape and its root places
+    the melody as the correct chord tone.
 
     Kept as a named entry point because it is what callers reach for directly and
     its output is part of the library's published behaviour. It is exactly
     get_grip_voicings with the grip pinned to drop-2.
     """
     return get_grip_voicings(
-        melody_note, chord_type, chord_name, top_string, grips=("drop2",)
+        melody_note, chord_name, top_string, grips=("drop2",)
     )
 
 
 def get_interval_voicings(
     melody_note: Note,
-    chord_type: str,
-    chord_name: Optional[str] = None,
+    chord_name: str,
     top_string: int = 5,
 ) -> List[Voicing]:
     """
@@ -1128,11 +1115,11 @@ def get_interval_voicings(
     single one does not have to know the tuple spelling. It is exactly
     get_grip_voicings with the grip pinned to "interval".
 
-    Returns an empty list when the chord has no usable root, or when the melody is
-    unreachable on that string - the same limitation every root-measured grip has.
+    Returns an empty list when the melody is unreachable on that string - the same
+    limitation every root-measured grip has.
     """
     return get_grip_voicings(
-        melody_note, chord_type, chord_name, top_string, grips=("interval",)
+        melody_note, chord_name, top_string, grips=("interval",)
     )
 
 
@@ -1223,8 +1210,7 @@ def _melody_only_voicings_on(
 
 def get_octave_down_candidates(
     melody_note: Note,
-    chord_type: str,
-    chord_name: Optional[str] = None,
+    chord_name: str,
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
 ) -> List[Voicing]:
@@ -1247,8 +1233,7 @@ def get_octave_down_candidates(
     octave_down = Note(note_name(melody_note.midi_note() - 12))
     return get_all_grip_voicings(
         octave_down,
-        chord_type,
-        chord_name=chord_name,
+        chord_name,
         top_strings=lower_soprano_strings(top_strings),
         grips=grips,
     )
@@ -1256,8 +1241,7 @@ def get_octave_down_candidates(
 
 def get_all_grip_voicings(
     melody_note: Note,
-    chord_type: str,
-    chord_name: Optional[str] = None,
+    chord_name: str,
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
 ) -> List[Voicing]:
@@ -1265,11 +1249,9 @@ def get_all_grip_voicings(
     Collects fingerings for every allowed soprano string in `top_strings`.
 
     High-E candidates come first, so a caller that simply takes the first result
-    keeps the traditional top-string fingering. Candidate generation tries the
-    chord-tone-matched inversion first and falls back to quality-only voicings, so
-    nothing is lost when chord_name cannot place the melody on a chord tone. A
-    melody below the high E string's open pitch (E4) simply yields no high-E
-    candidates and is arranged on a lower string instead of being skipped.
+    keeps the traditional top-string fingering. A melody below the high E string's
+    open pitch (E4) simply yields no high-E candidates and is arranged on a lower
+    string instead of being skipped.
 
     This is pure candidate generation: it neither filters by neck position nor
     transposes. A melody whose only position lies outside the window is re-voiced
@@ -1279,37 +1261,24 @@ def get_all_grip_voicings(
     candidates: List[Voicing] = []
     for top_string in top_strings:
         candidates.extend(
-            get_grip_voicings(
-                melody_note, chord_type, chord_name, top_string, grips
-            )
+            get_grip_voicings(melody_note, chord_name, top_string, grips)
         )
-
-    if not candidates and chord_name:
-        for top_string in top_strings:
-            candidates.extend(
-                get_grip_voicings(
-                    melody_note, chord_type, None, top_string, grips
-                )
-            )
 
     return candidates
 
 
 def get_all_drop2_voicings(
     melody_note: Note,
-    chord_type: str,
-    chord_name: Optional[str] = None,
+    chord_name: str,
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES,
 ) -> List[Voicing]:
     """
     Collects Drop-2 fingerings for every allowed soprano string in top_strings.
 
     High-E candidates come first, so a caller that simply takes the first result
-    keeps the traditional top-string fingering. Candidate generation tries the
-    chord-tone-matched inversion first and falls back to quality-only voicings, so
-    nothing is lost when chord_name cannot place the melody on a chord tone. A
-    melody below the high E string's open pitch (E4) simply yields no high-E
-    candidates and is arranged on the B string instead of being skipped.
+    keeps the traditional top-string fingering. A melody below the high E string's
+    open pitch (E4) simply yields no high-E candidates and is arranged on the B
+    string instead of being skipped.
 
     This is pure candidate generation: it neither filters by neck position nor
     transposes. A melody whose only position lies above HIGH_FRET_LIMIT is
@@ -1317,7 +1286,7 @@ def get_all_drop2_voicings(
     arrange_progression calls - so the two cannot recurse into each other.
     """
     return get_all_grip_voicings(
-        melody_note, chord_type, chord_name, top_strings, grips=("drop2",)
+        melody_note, chord_name, top_strings, grips=("drop2",)
     )
 
 

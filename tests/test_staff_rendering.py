@@ -64,7 +64,7 @@ class TestStaffTab(unittest.TestCase):
         # Dm7 -> G7 -> Cmaj7 on the high E block, for the reason `TestFormatProgression`
         # gives: this fixture is a *renderer* subject, so only the string set is fixed.
         self.steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")],
             top_strings=(5,),
         )
 
@@ -172,7 +172,7 @@ class TestStaffTab(unittest.TestCase):
         test states.
         """
         timed = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "Dm7"), ("C5", "Cmaj7")]
         )
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 1, 1.0
@@ -498,7 +498,7 @@ class TestStaffTab(unittest.TestCase):
         beats is not drawn jammed up against the next one.
         """
         timed = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "Dm7"), ("C5", "Cmaj7")]
         )
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 0, 3.0  # two beats later, same bar
@@ -1188,8 +1188,8 @@ class TestStaffBarlineAlignment(unittest.TestCase):
     def build(self, measures_per_line=1, bars=4):
         """A timed progression of `bars` one-bar chords, to force real barlines."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D", "m7", "Dm7"), ("G", "7", "G7"),
-             ("C", "maj7", "Cmaj7"), ("F", "m7", "Fm7")][:bars]
+            [("D", "Dm7"), ("G", "G7"),
+             ("C", "Cmaj7"), ("F", "Fm7")][:bars]
         )
         for index, step in enumerate(steps):
             step.bar, step.beat, step.duration = index + 1, 1.0, 4.0

@@ -3,7 +3,7 @@
 Guidance for AI coding agents (and humans) working in this repository.
 
 `jazz-arranger` turns a chord progression into playable **jazz guitar chord-melody**.
-Given `(melody note, chord quality, chord name)` triples it generates voicings in
+Given `(melody note, chord name)` pairs it generates voicings in
 several grip families, pins the melody to the soprano string, and chooses among the
 candidates with one position-aware cost function. It can also read a written head out
 of a MusicXML file and arrange that.
@@ -23,12 +23,12 @@ gate and the conventions — not the explanation.
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/meta_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/text_layout.py`, `arranger/render.py`, `arranger/movement.py` |
 | the chord part's content (`--chord-notes`), target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
-| non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
+| non-chord melody notes, a new chord quality, or a chord **spelling** that has to read | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` (`QUALITY_ALIASES`, `parse_symbol`), `tests/meta_chord_names.py` |
 | the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/routes.py`, `arranger/step_history.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/meta_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters, and the `SlotInputs` groups under it (`SlotArrangementFacts`, `SlotRhythmFacts`, `SlotNeckFacts`, `SlotBassFacts`) | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/slot_plan.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer — or **which module may import which**, including the `arranger ↔ tabstaff` loop and why it is inert | [docs/renderers.md](docs/renderers.md), and [docs/dependency-dag.md](docs/dependency-dag.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py`, `tests/meta_front_end_dag.py` |
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
-| the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
+| the slot layer: pairs to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the **request** — the six questions, spelled by `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` and by `Request(...)` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/engine.md](docs/engine.md) §"The request, and the axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py` (`_REQUEST_DESTS` is the one list holding the two spellings to the same six), `tests/test_rhythm.py`, `tests/test_request.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/history/open-issues.md](docs/history/open-issues.md) item 6 for the release instant — closed by reading a note as sounding over `[onset, end)` | `headxml.py` (`chord_at`, `rhythm_slots`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding** while admitting the instant it is released. The engine's own union - one position per subdivision of each bar's rhythm - is what a selection that **comps** gets when the request names nothing added: a chord part with no tune to play, which is how it states the chord in a bar the tune never enters. The gate reads that selection and not the *spelling*, so a request and its axis spelling are one arrangement |
 | an issue — where a new one is filed, and where the closed ones are recorded | [docs/open-issues.md](docs/open-issues.md) (the live ledger; none is open) and [docs/history/open-issues.md](docs/history/open-issues.md) (the record of the six it filed) | — each item is stated as **issue / problem / why it exists** with its measurement, and the figures and the behaviour are that document's own business: no test compares them with the prose or is keyed to these items |
@@ -205,7 +205,7 @@ arranger/
 │   ├── route_dispatch.py # the branch table: which route takes a planned slot, in order
 │   ├── movement.py      #   the step loop: _loop_slots, arrange_progression
 │   ├── steps.py         #   VoiceLeadingEngine - the published facade
-│   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
+│   ├── slots.py         #   the slot layer: pairs to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
 │   ├── cli.py           #   the head CLI's flags and output dispatch
 │   └── demo.py          #   main(): the built-in demonstration and the `head` hand-off
@@ -821,6 +821,28 @@ Each of these cost real time, or nearly shipped a defect.
     The same holds for a document's structure: **a document is code that nothing compiles, so
     the parts of it that *can* be checked mechanically must be** — a number, a code fence and
     a link are all of that.
+
+17. **A field a migration *derives* from a string fails silently when the string cannot be
+    read — and prose written to justify the diff is not evidence.** Retiring the chord
+    quality field made the name the single spelling, and a mechanical 3-tuple-to-2-tuple
+    pass dropped the `mMaj7` element from `("D5", "mMaj7", "Dm(maj7)")`. The name was
+    right and the published tab should not have moved — except `m(maj7)` was not in
+    `QUALITY_ALIASES`, so `parse_symbol` kept the unreadable suffix, the bar lost its
+    chord, and `x-x-11-10-10-10` became `x-x-x-x-x-10`. **Nothing failed**, because the
+    expectation moved in the same commit; the change was then explained in a docstring as
+    a fixture that "relied on a contradictory pair", which was invented. The pair agreed.
+
+    Two things carry forward. **When a migration drops a field in favour of deriving it,
+    audit every site for agreement before trusting the derivation** — the audit is an AST
+    pass over `(note, quality, name)` literals comparing the old quality with
+    `parse_symbol(name)`, and `git archive <pre-migration commit>` into `/tmp` is what
+    makes the old tree available to it. 389 triples there, nine divergences, and the
+    divergences were the whole of the damage. **And a rationalisation is testable**: the
+    check on "this had to change" is whether the old behaviour can be re-derived from the
+    tree, which one command answers. `tests/meta_chord_names.py` is the standing guard —
+    it holds every spelling the committed fixtures and the suite's shared progressions use
+    to the tables, so the next alias gap fails instead of moving a tab.
+
 
 ## Where things are documented
 

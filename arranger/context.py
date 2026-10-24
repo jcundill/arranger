@@ -36,12 +36,16 @@ class SlotTiming:
 
 @dataclass(frozen=True)
 class SlotHarmony:
-    """What the caller asked for: chord name, quality, melody note.
+    """What the caller asked for: chord name, its quality, and the melody note.
 
     `name`, `chord_type`, `note_str` and `melody_note` are what the caller
     asked for, not what a non-chord-tone strategy decided: a route may report a
     substituted harmony, and a context that carried the substitution would make
     the request unreadable. Every route reads harmony.
+
+    `chord_type` is **derived** from `name` by `chords.quality_of` rather than being a
+    second input, so the two cannot disagree; it stays a field because the routes ask
+    "is this an `NC` slot?" of one value.
     """
 
     name: str
@@ -57,7 +61,7 @@ class SlotIdentity:
     Every route reads identity.
     """
 
-    progression: Sequence[Tuple[Optional[str], str, str]]
+    progression: Sequence[Tuple[Optional[str], str]]
     index: int
 
 
@@ -88,7 +92,7 @@ class SlotArrangementFacts:
     playing rather than *where*.
     """
 
-    progression: Sequence[Tuple[Optional[str], str, str]]
+    progression: Sequence[Tuple[Optional[str], str]]
     texture: str
     parts: Tuple[str, ...]
     melody_only: bool

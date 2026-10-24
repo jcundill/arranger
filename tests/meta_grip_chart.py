@@ -103,7 +103,9 @@ class TestGeneratedChart(unittest.TestCase):
         tone set - the same table the engine steers by.
         """
         for quality in grip_chart.DEFAULT_QUALITIES:
-            tones = {t % 12 for t in ChordParser.get_chord_tones(quality)}
+            # Read off a C-rooted symbol: C is pitch class 0, so the absolute tone set is
+            # the relative one the cells below are compared against.
+            tones = {t % 12 for t in ChordParser.get_chord_tones("C" + quality)}
             for soprano in (5, 4):
                 for cell in grip_chart.cells_for(quality, soprano):
                     if cell is None:

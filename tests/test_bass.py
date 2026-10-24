@@ -531,7 +531,7 @@ class TestTheBassStyleRegistry(unittest.TestCase):
         computed from the same line either way.
         """
         # Annotated rather than inferred: `List` is invariant, so a list of
-        # `Tuple[str, str, str]` is not a `List[Tuple[Optional[str], str, str]]` and
+        # `Tuple[str, str]` is not a `List[Tuple[Optional[str], str, str]]` and
         # pyright rejects it - the same trap, and the same spelling, as every other
         # timing list in this suite.
         chords: List[Tuple[Optional[str], str, str]] = [("C", "maj7", "Cmaj7")] * 8

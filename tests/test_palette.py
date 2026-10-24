@@ -28,12 +28,12 @@ VOICES_CRITERION = VOICING_COST_CRITERIA.index("leaves a voice out")
 #: substitutes the chord), a shell that beat the complete shape out of the neck window,
 #: and another complete shape.
 STRUGGLING = (
-    ("B4", "m7", "F#m7"), ("A4", "m7", "F#m7"), ("A4", "m7", "F#m7"),
-    ("Bb3", "7", "B7"), ("B3", "7", "B7"), ("A4", "7", "B7"),
+    ("B4", "F#m7"), ("A4", "F#m7"), ("A4", "F#m7"),
+    ("Bb3", "B7"), ("B3", "B7"), ("A4", "B7"),
 )
 
 #: Three ordinary steps, where the palette has four voices and the shape states them.
-COMPLETE = (("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7"))
+COMPLETE = (("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7"))
 
 
 class TestTheRecordedPalette(unittest.TestCase):
@@ -244,7 +244,7 @@ class TestTheShapeClause(unittest.TestCase):
         class and nothing else would get no narrowing at all - a knob with an invisible
         effect, which is the defect this pins shut.
         """
-        triple = (("D4", "maj9", "Gmaj9"),)
+        triple = (("D4", "Gmaj9"),)
         f_sharp = Note("F#3").midi_note() % 12
 
         unasked = VoiceLeadingEngine.arrange_progression(triple)[0]
@@ -489,18 +489,21 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         )
 
     def test_an_unreadable_chord_says_so(self):
-        """`melody_degree_label` blanks for two reasons, and only one is worth printing.
+        """A melody over a chord no table can read is a fact the reader cannot get
+        anywhere else - the chord column shows the spelling, not the problem.
 
-        A slot the tune is silent at has no degree to name and needs no clause; a melody
-        over a chord no table can read is a fact the reader cannot get anywhere else - the
-        chord column shows the spelling, not the problem.
+        The spelling decides, and only the spelling. `Dm(maj7)` is the notation's
+        parenthesis form of a minor-major seventh, so the bar states that chord - the
+        same `x-x-11-10-10-10` drop-2 `DmMaj7` gets - and a suffix no table carries
+        leaves the tune alone with the reason on it. A caller cannot spell a *readable*
+        quality beside an unreadable symbol any more, because the quality is read off
+        the name, so this is one answer rather than two.
         """
-        voiced = VoiceLeadingEngine.arrange_progression([("C5", "m7", "Dm(maj7)")])
-        self.assertEqual(
-            step_annotation(voiced[0]),
-            " (the chord symbol could not be read - 4 voices)",
-        )
-        unvoiced = VoiceLeadingEngine.arrange_progression([("C5", "zz", "Czz")])
+        read = VoiceLeadingEngine.arrange_progression([("D5", "Dm(maj7)")])
+        self.assertEqual(read[0].tab_line(), "x-x-11-10-10-10")
+        self.assertNotIn("could not be read", step_annotation(read[0]))
+
+        unvoiced = VoiceLeadingEngine.arrange_progression([("C5", "Czz")])
         self.assertEqual(
             step_annotation(unvoiced[0]),
             " (melody alone - the chord symbol could not be read)",

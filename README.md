@@ -2,7 +2,7 @@
 
 Generate playable **jazz guitar chord-melody arrangements** from a chord progression.
 
-Takes `(melody note, chord quality, chord name)` triples, builds voicings in several grip families, pins the melody to the soprano string, picks with one position-aware cost function. Also reads a written head from MusicXML and arranges that.
+Takes `(melody note, chord name)` pairs, builds voicings in several grip families, pins the melody to the soprano string, picks with one position-aware cost function. Also reads a written head from MusicXML and arranges that.
 
 - **Seven grip families**, drop-2 first: `drop2`, `closed`, `drop3`, `drop24`, `drop2_6432`, `shell` and `duo` — four-note down to two-note guide-tone pairs. Every one sounds the chord's **3rd and 7th** (major vs minor); a `duo` sounds one of them under any chord tone — two notes is the floor ([grips](#grips)).
 - **Melody pinned to soprano**, on high E, B or G string — low melody still harmonised in position.
@@ -42,11 +42,11 @@ from arranger import VoiceLeadingEngine
 
 engine = VoiceLeadingEngine()
 
-# (melody note, chord quality, chord name)
+# (melody note, chord name)
 progression = [
-    ("D5", "m7",  "Dm7"),
-    ("B4", "7",   "G7"),
-    ("C5", "maj7", "Cmaj7"),
+    ("D5", "Dm7"),
+    ("B4", "G7"),
+    ("C5", "Cmaj7"),
 ]
 
 for step in engine.arrange_progression(progression):
@@ -169,7 +169,7 @@ from arranger import VoiceLeadingEngine, format_progression
 
 engine = VoiceLeadingEngine()
 steps = engine.arrange_progression(
-    [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+    [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")]
 )
 
 print(format_progression(steps))
@@ -352,10 +352,10 @@ python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chor
 
 ```python
 progression = [
-    ("C5", "maj7", "Fmaj7"),   # beat 1 - the target
-    ("E5", "maj7", "Fmaj7"),   # fill
-    ("A4", "maj7", "Fmaj7"),   # fill
-    ("F4", "maj7", "Fmaj7"),   # beat 3 - the target
+    ("C5", "Fmaj7"),   # beat 1 - the target
+    ("E5", "Fmaj7"),   # fill
+    ("A4", "Fmaj7"),   # fill
+    ("F4", "Fmaj7"),   # beat 3 - the target
 ]
 timings = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
 
@@ -485,7 +485,7 @@ Gmaj9/F# D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not p
 
 Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. The comp falls on the **tune's own onsets**: this bar of the head states three notes (beat 1, the and of 1 and the and of 2), so there are three attacks and no rests. Ask for a rhythm of its own and the positions it does not name become **rests**, emitted rather than dropped so the part keeps its place against the tune — `--chord-on 1,2` on the same bar comps beats 1 and 2 and rests the two offbeats the tune states between them. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
 
-**Shape chosen from the chord alone.** `get_comping_voicings` takes no melody argument; `D5` and `G3` under the same chord return *identical* candidate sets. A chord tone in the shell may land on the same pitch class as the melody — unremarkable, and the guide-tone ear needs it anyway. Every voiceable quality has a comping shape in some playable position, checked over `CHORD_TONES_FROM_ROOT`. A quality with no readable root gets nothing: a shell is a claim about *this* chord's 3rd and 7th, and guessing without the root is how wrong notes get in.
+**Shape chosen from the chord alone.** `get_comping_voicings` takes no melody argument; `D5` and `G3` under the same chord return *identical* candidate sets. A chord tone in the shell may land on the same pitch class as the melody — unremarkable, and the guide-tone ear needs it anyway. Every voiceable quality has a comping shape in some playable position, checked over `CHORD_TONES_FROM_ROOT`. A symbol with no readable root is refused: a shell is a claim about *this* chord's 3rd and 7th, and guessing without the root is how wrong notes get in.
 
 **A repeated melody holds the whole shape.** Normally a repeat is a soprano-only re-strike with the rest muted; there is no soprano to re-strike when the guitar is not singing, so the shape is held instead — the guitar does not play a moving line on exactly the beats the arrangement handed the tune away.
 
@@ -601,7 +601,7 @@ Seven of them are `grip_tables.GRIP_PREFERENCE`: the order the families are trie
 
 `closed` sits **second**, right after `drop2`: tightest shape there is, so where melody can fret it at all it beats other four-note families on a tie. Most melodies cannot — close-position chord under melody is seventh or more of pitch on four strings only 4–5 semitones apart in tuning — usually never generated rather than generated and rejected.
 
-`drop3` and `drop24` derive from close-position stack under melody, keeping every *other* voice chord tone — measured over every quality and every melody, zero wrong notes where drop-2's quality-only fallback produces hundreds. [docs/engine.md](docs/engine.md) has derivation and cost tuple; [docs/history/generated-grips.md](docs/history/generated-grips.md) the rule deciding which chord tones a shape states.
+`drop3` and `drop24` derive from close-position stack under melody, keeping every *other* voice chord tone — measured over every quality and every melody, zero wrong notes - and drop-2's old quality-only fallback, which could sound a note the chord does not contain, is gone. [docs/engine.md](docs/engine.md) has derivation and cost tuple; [docs/history/generated-grips.md](docs/history/generated-grips.md) the rule deciding which chord tones a shape states.
 
 Two arities are thin by design, and the run says so:
 
@@ -648,7 +648,7 @@ Sparsest thing library plays — harmony implied not stated, for solo voice or l
 Melodies below high E open pitch (`E4`) cannot be voiced on that block. By default melody may also pin to B string (voicing on A-D-G-B) and **G string** (bottom four strings) — floor drops to `G3`:
 
 ```python
-low = [("D4", "m7", "Dm7"), ("D4", "7", "G7"), ("C4", "maj7", "Cmaj7")]
+low = [("D4", "Dm7"), ("D4", "G7"), ("C4", "Cmaj7")]
 for step in engine.arrange_progression(low):
     print(step.chord, step.voicing.tab_string(), "melody string",
           6 - step.voicing.soprano_string())
@@ -684,7 +684,7 @@ Cost function ranks shape's **correctness first**: out-of-chord notes, then fret
 Melody whose only position sits above `tuning.HIGH_FRET_LIMIT` (13) voiced an octave down.
 
 ```python
-high = [("A5", "m7", "Dm7")]
+high = [("A5", "Dm7")]
 for step in engine.arrange_progression(high):
     print(step.chord, step.melody, step.voicing.tab_string(),
           "from", step.original_melody)
@@ -713,7 +713,7 @@ Two deliberate limits:
 Melodies do not always land on chord tones. Bar 2 of "All of Me" moves `C5 → D5 → C5` over `Cmaj7`, `D5` being the 9th. Pass `non_chord_tone=` to `arrange_progression` (or call `is_chord_tone` / `resolve_non_chord_tone` directly) to choose how such notes are harmonised:
 
 ```python
-bar_2 = [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
+bar_2 = [("C5", "Cmaj7"), ("D5", "Cmaj7"), ("C5", "Cmaj7")]
 
 for strategy in ("extension", "diminished", "sustain"):
     steps = engine.arrange_progression(bar_2, non_chord_tone=strategy)
@@ -779,7 +779,7 @@ On a **comping** selection (`Request(melody=False)` — guitar states the chord 
 
 Seventh: `maj7`, `6`, `m7`, `m7b5`, `dim7`, `m6`, `mMaj7`, `7`, `7b9`, `7alt`. Extensions: `maj9`, `m9`, `9`, `6/9`, `13`. Triads: `maj`, `m`, `aug`. Suspended: `sus4`, `sus2`, `7sus4`. Added-note and altered: `add9`, `madd9`, `7b5`, `7#5`, `7#11`, `7b13`, `maj7#11`, `m9b5`.
 
-Aliases resolve case-sensitively: `M7` major seventh, `m7` minor seventh, `M` major triad. Aliases: `min7`, `min7b5`, `ø7`, `ø`, `half-dim`, `°7`, `°`, `dim`, `min6`, `minMaj7`, `mmaj7`, `min9`, `dom7`, `dom9`, `dom13`, `M7`, `M9`, `69`, `min`, `-`, `+`, `sus`, `7sus`. Two conventions: `dim` means `dim7` (diminished triad not voiced); bare `C` not assumed major — spell `Cmaj` or `CM`.
+Aliases resolve case-sensitively: `M7` major seventh, `m7` minor seventh, `M` major triad. Aliases: `min7`, `min7b5`, `ø7`, `ø`, `half-dim`, `min6`, `minMaj7`, `mmaj7`, `m(maj7)`, `min(maj7)`, `mM7`, `-M7`, `min9`, `mi7`, `m7(b5)`, `m7-5`, `dom7`, `dom9`, `dom13`, `M7`, `M9`, `∆7`, `Δ7`, `Ma7`, `ma7`, `M6`, `69`, `min`, `-`, `+`, `+7`, `aug7`, `sus`, `7sus`. Two conventions: `dim` means `dim7` (diminished triad not voiced); bare `C` not assumed major — spell `Cmaj` or `CM`. A suffix no table carries is a chord the library reports rather than guesses: the bar keeps its tune and the tab says "the chord symbol could not be read".
 
 Drop-2 shape has four voices, so triad templates double root octave below stack:
 
@@ -787,16 +787,16 @@ Drop-2 shape has four voices, so triad templates double root octave below stack:
 from musthe import Note
 
 colours = [
-    ("E5",  "maj",  "Cmaj"),         # x-x-10-9-8-12
-    ("C5",  "sus4", "Gsus4"),        # x-x-5-5-3-8
-    ("D5",  "add9", "Cadd9"),        # x-x-10-9-8-10
-    ("Db5", "7#11", "G7#11"),        # x-x-9-10-8-9
-    ("Eb5", "7b13", "G7b13"),        # x-x-9-10-8-11
-    ("F#5", "maj7#11", "Cmaj7#11"),  # x-x-14-16-13-14
-    ("B4",  "m9b5", "Am9b5"),        # x-x-5-5-4-7
+    ("E5", "Cmaj"),         # x-x-10-9-8-12
+    ("C5", "Gsus4"),        # x-x-5-5-3-8
+    ("D5", "Cadd9"),        # x-x-10-9-8-10
+    ("Db5", "G7#11"),        # x-x-9-10-8-9
+    ("Eb5", "G7b13"),        # x-x-9-10-8-11
+    ("F#5", "Cmaj7#11"),  # x-x-14-16-13-14
+    ("B4", "Am9b5"),        # x-x-5-5-4-7
 ]
-for note, quality, name in colours:
-    voicing = engine.get_drop2_voicings(Note(note), quality, chord_name=name)[0]
+for note, name in colours:
+    voicing = engine.get_drop2_voicings(Note(note), chord_name=name)[0]
     print(f"{name:<9} {note:<3} {voicing.tab_string()}")
 ```
 
@@ -827,9 +827,9 @@ Engine lives in `arranger` package, fourteen modules in strict dependency order 
 - Voicings 2–4 strings, never all six. Melody on high E, B or G; A and low E inner voices only, no grip puts soprano on either. No barré chord — fret `0` when voice lands on open string — no full six-string voicing modelled. `fingers.py` assigns finger per string and marks barre where two strings share fret, but no renderer prints fingering: tab is what you read. One grip — 6-4-3 shell — deliberately skips A string.
 - Melodies confined `G3`–`Bb5`.
 - Fixed max fret span 5 (4 for duo and interval), fret range 0–18, no step may need fifth fret from hand already holding shape. `close` offered, second in preference order, usually unreachable: most melodies cannot fret it inside that budget, wins only where it does.
-- Non-chord melody notes handled only for `NON_CHORD_TONE_EXTENSIONS` mappings (9ths, 6/9s, 11ths, #11s, b13s, 13ths, half-diminished 9th, 9th over plain triad) plus dim7; anything else keeps quality-only fallback — and melody-only palette (`shell`, `duo`, `interval`) has no fallback to keep, note sounds alone under its chord, step says `(melody alone - no voicing for this chord)`.
-- Chord-tone drop-2 with no inversion for — 9th in melody of 13 chord — falls to quality-only fallback, which can sound note chord does not contain. Selector rejects such shape whenever correct one exists, so *arrangement* only hears it when nothing else playable, but `get_drop2_voicings` still offers it. Shells, duos, 6-4-3 grip unaffected: build from chord's tones.
-- `sustain` strategy structural — API takes only `(note, quality, name)` triples, rhythm and duration cannot spot brief passing tone.
+- Non-chord melody notes handled only for `NON_CHORD_TONE_EXTENSIONS` mappings (9ths, 6/9s, 11ths, #11s, b13s, 13ths, half-diminished 9th, 9th over plain triad) plus dim7; anything else has nothing to state, so the note sounds alone under its chord and the step says `(melody alone - no voicing for this chord)`.
+- Chord-tone drop-2 with no inversion for — 9th in melody of 13 chord — is not offered at all: the quality-only fallback that used to answer it could sound a note the chord does not contain, and it is gone with the quality field. Another family that builds from the chord's own tones answers it - shells, duos and the 6-4-3 grip are unaffected - or the step keeps the tune and loses the chord.
+- `sustain` strategy structural — API takes only `(note, name)` pairs, rhythm and duration cannot spot brief passing tone.
 - Neck window preference not filter, so `--fret-min`/`--fret-max` may not be honoured where nothing playable inside. Header echoes window either way.
 - Slash bass honoured as preference not hard constraint: selector narrows candidates by it, engine's own rule within that set — voicing that cannot honour bass still playable.
 - Beat melody skips *inside* a bar it occupies has no chord of its own — chord in force stored per melody note. Bar-level half built: a comping selection states the chord of a bar the melody never enters, and `--chord-on` names the positions a singing selection adds.

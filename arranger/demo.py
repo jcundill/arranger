@@ -64,9 +64,9 @@ def main() -> None:
     # Example 1: Minor ii - V - i cadence in C Minor (Dm7b5 -> G7b9 -> Cm7)
     # The staple progression for minor jazz standards (Autumn Leaves, Alone Together, Blue Bossa, etc.)
     minor_progression = [
-        ("F5", "m7b5", "Dm7b5"),
-        ("F5", "7b9", "G7b9"),
-        ("Eb5", "m7", "Cm7")
+        ("F5", "Dm7b5"),
+        ("F5", "G7b9"),
+        ("Eb5", "Cm7")
     ]
     result_minor = engine.arrange_progression(minor_progression)
 
@@ -76,9 +76,9 @@ def main() -> None:
 
     # Example 2: Major ii - V - I in C Major over a melody on the top string (D5 -> B4 -> C5)
     major_progression = [
-        ("D5", "m7", "Dm7"),
-        ("B4", "7", "G7"),
-        ("C5", "maj7", "Cmaj7")
+        ("D5", "Dm7"),
+        ("B4", "G7"),
+        ("C5", "Cmaj7")
     ]
     result_major = engine.arrange_progression(major_progression)
 
@@ -95,9 +95,9 @@ def main() -> None:
     # A-D-G-B. With the G string available the last chord can drop to a three-note
     # shell on 5-4-3, an octave lower, and still sound its 3rd and 7th.
     low_progression = [
-        ("D4", "m7", "Dm7"),
-        ("D4", "7", "G7"),
-        ("C4", "maj7", "Cmaj7")
+        ("D4", "Dm7"),
+        ("D4", "G7"),
+        ("C4", "Cmaj7")
     ]
     print("\n--- LOW-REGISTER CADENCE, frets 2-13 (Dm7 -> G7 -> Cmaj7) ---")
     for step in engine.arrange_progression(low_progression):
@@ -109,10 +109,10 @@ def main() -> None:
     # are filled with a shell or an interval - the arranging guide's method, and the
     # difference between an arrangement and a chord list.
     texture_progression = [
-        ("C5", "maj7", "Fmaj7"),
-        ("E5", "maj7", "Fmaj7"),
-        ("A4", "maj7", "Fmaj7"),
-        ("F4", "maj7", "Fmaj7"),
+        ("C5", "Fmaj7"),
+        ("E5", "Fmaj7"),
+        ("A4", "Fmaj7"),
+        ("F4", "Fmaj7"),
     ]
     texture_timings = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
 
@@ -135,9 +135,9 @@ def main() -> None:
     # differently: as an extension (Cmaj9), as a Barry Harris dim7 substitution
     # (Bdim7), or by holding the inner voices under the passing tone.
     all_of_me = [
-        ("C5", "maj7", "Cmaj7"),
-        ("D5", "maj7", "Cmaj7"),
-        ("C5", "maj7", "Cmaj7"),
+        ("C5", "Cmaj7"),
+        ("D5", "Cmaj7"),
+        ("C5", "Cmaj7"),
     ]
 
     print("\n--- NON-CHORD MELODY TONES: 'All of Me' bar 2 (C5 -> D5 -> C5 over Cmaj7) ---")

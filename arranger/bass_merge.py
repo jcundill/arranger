@@ -187,7 +187,7 @@ def _carry(step: ArrangementStep, ringing: _Ring) -> None:
 
 
 def next_resolution_melody(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     index: int,
     onsets: Optional[Container[int]] = None,
 ) -> Optional[str]:
@@ -207,9 +207,9 @@ def next_resolution_melody(
     for offset in range(index + 1, len(progression)):
         if onsets is not None and offset not in onsets:
             continue
-        note_str, chord_type, name = progression[offset]
+        note_str, name = progression[offset]
         if note_str is None:
             continue
-        if _chords.is_chord_tone(Note(note_str), chord_type, name):
+        if _chords.is_chord_tone(Note(note_str), name):
             return note_str
     return None

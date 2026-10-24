@@ -262,7 +262,7 @@ class _Policies:
 
 
 def resolve_policies(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     *,
     parts: Tuple[str, ...],
     texture: str,

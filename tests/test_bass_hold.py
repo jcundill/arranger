@@ -143,7 +143,7 @@ class TestTheRingEnds(unittest.TestCase):
         from arranger import VoiceLeadingEngine
 
         steps = VoiceLeadingEngine.arrange_progression(
-            [("E4", "maj7", "Cmaj7"), ("G4", "maj7", "Cmaj7")],
+            [("E4", "Cmaj7"), ("G4", "Cmaj7")],
             options=ArrangeOptions(request=Request(bass_on="1", bass_notes="root")),
         )
         self.assertEqual([step.bass_held for step in steps], [False, True])
@@ -153,7 +153,7 @@ class TestTheRingEnds(unittest.TestCase):
         from arranger import VoiceLeadingEngine
 
         steps = VoiceLeadingEngine.arrange_progression(
-            [("E4", "maj7", "Cmaj7"), ("G4", "maj7", "Cmaj7")],
+            [("E4", "Cmaj7"), ("G4", "Cmaj7")],
             timings=[(None, None, None)] * 2,
             options=ArrangeOptions(request=Request(bass_on="1", bass_notes="root")),
         )

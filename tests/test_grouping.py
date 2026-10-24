@@ -150,7 +150,7 @@ class TestTimeSignature(unittest.TestCase):
 class TestTheHandBuiltMetre(unittest.TestCase):
     """A hand-built progression declares one metre, and omitting it is 4/4."""
 
-    PROGRESSION = [("F5", "maj7", "Fmaj7")]
+    PROGRESSION = [("F5", "Fmaj7")]
 
     def test_omitting_the_signature_is_common_time(self):
         """The default is a real declaration, not half of one."""

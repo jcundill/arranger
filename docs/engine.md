@@ -247,25 +247,51 @@ you whether a change is an improvement or a different library.
   grid rather than failing.
 - `GuitarFretboard` — static helpers `note_to_fret(string_index, note)` and
   `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
-- `ChordParser` — `parse_chord_name(name) -> (root, quality)`,
-  `get_melody_degree(root, melody_note) -> 0..11`, `canonical_quality(quality)`
-  (case-sensitive alias resolution: `M7` -> `maj7`, `M` -> `maj`, `m7` stays `m7`)
-  and
-  `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
+- `ChordParser` — `parse_chord_name(name) -> (root, quality)`, the **tolerant**
+  splitter the renderers and the annotation keep; `parse_symbol(name) -> ChordSymbol |
+  None`, the **strict** resolver the voicing path uses; `quality_of(name)` -> the
+  canonical quality, or `NC`; `get_melody_degree(root, melody_note) -> 0..11`;
+  `canonical_quality(quality)` (case-sensitive alias resolution: `M7` -> `maj7`,
+  `M` -> `maj`, `m7` stays `m7`); and `get_chord_tones(chord_name)` -> every pitch class
+  in the chord, read from the symbol's own root.
   `CHORD_TONES_FROM_ROOT` is the full tone set per quality, and is what
   `grips.drop2_template_for` reads, so the root of a rootless `7b9` still counts
   as a chord tone and every tone of the chord can carry the melody.
+
+  **The chord *name* is the single spelling of the harmony.** A progression element is
+  `(melody note, name)` — there is no quality field beside it — so `Dm7`, `D-7` and
+  `Dmin7` are one chord, a slash bass rides in the same string, and a bare root is a
+  major triad. `parse_symbol` returns `None` for `NC` and raises `ValueError` for a
+  symbol with no readable **root**; a root whose suffix is no table knows comes back
+  carrying that suffix, which is what lets the callers report "the chord symbol could
+  not be read" rather than aborting an arrangement over one unreadable bar. The two
+  readers are deliberate: a renderer wants the spelling the file wrote, and the voicing
+  path wants the chord the tables can answer for.
+
+  **A spelling the tables do not carry is a chord lost, not a bar refused.** An unknown
+  suffix does not raise: the symbol keeps that suffix as its quality, no shape is
+  offered, and the step is the tune alone carrying the "could not be read" clause. That
+  is the right answer for a genuine unknown and the wrong one for a spelling the
+  notation uses — so `QUALITY_ALIASES` carries the standard forms, the parenthesis
+  spellings (`m(maj7)`, `min(maj7)`, `m7(b5)`) and the triangle (`∆7`, `Δ7`) among them,
+  and `tests/meta_chord_names.py` holds every spelling the committed fixtures and the
+  suite's shared progressions use to the tables. **What is missing from the tables is a
+  quality rather than an alias**: `7#9`, `11`/`m11`, `maj13`/`m13`, `mMaj9`,
+  `add11`/`add13`, `m6/9`, `9sus4`/`13sus4`, `7sus2`, `9#11`, `maj9#11` and the power
+  chord `5` each need the recipe in "Adding a new chord quality" rather than a row in
+  the alias table. Whether a given spelling reads is one call, so the list above is
+  re-taken rather than trusted: `parse_symbol("D7#9").quality in TONE_PRIORITY`.
 - `VoiceLeadingEngine` — the core engine:
-  - `get_drop2_voicings(melody_note, chord_type, chord_name=None, top_string=5)`
+  - `get_drop2_voicings(melody_note, chord_name, top_string=5)`
     — one string block; `top_string=4` pins the melody to the B string.
-  - `get_grip_voicings(melody_note, chord_type, chord_name=None, top_string=5,
+  - `get_grip_voicings(melody_note, chord_name, top_string=5,
     grips=GRIP_PREFERENCE)` — candidates for one soprano string across every grip
     family, the general form of `get_drop2_voicings`.
-  - `get_all_grip_voicings(melody_note, chord_type, chord_name=None,
+  - `get_all_grip_voicings(melody_note, chord_name,
     top_strings=MELODY_STRING_CHOICES_FULL, grips=GRIP_PREFERENCE)` — candidates
-    across every allowed soprano string, high-E first, applying the chord-tone match
-    then the quality-only fallback. **Pure**: it neither filters by fret nor
-    transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
+    across every allowed soprano string, high-E first, applying the chord-tone match.
+    **Pure**: it neither filters by fret nor transposes. `get_all_drop2_voicings` is
+    this pinned to `grips=("drop2",)`.
   - `voicing_cost(voicing, criteria)` — the whole selection rule as one comparable
     **7-field** `VoicingScore`: notes outside the chord, then
     frets outside the window, then missing voices, then **span** (with spans 0 and 1
@@ -304,7 +330,7 @@ you whether a change is an improvement or a different library.
     **filters** (`RIGHT_HAND_STRINGS` / `thumb_safe_grips`, `fingers.can_fret`), never
     scores. `docs/history/fingering.md` §4.2 and §4.4 hold the measurements, and §5 step 3
     is the one still open.
-  - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
+  - `get_octave_down_candidates(melody_note, chord_name,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
     on the strings below the high E. Empty when the transposed melody is unvoiceable,
     so the caller keeps its original candidates.
@@ -316,11 +342,13 @@ you whether a change is an improvement or a different library.
   - `NON_CHORD_TONE_EXTENSIONS` — canonical quality → `{melody degree: extension
     quality}`, the routing used by the `extension` strategy.
   - `NON_CHORD_TONE_STRATEGIES` — the accepted `non_chord_tone` values.
-  - `is_chord_tone(melody_note, chord_type, chord_name)` — chord-tone detection
-    using `ChordParser.CHORD_TONES_FROM_ROOT`; `False` for unknown qualities.
-  - `resolve_non_chord_tone(melody_note, chord_type, chord_name, strategy,
-    next_melody=None)` -> `(quality, name)` for a substitute chord, or `None` when
-    the strategy cannot help (the caller then keeps its fallback).
+  - `is_chord_tone(melody_note, chord_name)` — chord-tone detection
+    using `ChordParser.CHORD_TONES_FROM_ROOT`; `False` for a chord whose suffix is no
+    quality this library knows.
+  - `resolve_non_chord_tone(melody_note, chord_name, strategy,
+    next_melody=None)` -> the substitute chord's **name**, or `None` when
+    the strategy cannot help (the caller then keeps its fallback). The quality is read
+    off that name like every other, so it is not returned beside it.
   - `sustain_inner_voices(previous_voicing, melody_note)` — holds the previous
     voicing's inner voices and moves only the soprano; `None` when unplayable.
   - `arrange_progression(progression, **knobs)` — the step loop, and the point every
@@ -335,8 +363,8 @@ you whether a change is an improvement or a different library.
     fixture to. `timings` and `texture` are the metric layer; see
     [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
     The loop's own shape is [below](#the-step-loop-and-the-five-routes).
-  - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_type,
-    chord_name=None, top_string=5)` — the two-note `interval` grip, a public entry
+  - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_name,
+    top_string=5)` — the two-note `interval` grip, a public entry
     point like `get_drop2_voicings` so every family is reachable on its own.
   - `__version__` — the library version string, the single source of truth that
     `pyproject.toml` reads as the dynamic project version. No document may state a
@@ -637,11 +665,11 @@ inclusively would describe a reach the hand does not make, and would make the li
 | `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
 
 **`drop3` and `drop24` exist for a second reason, which is the one that matters.** A
-melody that is *not* a chord tone leaves drop-2 with no template and no shell, so its
-quality-only fallback states notes the chord does not contain. Both derive from the close
-stack under the melody, which keeps every *other* voice a chord tone: measured over every
-quality and every melody in the register they carry **no** wrong notes where drop-2's
-fallback carries hundreds, and with the bass permitted to skip a string both are as tight
+melody that is *not* a chord tone leaves drop-2 with no template and no shell, so it
+offers no drop-2 shape at all for that melody. Both derive from the close stack under the
+melody, which keeps every *other* voice a chord tone: measured over every quality and every
+melody in the register they carry **no** wrong notes - and the quality-only fallback that
+used to carry hundreds is gone with the quality field, and with the bass permitted to skip a string both are as tight
 as drop-2 — frequently span 0 to 2.
 
 **Every four-note voicing sounds the chord's 3rd and 7th**, and so does every three-note
@@ -1222,9 +1250,9 @@ melodic interval.
   what decides: `x-3-2-0-1-x` and `x-10-10-9-8-x` against the drop-2 & 4 readings
   `3-x-2-0-1-x` and `8-x-10-9-8-x`. Raising the span to admit the rest is a real change to
   the library's playability contract, not a tuning knob.
-- **A chord tone with no matching inversion does not fall through to the quality-only
-  fallback**, which would sound a note the chord does not contain — a 9th in the melody of a
-  13 chord, for example. That gap is **closed**, and closed for every chord tone: the rule
+- **A chord tone with no matching inversion has no fallback to fall through to** - the one
+  that used to answer it sounded a note the chord does not contain, a 9th in the melody of a
+  13 chord for example, and it is gone with the quality field. That gap is **closed**, and closed for every chord tone: the rule
   answers for all 125 degrees of the 29 qualities, each pure and stating both guide tones,
   so `get_drop2_voicings` has a shape of its own for every chord tone a melody can be.
   `tests/test_grip_tables.py::TestKnownTableGaps` pins the closure, so a regression re-opens it
@@ -1248,11 +1276,10 @@ melodic interval.
 - Non-chord melody notes are only covered for the mappings in
   `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
   half-diminished 9th and the 9th over a plain triad) plus the dim7 substitution. An
-  unmapped non-chord tone keeps the quality-only fallback, which can sound the melody
-  over a different chord's shape — and the step's non-chord-tone clause says that is
-  what happened.
+  unmapped non-chord tone has nothing to state, so the melody sounds alone under its
+  chord and the step's non-chord-tone clause says that is what happened.
 - **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
-  `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no
+  `shell`, `duo` and `interval` are built from the chord's own degrees, so there is no
   quality-only fallback to thin to — where the four-note families always have something.
   Under a shell-only palette a note with no mapping and no shell therefore had **no**
   candidate
@@ -1264,10 +1291,10 @@ melodic interval.
   `tests/test_progressions.py` pins, the position emitted silent — and a melody no string
   reaches at all is likewise emitted silent rather than voiced, with `silence="out_of_reach"`
   on the step and `_silence_clause` naming the palette.
-- A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
-  and therefore use the quality-only fallback. Triad shapes double the root, so their
-  second voice can sit up to 10 semitones below the melody — the same span limit, not a
-  new failure mode.
+- A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion, and
+  there is no quality-only fallback to cover them any more. Another family that builds from
+  the chord's own tones answers, or the step keeps the tune and loses the chord with a
+  clause naming why.
 - **A partial harmonisation means the printed chord name is not every note sounding.**
   Where a shell or a duo is used, the chord describes the harmony rather than the full
   voicing, and `step_annotation` says so and says why (`(shell - 3rd & 7th, partial -
@@ -1278,7 +1305,7 @@ melodic interval.
   consequence of the user's own brief — "just harmonising with the 3rd and 7th is fine" —
   not a defect, but it is a real thing to know before reading a tab.
 - The `sustain` strategy is structural, not rhythmic: `arrange_progression` takes
-  only `(note, quality, name)` triples, so it cannot tell a brief passing note from
+  only `(note, name)` pairs, so it cannot tell a brief passing note from
   an accented tension. Holding the inner voices is applied whenever the shape can
   physically stay put.
 - `7b9`/`7alt` are voiced rootless apart from their new root-in-top inversion;

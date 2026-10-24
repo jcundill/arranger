@@ -71,7 +71,7 @@ class TestValidation(unittest.TestCase):
         arrangement it makes is one bar of four beats.
         """
         self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
-        self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])), 4)
+        self.assertEqual(len(walk([("F5", "Fmaj7")], [(0, 1.0)])), 4)
 
     def test_an_unknown_texture_is_still_rejected_before_any_voicing(self):
         """
@@ -81,7 +81,7 @@ class TestValidation(unittest.TestCase):
         """
         with self.assertRaises(ValueError) as caught:
             VoiceLeadingEngine.arrange_progression(
-                [("F5", "maj7", "Fmaj7")], options=ArrangeOptions(request=Request(chord_notes="sorcery"))
+                [("F5", "Fmaj7")], options=ArrangeOptions(request=Request(chord_notes="sorcery"))
             )
         self.assertIn("sorcery", str(caught.exception))
 
@@ -98,7 +98,7 @@ class TestTheUnion(unittest.TestCase):
         the assertion that fails if the bass grid is assumed to be the melody grid, and
         it is why `arrange_progression` may now return more steps than it was given.
         """
-        steps = walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])
+        steps = walk([("F5", "Fmaj7")], [(0, 1.0)])
         self.assertEqual(len(steps), 4)
         self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
         self.assertEqual([step.bass is not None for step in steps], [True] * 4)
@@ -117,9 +117,9 @@ class TestTheUnion(unittest.TestCase):
         add, so the two counts agree - the growth is the union doing its job, not a
         constant offset.
         """
-        self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])), 4)
+        self.assertEqual(len(walk([("F5", "Fmaj7")], [(0, 1.0)])), 4)
         eighths = [(0, 1.0 + 0.5 * n) for n in range(8)]
-        self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")] * 8, eighths)), 8)
+        self.assertEqual(len(walk([("F5", "Fmaj7")] * 8, eighths)), 8)
 
     def test_a_sparser_skeleton_still_walks_every_beat(self):
         """
@@ -132,7 +132,7 @@ class TestTheUnion(unittest.TestCase):
         `test_bass.py` already owns.
         """
         on_beats = [(0, float(beat)) for beat in (1, 2, 3, 4)]
-        steps = walk([("F5", "maj7", "Fmaj7")] * 4, on_beats)
+        steps = walk([("F5", "Fmaj7")] * 4, on_beats)
         self.assertEqual(len(steps), 4)
         self.assertEqual([bass_name(step) for step in steps], ["F", "E", "F", "E"])
         self.assertEqual(steps[0].bass_role, "anchor")
@@ -147,7 +147,7 @@ class TestTheUnion(unittest.TestCase):
         It carries the previous melody pitch and the harmony in force, so a renderer
         printing the chord name above it is not claiming a chord that stopped.
         """
-        for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
+        for step in walk([("F5", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertEqual(step.chord, "Fmaj7")
             self.assertEqual(step.melody, "F5")
 
@@ -179,7 +179,7 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
     ) -> List[arranger.ArrangementStep]:
         timings: List[Tuple[int, float, Optional[float]]] = [(0, 1.0, None)]
         return VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7")],
+            [("F5", "Fmaj7")],
             timings=timings,
             options=ArrangeOptions(
                 request=Request(
@@ -224,7 +224,7 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
             (1, 1.0, None),
         ]
         steps = VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7"), ("F5", "maj7", "Fmaj7")],
+            [("F5", "Fmaj7"), ("F5", "Fmaj7")],
             timings=timings,
             options=ArrangeOptions(
                 request=Request(
@@ -252,7 +252,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         Spelled as a property rather than an exact string, because the note and its
         fret depend on the position - it is the *count* that is the design.
         """
-        for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
+        for step in walk([("F5", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertEqual(step.role, ROLE_FILL)
             self.assertEqual(upper_pitches(step), [Note("F5").midi_note()])
             self.assertIsNotNone(step.bass)
@@ -265,7 +265,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         not set it: the annotation would claim a lie, and the `repeated` hold keys off
         it.
         """
-        for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
+        for step in walk([("F5", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertFalse(step.melody_only)
             self.assertNotIn("no chord", step_annotation(step))
 
@@ -279,7 +279,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         slot under a shell would send the melody through the non-chord-tone
         strategies. So the step's only upper pitch is the melody.
         """
-        steps = walk([("D5", "m7", "Dm7"), ("B4", "7", "G7")], [(0, 1.0), (0, 4.5)])
+        steps = walk([("D5", "Dm7"), ("B4", "G7")], [(0, 1.0), (0, 4.5)])
         change = steps[-1]
         self.assertEqual(change.chord, "G7")
         self.assertEqual(change.role, ROLE_FILL)
@@ -296,7 +296,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         would get busier precisely where it is meant to get lighter.
         """
         steps = walk(
-            [("D5", "m7", "Dm7"), ("E5", "7", "G7"), ("F#5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("E5", "G7"), ("F#5", "Cmaj7")],
             [(0, 1.0), (0, 2.0), (0, 3.0)],
         )
         fills = [step for step in steps if step.role == ROLE_FILL]
@@ -315,7 +315,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         easy to miss in a long run and says nothing about what a reader would have
         played instead.
         """
-        steps = walk([("D5", "m7", "Bbm7")], [(0, 1.0)])
+        steps = walk([("D5", "Bbm7")], [(0, 1.0)])
         self.assertEqual(len(steps), 4)
         self.assertEqual(steps[0].melody, "D5")
         self.assertEqual(upper_pitches(steps[0]), [Note("D5").midi_note()])
@@ -335,7 +335,7 @@ class TestDecisionEAMidBarChange(unittest.TestCase):
         naming different chords on the same beat, which is the one thing this texture
         must never do. The beat-1 anchor is the *first* chord's root, not the second's.
         """
-        steps = walk([("D5", "m7", "Bbm7"), ("F4", "7", "Eb7")], [(0, 1.0), (0, 3.0)])
+        steps = walk([("D5", "Bbm7"), ("F4", "Eb7")], [(0, 1.0), (0, 3.0)])
         on_three = [step for step in steps if step.beat == 3.0][0]
         self.assertEqual(on_three.chord, "Eb7")
         self.assertEqual(on_three.role, ROLE_TARGET)
@@ -358,7 +358,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         The thumb's half of decision F, which no reading disputes: a chord lasting two
         bars is re-anchored on each downbeat, because the anchor is a metric event.
         """
-        steps = walk([("D5", "7", "G7"), ("D5", "7", "G7")], [(0, 1.0), (1, 1.0)])
+        steps = walk([("D5", "G7"), ("D5", "G7")], [(0, 1.0), (1, 1.0)])
         downbeats = [step for step in steps if step.beat == 1.0]
         self.assertEqual([step.bass_role for step in downbeats], ["anchor", "anchor"])
         self.assertEqual([bass_name(step) for step in downbeats], ["G", "G"])
@@ -370,7 +370,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         what the guide's own tab does, and what the plain "harmony changed" rule
         cannot produce.
         """
-        steps = walk([("C#5", "7", "G7"), ("D5", "7", "G7")], [(0, 1.0), (1, 1.0)])
+        steps = walk([("C#5", "G7"), ("D5", "G7")], [(0, 1.0), (1, 1.0)])
         second = [step for step in steps if step.beat == 1.0][-1]
         self.assertEqual(second.role, ROLE_TARGET)
         self.assertEqual(second.voicing.grip, "shell")
@@ -383,7 +383,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         and nothing else - thinner than a restated shell, and never claiming a harmony
         that is not sounding.
         """
-        steps = walk([("D5", "7", "G7"), ("D5", "7", "G7")], [(0, 1.0), (1, 1.0)])
+        steps = walk([("D5", "G7"), ("D5", "G7")], [(0, 1.0), (1, 1.0)])
         second = [step for step in steps if step.beat == 1.0][-1]
         self.assertEqual(second.role, ROLE_FILL)
         self.assertEqual(len(upper_pitches(second)), 1)
@@ -423,12 +423,12 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         and the test would pass for the wrong reason.
         """
         progression = [
-            ("G4", "maj", "Ebmaj"),   # bar 2 beat 1.0
-            ("F4", "maj", "Ebmaj"),   # bar 2 beat 2.0 - the note the bug inherited
-            ("Eb4", "m7", "Cm7"),     # bar 2 beat 2.5 - the note that is sounding
-            ("F4", "7", "Bb7"),       # bar 3 beat 1.5, after the invented downbeat
-            ("G4", "7", "Bb7"),
-            ("F4", "7", "Bb7"),
+            ("G4", "Ebmaj"),   # bar 2 beat 1.0
+            ("F4", "Ebmaj"),   # bar 2 beat 2.0 - the note the bug inherited
+            ("Eb4", "Cm7"),     # bar 2 beat 2.5 - the note that is sounding
+            ("F4", "Bb7"),       # bar 3 beat 1.5, after the invented downbeat
+            ("G4", "Bb7"),
+            ("F4", "Bb7"),
         ]
         timings = [
             (2, 1.0, 0.5),
@@ -535,7 +535,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         """
         from arranger.options import ArrangeOptions
 
-        progression = [("E5", "maj7", "Cmaj7"), ("F5", "m7", "Dm7")]
+        progression = [("E5", "Cmaj7"), ("F5", "Dm7")]
         timings = [(1, 1.0, 1.0), (1, 2.0, 0.25)]
 
         def invented(beat_type: int) -> List[Tuple[str, Optional[str]]]:
@@ -583,7 +583,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         arrangement, at which point it should be tested there too.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G4", "maj", "Ebmaj"), ("F4", "maj", "Ebmaj")],
+            [("G4", "Ebmaj"), ("F4", "Ebmaj")],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.5)],
             options=ArrangeOptions(
                         request=Request(chord_notes="2", bass_on="every-beat", bass_notes="walk"),
@@ -610,7 +610,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         accident - and because on "the synthetic cut-time head" it is 5 of the 22 invented beats.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G4", "maj", "Ebmaj"), ("G4", "maj", "Ebmaj")],
+            [("G4", "Ebmaj"), ("G4", "Ebmaj")],
             timings=[(1, 1.0, 0.25), (1, 2.0, None)],
             options=ArrangeOptions(
                         request=Request(chord_notes="2", bass_on="every-beat", bass_notes="walk"),
@@ -634,12 +634,12 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         fails and says the fixture no longer reproduces the defect.
         """
         progression = [
-            ("G4", "maj", "Ebmaj"),
-            ("F4", "maj", "Ebmaj"),
-            ("Eb4", "m7", "Cm7"),
-            ("F4", "7", "Bb7"),
-            ("G4", "7", "Bb7"),
-            ("F4", "7", "Bb7"),
+            ("G4", "Ebmaj"),
+            ("F4", "Ebmaj"),
+            ("Eb4", "Cm7"),
+            ("F4", "Bb7"),
+            ("G4", "Bb7"),
+            ("F4", "Bb7"),
         ]
         timings = [
             (2, 1.0, 0.5),
@@ -784,8 +784,8 @@ class TestNoRegression(unittest.TestCase):
         about them meaningful: `bass` is not populated by a melody that merely happens
         to sit on a bass string.
         """
-        progression = [("D5", "m7", "Dm7"), ("C#5", "7", "A7"),
-                       ("D5", "mMaj7", "Dm(maj7)")]
+        progression = [("D5", "Dm7"), ("C#5", "A7"),
+                       ("D5", "Dm(maj7)")]
         onsets = [(0, 1.0), (0, 2.0), (0, 3.0)]
         timings: List[Tuple[int, float, Optional[float]]] = [
             (bar, beat, None) for bar, beat in onsets
@@ -835,8 +835,8 @@ class TestNoRegression(unittest.TestCase):
         was given, in order - the union only ever *repeats* the previous one, never
         invents or reorders a pitch.
         """
-        progression = [("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
-                       ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")]
+        progression = [("F5", "Fmaj7"), ("D5", "Dm7"),
+                       ("C5", "G7"), ("B4", "Cmaj7")]
         onsets = [(0, 1.0 + 0.5 * n) for n in range(8)]
         steps = walk(progression + progression, onsets + [(1, 1.0 + 0.5 * n)
                                                           for n in range(8)])
@@ -855,14 +855,14 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     """
 
     PROGRESSION = [
-        ("F5", "maj7", "Fmaj7"),
-        ("E5", "maj7", "Emaj7"),
-        ("D5", "maj7", "Dmaj7"),
-        ("C5", "7", "C7"),
-        ("C5", "maj7", "Fmaj7"),
-        ("B4", "m7", "Bm7"),
-        ("A4", "maj7", "Amaj7"),
-        ("G4", "7", "G7"),
+        ("F5", "Fmaj7"),
+        ("E5", "Emaj7"),
+        ("D5", "Dmaj7"),
+        ("C5", "C7"),
+        ("C5", "Fmaj7"),
+        ("B4", "Bm7"),
+        ("A4", "Amaj7"),
+        ("G4", "G7"),
     ]
     ONSETS: List[Tuple[int, float]] = [(0, 1.0 + 0.5 * i) for i in range(8)]
 
@@ -1034,9 +1034,9 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
     # either side of it. That is what makes the old forward fill wrong here and not in
     # the corpus.
     PROGRESSION = [
-        ("D4", "m7", "Dm7"),
-        ("E4", NO_CHORD, NO_CHORD),
-        ("C5", "7", "G7"),
+        ("D4", "Dm7"),
+        ("E4", NO_CHORD),
+        ("C5", "G7"),
     ]
     TIMINGS: List[Tuple[int, float, float]] = [
         (1, 1.0, 1.0),

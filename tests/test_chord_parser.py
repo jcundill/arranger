@@ -78,8 +78,22 @@ class TestChordToneSets(unittest.TestCase):
             ("min6", "m6"),
             ("mmaj7", "mMaj7"),
             ("minMaj7", "mMaj7"),
+            ("m(maj7)", "mMaj7"),
+            ("min(maj7)", "mMaj7"),
+            ("mM7", "mMaj7"),
+            ("-M7", "mMaj7"),
+            ("mi7", "m7"),
+            ("m7(b5)", "m7b5"),
+            ("m7-5", "m7b5"),
             ("M9", "maj9"),
+            ("∆7", "maj7"),
+            ("Δ7", "maj7"),
+            ("Ma7", "maj7"),
+            ("ma7", "maj7"),
+            ("M6", "6"),
             ("69", "6/9"),
+            ("+7", "7#5"),
+            ("aug7", "7#5"),
             ("  m7  ", "m7"),
             # triads and suspended chords ("dim" deliberately still means dim7)
             ("M", "maj"),
@@ -98,22 +112,27 @@ class TestChordToneSets(unittest.TestCase):
         self.assertEqual(ChordParser.canonical_quality(""), "")
         self.assertEqual(ChordParser.canonical_quality(None), "")
 
-    def test_get_chord_tones_relative_to_root(self):
-        """Without a chord name the tones are pitch classes relative to the root."""
-        self.assertEqual(ChordParser.get_chord_tones("maj7"), (0, 4, 7, 11))
-        self.assertEqual(ChordParser.get_chord_tones("m7"), (0, 3, 7, 10))
+    def test_a_bare_quality_is_not_a_chord(self):
+        """`get_chord_tones` reads a *symbol*: a quality with no root has no tones.
 
-    def test_get_chord_tones_absolute_with_chord_name(self):
-        """With a chord name the pitch classes are absolute."""
-        self.assertEqual(ChordParser.get_chord_tones("maj7", "Cmaj7"), (0, 4, 7, 11))
-        self.assertEqual(ChordParser.get_chord_tones("maj7", "Dmaj7"), (2, 6, 9, 1))
+        The relative reading is gone with the quality field - a tone set without a root
+        is exactly the thing a caller had to add the root back to, and that is the
+        second spelling this change removes.
+        """
+        with self.assertRaises(ValueError):
+            ChordParser.get_chord_tones("maj7")
+
+    def test_get_chord_tones_reads_the_symbol(self):
+        """The pitch classes are absolute, read from the name's own root."""
+        self.assertEqual(ChordParser.get_chord_tones("Cmaj7"), (0, 4, 7, 11))
+        self.assertEqual(ChordParser.get_chord_tones("Dmaj7"), (2, 6, 9, 1))
         # The root is included even though a 7b9 is voiced rootless
-        self.assertEqual(ChordParser.get_chord_tones("7b9", "G7b9"), (7, 8, 11, 2, 5))
+        self.assertEqual(ChordParser.get_chord_tones("G7b9"), (7, 8, 11, 2, 5))
 
-    def test_get_chord_tones_unknown_quality_is_empty(self):
-        """An unsupported quality has no known tones."""
-        self.assertEqual(ChordParser.get_chord_tones("not-a-chord"), ())
-        self.assertEqual(ChordParser.get_chord_tones("not-a-chord", "Cnot-a-chord"), ())
+    def test_get_chord_tones_unknown_quality_is_refused(self):
+        """An unsupported quality has no known tones, and the resolver says so."""
+        with self.assertRaises(ValueError):
+            ChordParser.get_chord_tones("not-a-chord")
 
 
 class TestWidenedQualityVocabulary(unittest.TestCase):
@@ -136,21 +155,32 @@ class TestWidenedQualityVocabulary(unittest.TestCase):
         ("m9b5", (0, 2, 3, 6, 10)),
     ]
 
-    def test_relative_tone_sets(self):
+    def test_the_widened_vocabularies_tone_sets(self):
+        """Every widened quality's tone set, read off a C-rooted symbol.
+
+        The table is written root-relative for readability, which is what the numbers
+        are; the reading is absolute, so the symbol carries the C the numbers are
+        measured from.
+        """
         for quality, tones in self.NEW_QUALITIES:
-            self.assertEqual(ChordParser.get_chord_tones(quality), tones, quality)
+            self.assertEqual(
+                ChordParser.get_chord_tones("C" + quality), tones, quality
+            )
 
     def test_absolute_tone_sets(self):
-        self.assertEqual(ChordParser.get_chord_tones("7sus4", "G7sus4"), (7, 0, 2, 5))
-        self.assertEqual(ChordParser.get_chord_tones("m9b5", "Am9b5"), (9, 11, 0, 3, 7))
-        self.assertEqual(ChordParser.get_chord_tones("aug", "Caug"), (0, 4, 8))
+        self.assertEqual(ChordParser.get_chord_tones("G7sus4"), (7, 0, 2, 5))
+        self.assertEqual(ChordParser.get_chord_tones("Am9b5"), (9, 11, 0, 3, 7))
+        self.assertEqual(ChordParser.get_chord_tones("Caug"), (0, 4, 8))
 
-    def test_bare_major_chord_symbol_is_not_assumed(self):
-        """A name with no written quality ('C') is not guessed to be a major
-        triad; the caller spells it, e.g. 'Cmaj' or 'M'."""
+    def test_a_bare_root_is_a_major_triad(self):
+        """A letter on its own is a major triad, which is a fact about the notation.
+
+        The tolerant splitter still reports no *written* quality, and that reading is
+        what the renderers keep; the engine's own resolver reads a bare root as `maj`,
+        because a letter on its own in a lead sheet is a major triad rather than a guess.
+        """
         self.assertEqual(ChordParser.parse_chord_name("C"), ("C", ""))
-        self.assertEqual(ChordParser.get_chord_tones(""), ())
-        self.assertEqual(ChordParser.get_chord_tones("", "C"), ())
+        self.assertEqual(ChordParser.get_chord_tones("C"), (0, 4, 7))
 
 
 class TestMelodyDegreeName(unittest.TestCase):
@@ -365,10 +395,19 @@ class TestParseSymbol(unittest.TestCase):
         self.assertIsNone(parse_symbol("  NC  "))
 
     def test_an_unreadable_symbol_is_refused(self):
-        """A wrong chord is worse than a refused one, so junk raises rather than guessing."""
-        for name in ("Hmax15#", "weird label", "D minor seven", "", None):
+        """A wrong chord is worse than a refused one, so junk raises rather than guessing.
+
+        The refusal is for a symbol with no readable **root** - there is no chord to read
+        a quality from, so there is nothing to arrange. A root whose suffix is no table
+        knows is *not* junk: it is a chord the callers can still report, which is what the
+        "the chord symbol could not be read" annotation exists for.
+        """
+        for name in ("Hmax15#", "weird label", "7sus4", "", None):
             with self.assertRaises(ValueError, msg=name):
                 parse_symbol(name)
+        symbol = parse_symbol("D minor seven")
+        assert symbol is not None
+        self.assertEqual((symbol.root, symbol.quality), ("D", "minor seven"))
 
 
 if __name__ == "__main__":

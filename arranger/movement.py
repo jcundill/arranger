@@ -1,7 +1,7 @@
 """The step loop: one progression in, one arrangement out.
 
-`arrange_progression` is the entry point. It turns `(melody, quality, name)`
-triples into `ArrangementStep`s by asking `route_dispatch` which of the five routes
+`arrange_progression` is the entry point. It turns `(melody, name)` pairs into
+`ArrangementStep`s by asking `route_dispatch` which of the five routes
 takes each slot - a rest, a texture fill, a no-chord melody-alone step, a comping
 shape, or a harmonised melody step - and merging the walking bass in afterwards.
 
@@ -63,7 +63,7 @@ def _placed(
 
 
 def _loop_slots(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     slots: Optional[List[Slot]],
 ) -> List[Slot]:
@@ -87,7 +87,7 @@ def _loop_slots(
 
 
 def _timeline(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     beats_per_bar: int,
 ) -> Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]:
@@ -103,7 +103,7 @@ def _timeline(
 
 
 def arrange_progression(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     non_chord_tone: str = "extension",
     fret_min: int = NECK_FRET_MIN,

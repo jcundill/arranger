@@ -85,14 +85,14 @@ from tests.support import (
 # `targets` behaviour tests and the backward-compatibility pin below, so the two cannot
 # drift apart.
 BUT_NOT_FOR_ME = [
-    ("C5", "maj7", "Fmaj7"),
-    ("C5", "maj7", "Fmaj7"),
-    ("B4", "maj7", "Fmaj7"),
-    ("C5", "maj7", "Fmaj7"),
-    ("D5", "maj7", "Fmaj7"),
-    ("F5", "m7", "Gm7"),
-    ("C5", "maj7", "Fmaj7"),
-    ("A4", "7", "C7"),
+    ("C5", "Fmaj7"),
+    ("C5", "Fmaj7"),
+    ("B4", "Fmaj7"),
+    ("C5", "Fmaj7"),
+    ("D5", "Fmaj7"),
+    ("F5", "Gm7"),
+    ("C5", "Fmaj7"),
+    ("A4", "C7"),
 ]
 
 # One chord per eighth for a single bar of 4/4, so the eight slots land on beats 1.0,
@@ -383,7 +383,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
     """
 
     # the synthetic cut-time head's strong beats, in a form both paths can read.
-    PROGRESSION = [("G4", "maj", "Ebmaj")]
+    PROGRESSION = [("G4", "Ebmaj")]
 
     def test_the_palette_is_the_families_the_arity_names(self):
         """
@@ -515,7 +515,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         else:
             # A complete chord, and every note is a tone of Ebmaj.
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
-            tones = {t % 12 for t in ChordParser.get_chord_tones("maj", "Ebmaj")}
+            tones = {t % 12 for t in ChordParser.get_chord_tones("Ebmaj")}
             self.assertLessEqual(
                 {p % 12 for p in step.voicing.midi_notes()}, tones, step.tab_line()
             )
@@ -528,7 +528,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         only what sits at the very top of the budget.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7")],
+            [("D4", "Dm7")],
             options=ArrangeOptions(request=Request(chord_notes="targets")),
             timings=[(0, 1.0, 1.0)],
         )
@@ -689,8 +689,8 @@ class TestTheRightHandBudget(unittest.TestCase):
     def test_a_thumb_carrying_targets_arrangement_never_sounds_five_strings(self) -> None:
         """The engine-level sweep, and the assertion whose absence let this ship."""
         progression = [
-            ("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
-            ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+            ("F5", "Fmaj7"), ("D5", "Dm7"),
+            ("C5", "G7"), ("B4", "Cmaj7"),
         ]
         timings = [(bar, 1.0 + 0.5 * n, None) for bar in range(4) for n in range(4)]
         with contextlib.redirect_stdout(io.StringIO()):
@@ -806,10 +806,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         # the palette now, so a complete chord can be built on the skipped-bass sets and
         # a tighter shape outranks the old one. The A7 is a drop-3 (G3 E4 A4 Db5) where it
         # was a drop-2 at `x-x-7-9-8-9` - the same A7, span 1 against span 2. The Am7
-        # likewise. The Dm(maj7) is unchanged, and staying that way was not automatic:
-        # that spelling does not parse, so it has no tone set, and counting wrong notes
-        # against an empty set made a two-note duo look *better* than a four-note chord.
-        # An unreadable chord now leaves the criterion unasked - see cost.voicing_cost.
+        # likewise. The last bar did not move: `Dm(maj7)` is the parenthesis spelling of
+        # the minor-major seventh, which `ChordParser.QUALITY_ALIASES` reads, so the bar
+        # keeps its `x-x-11-10-10-10` drop-2 and states the shape count.
         # The A-7 of the other cadence is the exception, and it went the other way: the
         # four-note shape it had was an inner-skip set, and no playable replacement exists
         # at C#5 in that position, so `major_cadence_tabs` records the melody alone there.
@@ -1274,7 +1273,7 @@ class TestTargetsTexture(unittest.TestCase):
             self.assertIsNotNone(root)
             tones = set(
                 arranger.ChordParser.get_chord_tones(
-                    arranger.ChordParser.canonical_quality(quality or ""), step.chord
+                    step.chord
                 )
             )
             harmony = tones | {max(step.voicing.midi_notes()) % 12}
@@ -1306,7 +1305,7 @@ class TestTargetsTexture(unittest.TestCase):
         nothing to say about it - and it must still be flagged melody_only.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C5", "NC", "NC"), ("C5", "maj7", "Fmaj7")],
+            [("C5", "NC"), ("C5", "Fmaj7")],
             timings=[(0, 2.0, None), (0, 1.0, None)],
             options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
@@ -1330,12 +1329,12 @@ class TestTargetsTexture(unittest.TestCase):
         a target - never a fill that quietly got thick.
         """
         checked = 0
-        for quality, chord in (
+        for _quality, chord in (
             ("maj7", "Fmaj7"), ("m7", "Dm7"), ("7", "G7"), ("m7b5", "Bm7b5"),
         ):
             for melody in ("C5", "A4", "F4", "E4"):
                 steps = VoiceLeadingEngine.arrange_progression(
-                    [(melody, quality, chord)],
+                    [(melody, chord)],
                     timings=[(0, 2.0, None)],
                     options=ArrangeOptions(request=Request(chord_notes="targets")),
                 )
@@ -1379,10 +1378,10 @@ class TestIntervalGrip(unittest.TestCase):
         string set, with the melody on top.
         """
         checked = 0
-        for quality, name in self.QUALITIES:
+        for _quality, name in self.QUALITIES:
             for melody in ("C5", "E5", "A4", "G4", "B4"):
                 for voicing in VoiceLeadingEngine.get_interval_voicings(
-                    Note(melody), quality, chord_name=name
+                    Note(melody), chord_name=name
                 ):
                     checked += 1
                     active = voicing.active_frets()
@@ -1405,10 +1404,10 @@ class TestIntervalGrip(unittest.TestCase):
     def test_the_two_notes_are_a_third_or_a_sixth_apart(self):
         """A 3rd, a 6th or a 10th - the intervals the guide names, and no others."""
         allowed = {3, 8, 9}
-        for quality, name in self.QUALITIES:
+        for _quality, name in self.QUALITIES:
             for melody in ("C5", "A4", "G4"):
                 for voicing in VoiceLeadingEngine.get_interval_voicings(
-                    Note(melody), quality, chord_name=name
+                    Note(melody), chord_name=name
                 ):
                     low, high = sorted(voicing.midi_notes())
                     self.assertIn((high - low) % 12, allowed, f"{name} under {melody}")
@@ -1431,13 +1430,13 @@ class TestIntervalGrip(unittest.TestCase):
         whichever of a 3rd, 6th or 10th it can reach - including, for a non-chord tone, a
         note of the prevailing key rather than of the chord.
         """
-        for quality, name, melody in (
+        for _quality, name, melody in (
             ("m7", "Dm7", "C5"),
             ("7", "D7", "F#4"),
             ("maj7", "Dmaj7", "C#5"),
         ):
             voicings = VoiceLeadingEngine.get_all_grip_voicings(
-                Note(melody), quality, chord_name=name, grips=("interval",)
+                Note(melody), chord_name=name, grips=("interval",)
             )
             self.assertTrue(voicings, f"no interval under {melody} for {name}")
 
@@ -1455,7 +1454,7 @@ class TestIntervalGrip(unittest.TestCase):
             ("maj7", "Dmaj7", "C#5"),  # the major 7th in the melody
         ):
             duos = VoiceLeadingEngine.get_all_grip_voicings(
-                Note(melody), quality, chord_name=name, grips=("duo",)
+                Note(melody), chord_name=name, grips=("duo",)
             )
             self.assertTrue(duos, f"no duo under {melody} for {name}")
             guide = set(SHELL_DEGREES[quality])
@@ -1475,13 +1474,16 @@ class TestIntervalGrip(unittest.TestCase):
 
     def test_no_interval_without_a_chord_root(self):
         """
-        With no chord name there are no guide tones to measure from, so nothing is
-        generated.
+        With no chord root there are no guide tones to measure from, so nothing is
+        generated - and the symbol is refused rather than guessed at.
 
         The same argument as the shell: an interval named against a chord we cannot
-        identify is a guess, and a guess here is how a wrong note gets in.
+        identify is a guess, and a guess here is how a wrong note gets in. It is a
+        refusal rather than an empty list, because a symbol with no root has no quality
+        to measure from either.
         """
-        self.assertEqual(VoiceLeadingEngine.get_interval_voicings(Note("C5"), "maj7"), [])
+        with self.assertRaises(ValueError):
+            VoiceLeadingEngine.get_interval_voicings(Note("C5"), chord_name="maj7")
 
     def test_offsets_are_empty_rather_than_guessed_for_an_unknown_quality(self):
         """A quality with no tone set yields no intervals at all."""
@@ -1512,7 +1514,7 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         that never moves is the defect this pins.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G4", "7", "Eb7")] * 4,
+            [("G4", "Eb7")] * 4,
             timings=[(0, float(beat), None) for beat in (1, 2, 3, 4)],
             options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
