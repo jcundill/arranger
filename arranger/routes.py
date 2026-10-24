@@ -14,6 +14,7 @@ from typing import Container, List, Optional, Tuple
 
 from musthe import Note
 
+from . import comp_line as _comp_line
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass, next_resolution_melody
@@ -340,7 +341,7 @@ def _comping_choice(
     context: SlotContext,
     harmony: _CompingHarmony,
     slot: Slot,
-) -> Tuple[Voicing, Palette]:
+) -> Tuple[Voicing, Palette, str]:
     """The comping shape the selector prefers, and the palette it chose from.
 
     The root is read once for the bass-function tie-break. `get_comping_voicings`
@@ -399,7 +400,41 @@ def _comping_choice(
     dropped = dropped_for_the_bass(offered, candidates, chosen, criteria)
     if dropped is not None:
         palette = replace(palette, dropped_for_bass=dropped)
-    return chosen, palette
+    # The comp line narrows the surviving palette to the chosen top tone.
+    # Narrowing only, never widening: full palette when nothing survives.
+    # This does NOT change the selected voicing - it only records the role.
+    prev_sounding_top = (
+        max(prev_sounding.voicing.midi_notes())
+        if prev_sounding is not None and prev_sounding.voicing.active_frets()
+        else None
+    )
+    history_tops = []
+    if prev_sounding is not None and prev_sounding.voicing.active_frets():
+        history_tops.append(max(prev_sounding.voicing.midi_notes()))
+    band = _comp_line.home_band(context.neck.fret_min, context.neck.fret_max)
+    is_opening = prev_sounding is None
+    # Extract pitch values from Voicing candidates for chosen_top
+    pitch_candidates = [max(v.midi_notes()) for v in candidates]
+    target_tone, _new_dir, role = _comp_line.chosen_top(
+        previous_top=prev_sounding_top,
+        candidates=pitch_candidates,
+        band=band,
+        direction=1,
+        history=history_tops,
+        next_landing=None,
+        is_opening=is_opening,
+    )
+    # Record the narrowing as palette facts, but keep original candidates for voicing
+    narrowed = [v for v in candidates if max(v.midi_notes()) == target_tone] if target_tone is not None else list(candidates)
+    dropped_for_line = None
+    if narrowed and len(narrowed) < len(candidates):
+        dropped_for_line = candidates[0] if candidates else None
+    if not narrowed:
+        narrowed = list(candidates)
+    # Record palette narrowing facts without changing the voicing selection
+    if dropped_for_line is not None:
+        palette = replace(palette, dropped_for_line=dropped_for_line)
+    return chosen, palette, role
 
 
 def _emit_comping_step(
@@ -409,6 +444,7 @@ def _emit_comping_step(
     harmony: _CompingHarmony,
     chosen: Voicing,
     palette: Palette,
+    top_role: Optional[str] = None,
 ) -> None:
     """Append the comping shape, then merge the thumb into it.
 
@@ -451,6 +487,7 @@ def _emit_comping_step(
         non_chord_tone=harmony.is_non_chord_tone,
         strategy=harmony.strategy,
         harmonized_as=harmony.harmonized_as,
+        top_role=top_role,
     ))
     attach_bass(arrangements[-1], slot.bass, arrangements)
 
@@ -592,6 +629,6 @@ def comping_step(
     # cannot reach that beat's note under is not offered, so the chord part moves instead
     # of the line losing a note. A narrowing of what the axis offered, never a widening -
     # see `decisions.leaving_room_for_the_bass`.
-    chosen, palette = _comping_choice(arrangements, candidates, context, harmony, slot)
-    _emit_comping_step(arrangements, slot, context, harmony, chosen, palette)
+    chosen, palette, top_role = _comping_choice(arrangements, candidates, context, harmony, slot)
+    _emit_comping_step(arrangements, slot, context, harmony, chosen, palette, top_role=top_role)
     return True
