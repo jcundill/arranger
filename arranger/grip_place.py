@@ -43,6 +43,20 @@ def frets_in_span(
             yield (first,) + tail
 
 
+def frets_in_band(frets: Iterable[int], band: Tuple[int, int]) -> bool:
+    """True when every sounded fret lies inside `band`, inclusive.
+
+    **Every fret, not the average.** A shape whose average sits inside the band while
+    one fret reaches above it is not a shape the band holds: `Cmaj7`'s `x-7-x-9-12-x`
+    (avg 9.3, up to fret 12) would otherwise be handed to the walk in bar 3, jumping
+    the hand to fret 12 for one beat of a bar otherwise at frets 4-9
+    (`docs/history/comp-line.md`). The banded palette's collapse reads this same
+    predicate, so the shape it keeps per top tone is one the line can actually walk.
+    """
+    lo, hi = band
+    return all(lo <= fret <= hi for fret in frets)
+
+
 @dataclass(frozen=True)
 class Placement:
     """

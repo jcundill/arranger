@@ -37,6 +37,7 @@ from arranger.grip_place import (
     Placement,
     _searched_shape,
     candidate,
+    frets_in_band,
     frets_in_span,
     place_shape,
     place_template,
@@ -167,6 +168,33 @@ class TestTheSearchIsExhaustive(unittest.TestCase):
     def test_an_empty_string_set_yields_the_empty_shape(self):
         """The recursion's base case, which a one-voice shape would reach."""
         self.assertEqual(list(frets_in_span((), 0, 5, 5)), [()])
+
+
+class TestFretsInBand(unittest.TestCase):
+    """One band test for the two readers that narrow to a register.
+
+    `comp_line.LineShape` and `grips._comping_collapse_key` both ask "is this shape
+    inside the comp's home band?", and a divergence between them is a shape the
+    palette keeps and the line then refuses. `frets_in_band` is the one answer.
+    """
+
+    def test_the_edges_are_inside(self):
+        """A band is inclusive: a fret on either boundary belongs to it."""
+        self.assertTrue(frets_in_band((3, 5, 10), (3, 10)))
+
+    def test_one_fret_outside_is_outside(self):
+        """The predicate is over every fret, so a reach outside ends the claim."""
+        self.assertFalse(frets_in_band((3, 5, 10), (3, 9)))
+        self.assertFalse(frets_in_band((2, 5, 10), (3, 10)))
+
+    def test_a_shape_whose_average_is_inside_but_a_fret_is_not_is_outside(self):
+        """The measured case: an average test would hand this shape to the walk.
+
+        `Cmaj7`'s `x-7-x-9-12-x` has an average of 9.3, inside the 3-10 band, while
+        its top voice is at fret 12 - a hand that would jump five frets for one beat
+        (`docs/history/comp-line.md`).
+        """
+        self.assertFalse(frets_in_band((7, 9, 12), (3, 10)))
 
 
 def _requests(

@@ -246,6 +246,7 @@ TEST_SEAMS: Set[str] = {
     # Bass rules tests read the no-room reason.
     "test_bass -> arranger.bass_rules._comping_no_room_reason",
     # Comping tests read the grip generators and palette directly.
+    "test_comping -> arranger.grips._comping_collapse_key",
     "test_comping -> arranger.grips._comping_palette",
     "test_comping -> arranger.grips._search_comping_voicings",
     # The generated-grips witness reads the drop-2 palette and guide tones.

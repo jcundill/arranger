@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
+from .grip_place import frets_in_band
 from .step_types import (
     TOP_APPROACH_FROM_ABOVE,
     TOP_APPROACH_FROM_BELOW,
@@ -46,11 +47,9 @@ class LineState:
 class LineShape:
     """One shape, as the line reads it: its top voice, its register, and its band.
 
-    **`in_band` is tested on every fret**, not on the average: a shape whose average
-    sits inside the band while one fret reaches above it is not a shape the band holds.
-    The measured case is `Cmaj7`'s `x-7-x-9-12-x` (avg 9.3, frets to 12), which an
-    average test would hand the walk in bar 3 - and the hand would jump to fret 12 for
-    one beat of a bar that is otherwise at frets 4-9.
+    **`in_band` is tested on every fret**, not on the average, and
+    `grip_place.frets_in_band` is that one test - the banded palette's collapse reads
+    the same predicate, so the shape it keeps per top tone is one the line can walk.
     """
 
     tone: int
@@ -62,9 +61,7 @@ class LineShape:
         return cls(
             tone=max(voicing.midi_notes()),
             register=voicing.avg_fret,
-            in_band=all(
-                band[0] <= fret <= band[1] for fret in voicing.active_frets()
-            ),
+            in_band=frets_in_band(voicing.active_frets(), band),
         )
 
 

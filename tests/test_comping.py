@@ -18,12 +18,14 @@ from arranger import (
     ChordParser,
     TimeSignature,
     VoiceLeadingEngine,
+    Voicing,
     format_progression,
     get_comping_voicings,
     parts_has_melody_only,
     resolve_request,
     supported_string_sets,
 )
+from arranger.comp_line import LineShape
 from arranger.grip_place import snapshot
 from arranger.grip_tables import (
     COMPING_MAX_SPAN,
@@ -32,6 +34,7 @@ from arranger.grip_tables import (
 )
 from arranger.grips import (
     CompingRequest,
+    _comping_collapse_key,
     _comping_palette,
     _search_comping_voicings,
     get_comping_voicings_for,
@@ -463,6 +466,50 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
             [voicing.tab_string() for voicing in get_comping_voicings("A7")],
             [voicing.tab_string() for voicing in first],
         )
+
+
+class TestTheBandedCollapseReadsOneBand(unittest.TestCase):
+    """The collapse and the line answer "inside the band?" the same way.
+
+    A banded palette keeps **one shape per top tone**, and the comp line then filters
+    that palette on `LineShape.in_band`. When the two asked different questions - an
+    average here, every fret there - the collapse could keep a shape the line refused
+    to walk, so the tone's in-band shape never reached the selector
+    (`docs/history/comp-line.md`). `grip_place.frets_in_band` is now the one answer.
+    """
+
+    @staticmethod
+    def _voicing(frets: Tuple[int, ...]) -> Voicing:
+        """A `Voicing` sounding `frets` on the top three strings."""
+        padded = [-1, -1, -1, -1, -1, -1]
+        for index, fret in zip((3, 4, 5), frets):
+            padded[index] = fret
+        return Voicing(
+            frets=padded,
+            top_fret=max(frets),
+            avg_fret=sum(frets) / len(frets),
+        )
+
+    def test_the_collapse_and_the_line_agree_shape_by_shape(self):
+        """Over a spread of registers, the two predicates never disagree."""
+        band = (3, 10)
+        for frets in [(3, 5, 10), (7, 9, 12), (2, 5, 9), (4, 6, 8), (3, 11, 11)]:
+            with self.subTest(frets=frets):
+                _window, outside_band, _middle, _span = _comping_collapse_key(
+                    frets, band, NECK_FRET_MIN, NECK_FRET_MAX
+                )
+                in_band = LineShape.of(self._voicing(frets), band).in_band
+                self.assertEqual(outside_band, 0 if in_band else 1)
+
+    def test_the_measured_shape_is_outside_for_both(self):
+        """`x-7-x-9-12-x`: average 9.3 inside the band, top voice at fret 12 outside."""
+        frets = (7, 9, 12)
+        band = (3, 10)
+        _window, outside_band, _middle, _span = _comping_collapse_key(
+            frets, band, NECK_FRET_MIN, NECK_FRET_MAX
+        )
+        self.assertEqual(outside_band, 1)
+        self.assertFalse(LineShape.of(self._voicing(frets), band).in_band)
 
 
 class TestTheAxisIsInertByDefault(unittest.TestCase):

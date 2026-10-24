@@ -30,6 +30,7 @@ from .chords import ChordParser, parse_symbol
 from .grip_place import (
     Placement,
     ShapeSnapshot,
+    frets_in_band,
     frets_in_span,
     place_shape,
     place_template,
@@ -872,10 +873,14 @@ def _comping_collapse_key(
     The band is a *preference* in exactly the way the window is: a tone reachable
     only outside it still enters the palette, which is what keeps the fill able to
     climb toward a melody and keeps a chord from losing a tone.
+
+    The band test is `grip_place.frets_in_band` - **every fret, not the average** -
+    the same predicate `comp_line.LineShape` reads, so the shape kept per top tone is
+    one the line will actually walk.
     """
     avg = sum(frets) / len(frets)
     outside_window = 0 if all(fret_min <= fret <= fret_max for fret in frets) else 1
-    outside_band = 0 if band[0] <= avg <= band[1] else 1
+    outside_band = 0 if frets_in_band(frets, band) else 1
     middle = (band[0] + band[1]) / 2
     return (outside_window, outside_band, abs(avg - middle), max(frets) - min(frets))
 
