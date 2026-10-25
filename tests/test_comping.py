@@ -1414,9 +1414,9 @@ class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
     def test_the_importer_is_the_other_producer_of_positions(self):
         """The same request that leaves a bare progression silent comps a written head.
 
-        The difference between the two entry points, asserted rather than assumed: the
-        importer's union generates the position, so `1and` is a place on the metre's grid
-        there and no place at all here.
+        The difference between the two entry points, asserted rather than assumed: a
+        head has a metre, so `1and` is a place on its grid and no place at all among a
+        bare progression's entries.
         """
         import os
 
@@ -1431,12 +1431,61 @@ class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         self.assertTrue(
             self._sounding(steps),
-            "the importer's union did not produce the requested position",
+            "the importer's rhythm did not produce the requested position",
         )
         for step in steps:
             if not step.voicing.active_frets():
                 continue
             self.assertEqual(step.beat % 1, 0.5, step.tab_line())
+
+
+class TestACompOnlySelectionPlaysTheRhythmItNames(unittest.TestCase):
+    """A selection with no tune to play is not laid out on the tune's rhythm.
+
+    `headxml._comp_only_timeline`: the positions the request names are the whole
+    timeline, and each rings its felt beat. The alternative - the melody-anchored union
+    - makes the tune's written rhythm the bar's, so a note beginning between two named
+    positions becomes a slot of its own (a **rest**, since nothing is asked to sound
+    there) and a named position inherits the length of the note that happens to begin
+    on it. Measured at 791d13b over `synthetic_triplets.mxl` bars 1-2,
+    `--no-melody --chord-on 1,2` came out as **8 steps, 4 of them rests**, and the stab
+    on bar 1 beat 1 rang 0.104167 of a whole note where the beat is a half.
+    """
+
+    def _steps(self):
+        import os
+
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "synthetic_triplets.mxl",
+        )
+        steps, head, _notes = arrange_xml_head(
+            path, section=(1, 3), request=Request(melody=False, chord_on="1,2")
+        )
+        return steps, head
+
+    def test_the_named_positions_are_the_whole_timeline(self):
+        """Two attacks per bar, each a half note, and nothing else at all."""
+        steps, head = self._steps()
+        self.assertEqual(head.beats_per_bar, 2, "the fixture is in 2/2")
+        self.assertEqual(
+            [(step.bar, step.beat) for step in steps],
+            [(1, 1.0), (1, 2.0), (2, 1.0), (2, 2.0)],
+        )
+        self.assertEqual([step.duration for step in steps], [0.5] * 4)
+        self.assertEqual([step.silence for step in steps], [None] * 4)
+
+    def test_the_shapes_are_the_chords_own_and_did_not_move(self):
+        """What the rule changes is *when* a chord is struck, not which shape it is."""
+        steps, _head = self._steps()
+        self.assertEqual(
+            [step.tab_line() for step in steps],
+            ["x-5-9-7-x-x", "x-x-9-7-8-x", "x-x-5-5-5-x", "x-7-5-5-x-x"],
+        )
+
 
 
 class TestTheCompStaysUnderTheTune(unittest.TestCase):

@@ -651,20 +651,20 @@ def _build_song(
                 beat = gp.Beat(
                     voice,
                     duration=duration,
-                    # A beat with notes is `normal`; a beat with none is a **rest**,
-                    # and it must say so. The writer only emits the status byte when
-                    # the status is not `normal`, so a note-less beat written as
-                    # `normal` goes out as an ordinary beat with an empty string-flags
-                    # byte - which MuseScore reads as a rest in the right place and
-                    # TuxGuitar does not, putting the pickup rest at the end of the
-                    # bar instead of the head. `BeatStatus.rest` sets the flag that
-                    # says rest explicitly. See `_build_song`.
-                    status=(gp.BeatStatus.normal if step is not None
-                            else gp.BeatStatus.rest),
                     text=label,
                 )
                 ringing = _strike_notes(
                     gp, beat, step, continued, part, tie, ringing, last_on_string
+                )
+                # **A beat with no notes is a rest, and it must say so.** The status is
+                # read off the beat's own notes rather than off `step is not None`, because
+                # a rest *step* is a step too: the engine emits one for a position the
+                # guitar declines, and written `normal` it goes out as an ordinary beat
+                # with an empty string-flags byte - which MuseScore reads as a rest in the
+                # right place and TuxGuitar puts at the end of the bar instead of the head.
+                # `BeatStatus.rest` sets the flag that says rest explicitly.
+                beat.status = (
+                    gp.BeatStatus.normal if beat.notes else gp.BeatStatus.rest
                 )
                 voice.beats.append(beat)
         # maxVoices is 2 and the writer emits every voice; one would desync the

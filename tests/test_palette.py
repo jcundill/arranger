@@ -323,18 +323,21 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     """
 
     def test_a_silent_step_says_it_is_silent(self):
-        """A grid that places no chord leaves the guitar out, and the line says so.
+        """A step the request does not name leaves the guitar out, and the line says so.
 
         Measured before this clause existed: 74 of one head's 206 `--grid freddie` steps
         are silent, and every one of them carried `(harmony under <degree>)` - the one
         annotation that was not merely thin but false.
-        """
-        from headxml import arrange_xml_head
 
-        steps, _head, _notes = arrange_xml_head(
-            "tests/data/synthetic_repeat_slash.musicxml",
-            section=(1, 2),
-            options=ArrangeOptions(request=Request(melody=False, chord_on="every-beat")),
+        A progression written in code has no positions but its own entries, so a rhythm
+        that names beat 1 alone leaves the entry at 1.5 **resting** - which is the
+        engine's rule rather than the importer's: `chord_on` selects among a
+        progression's positions and never invents one.
+        """
+        steps = VoiceLeadingEngine().arrange_progression(
+            [(None, "Dm7"), (None, "Dm7")],
+            timings=[(0, 1.0, 1.0), (0, 1.5, 1.0)],
+            request=Request(melody=False, chord_on="1"),
         )
         silent = [step for step in steps if not step.voicing.active_frets()]
         self.assertTrue(silent, "the rhythm stopped leaving the guitar out")

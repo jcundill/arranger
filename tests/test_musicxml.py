@@ -12,6 +12,7 @@ from typing import List
 from xml.etree import ElementTree
 
 from arranger import VoiceLeadingEngine
+from arranger.options import Request
 from tabxml import (
     _READABLE_KINDS,
     _WRITTEN_OCTAVE_SHIFT,
@@ -1093,4 +1094,83 @@ class TestACrossBarHoldIsWrittenAsATie(unittest.TestCase):
         # And the continuation restates no chord symbol: it is the same harmony.
         self.assertFalse(any(n.find("harmony") is not None for n in continuation))
 
+
+@requires_music21
+class TestARestIsCutAtABarLineAndNotTied(unittest.TestCase):
+    """A rest cannot overfill a measure either, and a tie is not how it is cut.
+
+    `<tie>` inside a `<rest>` is not legal MusicXML, and the reason is the meaning of the
+    element: a tie asserts that *this pitch* continues, which a silence makes no claim
+    about. The event still has to be split - a measure holding more than its signature is
+    not a measure - so the two rests are written as the two silences they are.
+    """
+
+    def test_a_rest_spanning_a_bar_line_is_two_rests_and_no_tie(self):
+        from arranger import VoiceLeadingEngine, format_musicxml
+
+        # A whole note on bar 1's downbeat, then an attack on bar 3's third beat: the
+        # silence between them starts at bar 2's downbeat and crosses that bar line
+        # (and bar 3's), so it is written as more than one rest.
+        steps = VoiceLeadingEngine().arrange_progression(
+            [(None, "Dm7"), (None, "G7")],
+            timings=[(0, 1.0, 1.0), (2, 3.0, 0.25)],
+        )
+        root = ElementTree.fromstring(
+            format_musicxml(steps, beats_per_bar=4, beat_type=4)
+        )
+        rests = [
+            note
+            for measure in root.findall("part")[0].findall("measure")
+            for note in measure.findall("note")
+            if note.find("rest") is not None
+        ]
+        # The witness that the rest really was cut, so "no tie" is not "no split".
+        self.assertEqual(len(rests), 2)
+        for note in rests:
+            self.assertIsNone(note.find("tie"))
+            self.assertIsNone(note.find("notations/tied"))
+
+
+@requires_music21
+class TestACompOnlySelectionWritesTheRhythmItNames(unittest.TestCase):
+    """`--no-melody --chord-on 1,2` is two chords a bar, and a rest nowhere.
+
+    The rests this replaced came from the timeline rather than from the writer: the
+    arrangement carried a step at every position the *tune* began at, so a position
+    nobody asked to sound became a rest step, and the chord that *was* asked for
+    inherited the written note's length. Measured at 791d13b over this fixture's bars
+    1-2: 8 steps, 4 of them rests, and the first stab a triplet eighth long.
+    """
+
+    def test_each_bar_is_two_half_note_chords_and_no_rest(self):
+        from arranger import format_musicxml
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "synthetic_triplets.mxl",
+        )
+        steps, head, _notes = arrange_xml_head(
+            path, section=(1, 3), request=Request(melody=False, chord_on="1,2")
+        )
+        root = ElementTree.fromstring(
+            format_musicxml(
+                steps,
+                beats_per_bar=head.beats_per_bar,
+                beat_type=head.beat_type,
+            )
+        )
+        self.assertEqual([n for n in root.iter("note") if n.find("rest") is not None], [])
+        measures = root.findall("part")[0].findall("measure")
+        self.assertEqual(len(measures), 2)
+        divisions = int(root.findtext(".//divisions") or 4)
+        bar = divisions * head.beats_per_bar * 4 // head.beat_type
+        for measure in measures:
+            onsets = [
+                note for note in measure.findall("note") if note.find("chord") is None
+            ]
+            self.assertEqual(len(onsets), 2, "two attacks in the bar")
+            for note in onsets:
+                self.assertEqual(int(note.findtext("duration") or 0), bar // 2)
 

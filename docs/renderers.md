@@ -185,7 +185,20 @@ sounding, so each renderer has to say "not plucked" in its own way:
   string is the same fret, because a GP5 tie carries no fret of its own.
 
 A **rest column** is drawn by all four as silence: a blank cell, an `x` under `--mutes`, an
-explicit `<rest>` in the score. A **fill** is not a rest — it is a step with no melody — so
+explicit `<rest>` in the score. Two things about it are stated rather than left to a reader:
+
+- **a rest is cut at a bar line and not tied.** A measure cannot overfill, so a rest longer
+  than the room in its bar is split like any other event — but `<tie>` inside a `<rest>` is
+  not legal MusicXML, and the claim it would make is false: a tie says *this pitch
+  continues*, and a silence makes no such claim. `tabxml.write_event` sets the tie on a
+  sounding event only, so the two pieces are the two silences they are.
+- **a rest step is a rest beat in GP5.** The status is read off the beat's own notes rather
+  than off `step is not None`: a rest *step* is still a step — the engine emits one for a
+  position the guitar declines — and written `normal` it goes out as an ordinary beat with an
+  empty string-flags byte, which MuseScore reads as a rest in the right place and TuxGuitar
+  puts at the end of the bar instead of the head.
+
+A **fill** is not a rest — it is a step with no melody — so
 it draws the chord it states and its line says *the tune is silent here*, which is what stops
 a chord with no melody above it from reading as a mistake.
 

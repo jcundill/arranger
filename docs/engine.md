@@ -1978,6 +1978,32 @@ ours is the skeleton alone: a chord under each written note and nothing invented
 reads that selection rather than the spelling that asked for it, so one request is one
 arrangement.
 
+**On a selection with no tune to play, the requested rhythm is the whole timeline**
+(`headxml._comp_only_timeline`). Nothing sings the tune, so the tune's written rhythm is not
+the bar's: a note that begins between two named positions is not an attack, and a named
+position rings its felt beat rather than the length of the note that happens to begin on it.
+The arrangement is the positions the request names and no others — so the score carries no
+rest for a position nobody asked to sound, and a stab is never a triplet eighth because the
+horn's note was one. Two consequences are deliberate:
+
+- **a harmony change between two named positions is stated at the next attack.** `1,3` in
+  4/4 states a chord that changes on beat 2 on beat 3; `every-beat` is how a caller asks for
+  every attack.
+- **a bar with no chord in force** (`NC`, or a symbol the library cannot voice) **has no comp
+  step at all** under a named rhythm, exactly as `fill_slots` states it for a fill: there is
+  no chord to state, and inventing one is what every position rule in the importer refuses.
+  The bar is silence in the score, which is what an `NC` bar is.
+
+The melody column is still filled in at every named position, because the comp is voiced
+*under* the tune even when the guitar is not playing it: `leaving_room_for_the_tune` reads it
+as the ceiling, so a comping part does not rise into the horn's register.
+
+**The one comping request the union still lays out is the default `chord_on="melody"`**, which
+names no positions: the guitar states the chord where the tune is, so the slots are the
+tune's and a stab's length there is the written note's. That asymmetry is stated rather than
+hidden, and it is left alone because its fix changes every slot's `duration`, which
+`bass._melody_timeline` reads to decide which melody is in force on a walked beat.
+
 ### What a slot the rhythm does not name does, and why it is a fourth kind
 
 `decisions.melody_alone_case` returns a *kind*, and the chord's rhythm is what made

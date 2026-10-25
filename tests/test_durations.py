@@ -28,10 +28,11 @@ from tests.support import harmony, note, rest, score_bars, write_score
 def _long_note_score() -> str:
     """A 4/4 head whose melody is one whole note in bar 1 and a rest in bar 2.
 
-    Written by hand rather than taken from the corpus because the bars have to be
-    *empty* of melody for the chord part's own positions to be the ones that sound - the
-    union keeps the melody's slot wherever the tune has a note, and that slot's length
-    is the written note's.
+    Written by hand rather than taken from the corpus because the request has to be
+    the only thing naming positions: a **comping-only** selection's timeline is its
+    own rhythm (`headxml._comp_only_timeline`), so bar 1's whole note leaves the
+    stab's length measurable rather than standing in for it, and bar 2 has no tune
+    in it at all.
     """
     return score_bars([
         harmony("C", "major") + note("C", 5, duration=16),
@@ -94,18 +95,25 @@ class TestTheScoreRestsAfterAStab(unittest.TestCase):
     """`duration` is a cap, so the beats a stab does not fill are written as silence."""
 
     def test_the_tail_of_the_beat_is_a_rest(self):
+        """`2,4` states two stabs and lets the beat between them be silence.
+
+        Bar 1's tune is one whole note and the request names beats 2 and 4, so the
+        part is a quarter on 2, the beat the stab does not fill, and the attack on 4 -
+        **not** a slot on every position the tune inhabits. The silence before the
+        first attack is the pickup, which is what keeps bar 1's downbeat where the
+        score says it is.
+        """
         path = write_score(_long_note_score())
         self.addCleanup(os.unlink, path)
         steps, _head, _notes = arrange_xml_head(
             path, request=Request(melody=False, chord_on="2,4"), section=(1, 2)
         )
-        events, _pickup = score_events(steps, 4, True, 4)
-        # bar 1: a rest where the tune is silent, the stab on beat 2, the silence it
-        # leaves, then the stab on beat 4 running to the bar line.
+        events, pickup = score_events(steps, 4, True, 4)
         self.assertEqual(
             [(step is None, round(length, 6)) for step, _strikes, length in events],
-            [(False, 1.0), (False, 1.0), (True, 1.0), (False, 1.0)],
+            [(False, 1.0), (True, 1.0), (False, 1.0)],
         )
+        self.assertEqual(round(pickup, 6), 1.0)
 
 
 class TestAFillStopsAtTheRestsEnd(unittest.TestCase):

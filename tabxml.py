@@ -394,13 +394,13 @@ def _build_part(
 
     def write_event(step: Optional[ArrangementStep], length: float) -> None:
         """
-        Writes one event, cutting it at a bar line and tying the halves.
+        Writes one event, cutting it at a bar line and **tying only what sounds**.
 
-        A note cannot cross a bar line in MusicXML, and a measure holding more than
-        its time signature is not a measure. So an event that runs across one becomes
-        two notes tied together - which is what an engraver does too, and it keeps
-        the written rhythm: a transcription whose phrasing disagrees with the metre
-        comes out as the player heard it rather than silently straightened.
+        A note cannot cross a bar line, and a measure holding more than its time
+        signature is not a measure, so an event that runs across one becomes two
+        pieces: tied when it sounds, which keeps the written rhythm, and **cut but
+        not tied when it is a rest** - `<tie>` inside a `<rest>` is not legal, and a
+        silence continues no pitch.
         """
         nonlocal offset
         from music21 import tie as tie_module
@@ -429,7 +429,7 @@ def _build_part(
 
         for index, (where, at, piece) in enumerate(pieces):
             built = _build_note(step, piece, state, len(pieces) > 1)
-            if len(pieces) > 1:
+            if len(pieces) > 1 and not built.isRest:
                 built.tie = tie_module.Tie(
                     "start" if index == 0
                     else "stop" if index == len(pieces) - 1

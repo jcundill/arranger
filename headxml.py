@@ -2659,6 +2659,7 @@ def rhythm_slots(
     rhythm: Rhythm,
     section: Optional[Tuple[int, int]] = None,
     grouping: Optional[Sequence[int]] = None,
+    extra_positions: Sequence[Tuple[int, float]] = (),
 ) -> List[Tuple[Optional[str], str, int, float, float]]:
     """Every position `rhythm` names, as slots, including positions no note has.
 
@@ -2666,11 +2667,24 @@ def rhythm_slots(
     4/4 bar is beat 1.5 of every bar in the section, and a position the tune merely
     holds through is still one the chord attacks on - a stab under a held note is
     wanted, so unlike the melody-anchored union there is no hold filter here.
+
+    `extra_positions` are the caller's own positions beside the rhythm's - the tune's
+    written onsets, for a rhythm that names `melody` *and* positions and so plays
+    both. They are unioned on `(bar, beat)` with the rhythm's, and every slot is built
+    by `_slots_at` with `_stab_length` over the whole set: the two sources cannot
+    disagree about the harmony in force, nor about how long an attack rings.
     """
     lo, hi = section if section is not None else head.bars
     grouping = _chord_grouping(head, grouping)
     beats = rhythm_beats(rhythm, head.beats_per_bar, grouping)
-    positions = [(bar, beat) for bar in range(lo, hi) for beat in beats]
+    at: Dict[Tuple[int, int], Tuple[int, float]] = {}
+    for bar in range(lo, hi):
+        for beat in beats:
+            at.setdefault(_tick_key(bar, beat), (bar, beat))
+    for bar, beat in extra_positions:
+        if lo <= bar < hi:
+            at.setdefault(_tick_key(bar, beat), (bar, beat))
+    positions = [at[key] for key in sorted(at)]
     return [
         (_note, _name, bar, beat, _stab_length(head, beat, length, grouping))
         for (_note, _name, bar, beat, length) in _slots_at(
@@ -3048,7 +3062,7 @@ def _head_slots(
     options: ArrangeOptions,
     grouping: Tuple[int, ...],
 ) -> List[Tuple[Tuple[Optional[str], str], int, float, float]]:
-    """The head's melody slots, with the projected chord positions unioned in.
+    """The head's slots: the tune's notes, with the comping positions added.
 
     **The union is gated on whether the guitar comps at all - not on the route.**
     A selection that *comps* states the chord where the tune is silent -
@@ -3056,6 +3070,12 @@ def _head_slots(
     play: a melody-only selection plays the tune and nothing else, and a **lone bass
     line** has no chord to state at a position the tune left.
     `docs/history/open-issues.md` item 1 holds the measurement.
+
+    **A requested rhythm is the whole timeline of a selection with no tune to play.**
+    The positions it names are the ones the guitar attacks on, each ringing its felt
+    beat - `_comp_only_timeline`, because the tune's written rhythm is not the bar's
+    when nothing sings it. A selection that *does* sing the tune keeps the union: every
+    written note is a step there, and the request only adds positions to it.
     """
     slots = head_skeleton(head, section)
     # The parts gate reads the **derivation**, which is the same value the step loop
@@ -3074,12 +3094,18 @@ def _head_slots(
     # enters.
     request = axes
     chord_on = request.chord_rhythm
+    # `melody` alone adds nothing to the union: the skeleton already has one chord per
+    # written note. A **positions** rhythm adds the attacks the caller named.
+    named = not chord_on.is_none and not (
+        chord_on.wants_melody and not chord_on.positions
+    )
+    comps = parts_have_chord(parts) and not parts_have_melody(parts)
+    if named and comps:
+        return _comp_only_timeline(head, slots, chord_on, section, grouping)
     extra: List[Tuple[Optional[str], str, int, float, float]] = []
-    if not chord_on.is_none and not (chord_on.wants_melody and not chord_on.positions):
-        # `melody` alone adds nothing: the skeleton already has one chord per
-        # written note. A **positions** rhythm adds the attacks the caller named.
+    if named:
         extra = rhythm_slots(head, chord_on, section, grouping)
-    if not extra and parts_have_chord(parts) and not parts_have_melody(parts):
+    if not extra and comps:
         return _merge_chord_slots(slots, head, section, grouping)
     extra.extend(fill_slots(head, request, section, grouping))
     if head.first_bar_implicit:
@@ -3088,6 +3114,45 @@ def _head_slots(
         extra = [slot for slot in extra if slot[2] != head.bars[0]]
     return _unioned(slots, extra)
 
+
+def _comp_only_timeline(
+    head: Head,
+    skeleton: List[Tuple[Tuple[Optional[str], str], int, float, float]],
+    chord_on: Rhythm,
+    section: Optional[Tuple[int, int]],
+    grouping: Tuple[int, ...],
+) -> List[Tuple[Tuple[Optional[str], str], int, float, float]]:
+    """A comp-only selection's slots: **the positions the request names**, and no others.
+
+    The chord is the only thing the guitar plays, so the tune's written rhythm is not
+    the bar's rhythm: a note that happens to begin between two named positions is not
+    an attack, and a named position rings its felt beat (`_stab_length`) rather than
+    the length of a note beginning there. Both rules are `rhythm_slots`', so nothing
+    here re-times an attack - the alternative is a slot per written note whose
+    *duration* is the horn's, which is a chord either cut short by a triplet or left
+    sounding over a beat the caller did not ask for.
+
+    The melody column is still `melody_at` at every position, because the comp is
+    voiced **under** the tune even when the tune is not played: `leaving_room_for_the_tune`
+    reads it as the ceiling. A rhythm that also names `melody` plays the written onsets
+    too, which is the one way the tune contributes positions of its own.
+
+    No fill is added, and not for want of asking: `--chord-fills` is a policy for the
+    tune's notated rests, so `resolve_request` refuses it on a selection with no melody
+    part (`options._refuse_melody`). There is no rest to fill because there is no tune.
+
+    A **pickup bar** keeps the skeleton's slots and takes no requested ones, for the
+    reason `_merge_chord_slots` gives: they are what the pickup *is*, and a chord
+    attack in the short bar would erase it and move the head's downbeat.
+    """
+    onsets = [(slot[1], slot[2]) for slot in skeleton] if chord_on.wants_melody else []
+    slots = rhythm_slots(head, chord_on, section, grouping, onsets)
+    base: List[Tuple[Tuple[Optional[str], str], int, float, float]] = []
+    if head.first_bar_implicit:
+        first = head.bars[0]
+        base = [slot for slot in skeleton if slot[1] == first]
+        slots = [slot for slot in slots if slot[2] != first]
+    return _unioned(base, slots)
 
 
 def arrange_xml_head(

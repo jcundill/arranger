@@ -1062,6 +1062,73 @@ class TestRhythm(GuitarProTestCase):
         self.assertEqual(first.status, guitarpro.BeatStatus.rest)
         self.assertEqual(first.notes, [])
 
+    def test_a_rest_step_is_a_rest_too(self):
+        """A **rest step** is a beat with no notes, so it is marked `rest` as well.
+
+        The status used to be read off `step is not None`, and a rest step *is* a step:
+        the engine emits one to say the guitar declines a position - here a slot at 1.5
+        that `--chord-on 1` does not name. Written as `normal` it went out as an empty
+        beat, which is the unmarked rest TuxGuitar misplaces at the end of the bar.
+        """
+        import guitarpro
+
+        steps = VoiceLeadingEngine().arrange_progression(
+            [(None, "Dm7"), (None, "Dm7")],
+            timings=[(0, 1.0, 1.0), (0, 1.5, 1.0)],
+            request=Request(melody=False, chord_on="1"),
+        )
+        rested = [step for step in steps if not step.voicing.active_frets()]
+        self.assertTrue(rested, "the rhythm stopped leaving the guitar out")
+        beats = self.beats(steps=steps, beats_per_bar=4)
+        for beat in beats:
+            self.assertEqual(
+                beat.status,
+                guitarpro.BeatStatus.normal if beat.notes else guitarpro.BeatStatus.rest,
+            )
+        self.assertIn(guitarpro.BeatStatus.rest, [beat.status for beat in beats])
+
+    def test_a_comp_only_selection_writes_the_rhythm_it_names(self):
+        """Two half-note beats per bar, not a beat per written melody note.
+
+        A selection with no tune to play is laid out on its own rhythm
+        (`headxml._comp_only_timeline`). Measured at 791d13b the same request over the
+        same two bars came out as **8 beats, 4 of them note-less**, with the first
+        chord a triplet eighth long: the timeline was the tune's written rhythm, so the
+        two positions the request named were not the bar's, and the score carried rests
+        for positions nobody asked to sound.
+        """
+        import guitarpro
+
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "synthetic_triplets.mxl"
+        )
+        steps, head, _notes = arrange_xml_head(
+            path, section=(1, 3), request=Request(melody=False, chord_on="1,2")
+        )
+        song = self.song(
+            steps=steps, beats_per_bar=head.beats_per_bar, beat_type=head.beat_type
+        )
+        measures = song.tracks[0].measures
+        self.assertEqual(len(measures), 2)
+        written = [beat for measure in measures for beat in measure.voices[0].beats]
+        self.assertEqual(len(written), 4, "two attacks in each of the two bars")
+        for beat in written:
+            self.assertEqual(beat.status, guitarpro.BeatStatus.normal)
+            self.assertEqual(beat.duration.value, 2, "a half note in 2/2")
+            # GP5 spells "no tuplet" as the neutral 1:1 rather than by omitting it,
+            # so this is what a plain duration looks like in the file.
+            self.assertEqual(
+                (beat.duration.tuplet.enters, beat.duration.tuplet.times), (1, 1)
+            )
+        # The shapes are the comping route's and did not move: what changed is when
+        # they are struck and how long each rings.
+        self.assertEqual(
+            [self.written_frets(beat) for beat in written],
+            [self.expected_frets(step) for step in steps],
+        )
+
     def test_tempo_and_time_signature_reach_the_file(self):
         """The score's tempo and metre are set, not left at the defaults."""
         song = self.song(tempo=180, beats_per_bar=3)
