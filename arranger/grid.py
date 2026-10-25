@@ -58,6 +58,7 @@ def grid_resolutions(beat_type: int) -> Tuple[int, ...]:
 # --- the request: direct positions in felt beats -----------------------------
 
 RHYTHM_MELODY = "melody"
+RHYTHM_SUSTAIN = "sustain"
 RHYTHM_NONE = "none"
 RHYTHM_EVERY_BEAT = "every-beat"
 _RHYTHM_LAST = "last"
@@ -104,6 +105,7 @@ class BarRhythm:
     """
 
     melody: bool = False
+    sustain: bool = False
     positions: Tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
@@ -122,7 +124,7 @@ class BarRhythm:
     @property
     def is_none(self) -> bool:
         """Whether the layer never sounds in this bar."""
-        return not (self.melody or self.positions)
+        return not (self.melody or self.sustain or self.positions)
 
     def includes(
         self,
@@ -146,7 +148,7 @@ class BarRhythm:
     def __str__(self) -> str:
         if self.is_none:
             return RHYTHM_NONE
-        tokens = [RHYTHM_MELODY] if self.melody else []
+        tokens = [RHYTHM_SUSTAIN] if self.sustain else ([RHYTHM_MELODY] if self.melody else [])
         tokens.extend(_format_position(position) for position in self.positions)
         return ",".join(tokens)
 
@@ -180,6 +182,11 @@ class Rhythm:
     def is_melody_only(self) -> bool:
         """Whether every bar of the cycle attacks only at the written melody's onsets."""
         return all(bar.melody and not bar.positions for bar in self.bars)
+
+    @property
+    def sustain(self) -> bool:
+        """Whether the chord's rhythm states sustained melody onsets only."""
+        return any(bar.sustain for bar in self.bars)
 
     def at(
         self, bar: Optional[int] = None, first_bar: Optional[int] = None
@@ -275,15 +282,25 @@ def _parse_bar(segment: str, number: int, felt_beats: int) -> BarRhythm:
 
 
 def _bar_from_tokens(tokens: Sequence[str], felt_beats: int) -> BarRhythm:
-    """One bar's tokens as a `BarRhythm`: `none` alone, or melody and positions."""
+    """One bar's tokens as a `BarRhythm`: `none` alone, melody or sustain, or positions.
+
+    `sustain` names the tune's sustained onsets - only a melody note running at least
+    one felt beat is harmonised there. When `melody` is also named, `sustain` is inert
+    and the bar behaves as plain `melody`.
+    """
     if RHYTHM_NONE in tokens:
         if len(tokens) > 1:
             raise ValueError(
-                "a rhythm that says 'none' cannot name 'melody' or a position"
+                "a rhythm that says 'none' cannot name 'melody', 'sustain' or a position"
             )
         return BarRhythm()
+    melody = RHYTHM_MELODY in tokens
+    sustain = RHYTHM_SUSTAIN in tokens
+    if melody:
+        sustain = False
     return BarRhythm(
-        melody=RHYTHM_MELODY in tokens,
+        melody=melody,
+        sustain=sustain,
         positions=_rhythm_positions(tokens, felt_beats),
     )
 
@@ -293,7 +310,7 @@ def _rhythm_positions(tokens: Sequence[str], felt_beats: int) -> Tuple[float, ..
     return tuple(
         position
         for token in tokens
-        if token not in (RHYTHM_MELODY, RHYTHM_NONE)
+        if token not in (RHYTHM_MELODY, RHYTHM_NONE, RHYTHM_SUSTAIN)
         for position in _positions_for(token, felt_beats)
     )
 

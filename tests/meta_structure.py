@@ -160,8 +160,11 @@ BUDGETS: Dict[str, Budget] = {
     # complexity budget rather than growing it by a branch.
     "arranger/resolution.py": Budget(7, 111, 12),
     # `slot_state`'s grid branches left with the axis, so the ceiling is what it
-    # measures rather than what it measured.
-    "arranger/slot_plan.py": Budget(6, 78, 5),
+    # measures rather than what it measured. `sustain` added a duration branch plus
+    # a position (stab) override to `_chord_here`, so the module's complexity ceiling
+    # grew from six to eight; the duration test itself was split into the small
+    # `_sustain_attacks`.
+    "arranger/slot_plan.py": Budget(8, 78, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
     # The value types and tab-cell primitives, split out of `tuning`: `Voicing`,
     # `ArrangementStep`, `Palette` and the six-line block renderer. Measured as it

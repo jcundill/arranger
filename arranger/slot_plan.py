@@ -103,6 +103,7 @@ class SlotRhythmFacts:
     """
 
     beats_per_bar: int
+    beat_type: int
     grouping: Tuple[int, ...]
     #: The chord's rhythm, read by `_chord_here`.
     chord_rhythm: Optional[Rhythm]
@@ -331,6 +332,7 @@ def _chord_here(
     bar: Optional[int],
     beat: Optional[float],
     melody_absent: bool,
+    duration: Optional[float] = None,
 ) -> bool:
     """Whether the chord part attacks at this position.
 
@@ -338,6 +340,11 @@ def _chord_here(
     attacks at every written onset, a bar that names positions attacks on those, and
     a silent bar of a cycle never attacks. `Rhythm.at` answers which of those bars a
     place in the form takes.
+
+    `sustain` is `melody` with a duration test: the chord attacks only at a melody
+    onset whose note runs at least one felt beat (`duration * beat_type >= 1.0`).
+    A shorter onset stays a single note, and a position the figure names (such as a
+    `1and` stab) is still honoured.
 
     A slot with **no melody** is one the chord layer asked for: either a
     `--chord-on` target or a rest `--chord-fills` fills, and a slot nothing asked
@@ -353,7 +360,22 @@ def _chord_here(
     segment = chord_rhythm.at(bar, rhythm.first_bar)
     if segment.melody:
         return True
+    if segment.sustain and not melody_absent:
+        # A named position (a `1and` stab) attacks regardless of duration, exactly as
+        # it would beside `melody`; only unnamed onsets are duration-tested.
+        if segment.includes(beat, rhythm.beats_per_bar, rhythm.grouping):
+            return True
+        return _sustain_attacks(duration, rhythm.beat_type)
     return segment.includes(beat, rhythm.beats_per_bar, rhythm.grouping)
+
+
+def _sustain_attacks(duration: Optional[float], beat_type: int) -> bool:
+    """Whether a sustained melody onset is struck: it must run at least one felt beat.
+
+    A duration the caller did not give is not a reason to be silent, so it attacks.
+    """
+    beats = duration * beat_type if duration is not None else float("inf")
+    return beats >= 1.0
 
 
 def _tune_onset_attack(
@@ -472,7 +494,9 @@ def slot_state(
     # takes the comping-route branches inside `melody_alone_case`, so an
     # off-grid note-less slot rests rather than asserting a melody it has not
     # got. §9.3 step D.
-    chord_here = _chord_here(inputs.rhythm, slot.bar, beat, melody_note is None)
+    chord_here = _chord_here(
+        inputs.rhythm, slot.bar, beat, melody_note is None, duration=slot.duration
+    )
     melody_alone = melody_alone_case(
         inputs.arrangement.texture, role, slot_grips, quality_of(name), name,
         inputs.arrangement.has_thumb, melody_voiced=sings_here, on_grid=chord_here,
