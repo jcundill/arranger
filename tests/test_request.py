@@ -324,6 +324,7 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             (Request(bass_on="every-beat", chord_on="none"), 2),
             (Request(chord_notes="targets"), 4),
             (Request(chord_notes="targets", bass_on="every-beat"), 4),
+            (Request(chord_on="1and:none", bass_on="none:1"), 4),
         ):
             with self.subTest(request=request, beats=beats):
                 resolved = resolve_request(request, beats)
@@ -347,7 +348,7 @@ class TestTheCanonicalSpelling(unittest.TestCase):
 
     def test_the_rhythm_spellings_are_the_grammar_s(self):
         """The request does not re-spell the positions `parse_rhythm` owns."""
-        for text in ("melody", "none", "1and", "lastand", "every-beat"):
+        for text in ("melody", "none", "1and", "lastand", "every-beat", "1,3:none"):
             with self.subTest(text=text):
                 resolved = resolve_request(Request(chord_on=text), 4)
                 self.assertEqual(str(parse_rhythm(text, 4)), resolved.chord_on)

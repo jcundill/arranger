@@ -186,20 +186,19 @@ class Rhythm:
     ) -> BarRhythm:
         """The cycle's segment for `bar`, and the tune for a bar before the cycle.
 
-        `bar` is the number the position falls in and `first_bar` the **first
-        complete bar** of the form - the bar the cycle's first segment lands on. A
-        bar before it is not a bar of the cycle: it takes the tune's own onsets,
-        which is what makes an accompaniment begin with the form rather than with
-        the pickup. `bar=None` is a position nobody placed, which takes the first
-        segment.
-
-        `first_bar=None` is a figure placed on no form - a hand-built progression,
-        whose bars are simply its own - and it runs on **absolute phase** from bar 1
-        instead. There is no pickup to take in that case, because nobody said which
-        bar the form begins on.
+        `bar` is the number the position falls in and `first_bar` the **first complete
+        bar** of the form - where segment 1 lands. A bar before it is not a bar of the
+        cycle: it takes the tune's own onsets, so an accompaniment begins with the form
+        rather than with the pickup. A **silent** figure is silent there too: `none`
+        asks that the layer never attack, so it has no bar of the form to begin in.
+        `bar=None` takes the first segment, and `first_bar=None` is a figure placed on
+        no form, which runs on absolute phase from bar 1 because nobody said where the
+        form is.
         """
         if bar is None:
             return self.bars[0]
+        if self.is_none:
+            return BarRhythm()
         if first_bar is not None and bar < first_bar:
             return BarRhythm(melody=True)
         origin = 1 if first_bar is None else first_bar

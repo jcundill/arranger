@@ -90,9 +90,13 @@ class SlotRhythmFacts:
     """The metre and the layers' rhythms: *when* each part sounds.
 
     The metre (`beats_per_bar`, `grouping`), the chord's own rhythm (`chord_rhythm`),
-    where the chord fills a notated rest (`chord_fills`), and the tune's onsets
-    (`melody_onsets`). Read by the plan's chord-attack decisions and the comping
-    route's reharmonise guard.
+    where the chord fills a notated rest (`chord_fills`), the tune's onsets
+    (`melody_onsets`) and the bar the chord's figure begins on (`first_bar`). Read by
+    the plan's chord-attack decisions and the comping route's reharmonise guard.
+
+    `first_bar` is the form's first complete bar, passed to `Rhythm.at` so a longer
+    figure lands on the form rather than on its pickup; it is `None` when nobody stated
+    a form, and the figure then runs on absolute phase.
 
     It lives here rather than in `context` because `chord_rhythm` is a `grid.Rhythm`
     and `context` sits below `grid` in the dependency order.
@@ -104,6 +108,7 @@ class SlotRhythmFacts:
     chord_rhythm: Optional[Rhythm]
     chord_fills: str
     melody_onsets: Optional[Container[int]]
+    first_bar: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -345,7 +350,7 @@ def _chord_here(
     chord_rhythm = rhythm.chord_rhythm
     if chord_rhythm is None:
         return True
-    segment = chord_rhythm.at(bar)
+    segment = chord_rhythm.at(bar, rhythm.first_bar)
     if segment.melody:
         return True
     return segment.includes(beat, rhythm.beats_per_bar, rhythm.grouping)
@@ -407,7 +412,7 @@ def _chord_attacks(
     chord_rhythm = rhythm.chord_rhythm
     if chord_rhythm is None:
         return False
-    segment = chord_rhythm.at(slot.bar)
+    segment = chord_rhythm.at(slot.bar, rhythm.first_bar)
     if segment.includes(slot.beat, rhythm.beats_per_bar, rhythm.grouping):
         return True
     if not segment.melody:

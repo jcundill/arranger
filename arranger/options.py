@@ -447,6 +447,18 @@ class ArrangeOptions:
     # This is the third time list invariance in a signature has cost this library
     # something, and the fourth would not have been a surprise.
     timings: Optional[Sequence[Timing]] = None
+    # The bar a requested rhythm's **first segment lands on**: the form's first
+    # complete bar. `None` is "this figure was placed on no form" - a hand-built
+    # progression, whose first named bar is its own origin - which `resolution` reads
+    # off the timings. A bar before it is not a bar of the figure, so a pickup takes
+    # the tune's own onsets (`grid.Rhythm.at`).
+    #
+    # It sits here rather than on the rhythm because it is a fact about **what is being
+    # arranged**, like the timings: the same `--chord-on 1,3:none` lands differently on a
+    # form that opens with an anacrusis, and the score is what says so. There is no CLI
+    # flag for the same reason `grouping` has none: `head` reads it from the file, and a
+    # progression written in code states it here.
+    first_full_bar: Optional[int] = None
     # Per-progression-index bass pitch class: the note a written slash chord asks
     # for (`A-/G` wants G). It narrows *which candidates are considered*, and the
     # engine's own rule then decides within that narrowed set, so the two selection

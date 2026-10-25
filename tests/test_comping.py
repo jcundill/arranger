@@ -1478,6 +1478,36 @@ class TestACompOnlySelectionPlaysTheRhythmItNames(unittest.TestCase):
         self.assertEqual([step.duration for step in steps], [0.5] * 4)
         self.assertEqual([step.silence for step in steps], [None] * 4)
 
+    def test_the_figure_begins_where_the_form_says(self):
+        """`first_full_bar` states where segment 1 lands; a bar before it takes the tune.
+
+        The same progression and the same figure, read two ways. With no form stated its
+        own first bar is the origin - a hand-built progression's numbering *is* its form -
+        so `1:none` attacks bar 1 and rests in bar 2. Told the form begins at bar 2, bar 1
+        is a pickup that takes the tune's own onsets, and the figure starts in bar 2.
+        """
+        progression = [(None, "Dm7")] * 3
+        timings = [(1, 1.0, 1.0), (2, 1.0, 1.0), (3, 1.0, 1.0)]
+        request = Request(melody=False, chord_on="1:none")
+        engine = VoiceLeadingEngine()
+        stated = engine.arrange_progression(
+            progression,
+            timings=timings,
+            request=request,
+            options=ArrangeOptions(first_full_bar=2),
+        )
+        self.assertEqual(
+            [bool(step.voicing.active_frets()) for step in stated],
+            [True, True, False],
+        )
+        unstated = engine.arrange_progression(
+            progression, timings=timings, request=request
+        )
+        self.assertEqual(
+            [bool(step.voicing.active_frets()) for step in unstated],
+            [True, False, True],
+        )
+
     def test_the_shapes_are_the_chords_own_and_did_not_move(self):
         """What the rule changes is *when* a chord is struck, not which shape it is."""
         steps, _head = self._steps()

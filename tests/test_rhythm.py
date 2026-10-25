@@ -387,6 +387,16 @@ class TestTheCycle(unittest.TestCase):
         self.assertIn("bar 2", message)
         self.assertIn("none", message)
 
+    def test_a_silent_figure_stays_silent_before_the_cycle(self):
+        """`first_bar` does not hand a silent figure a pickup bar to sound in.
+
+        `none` asks that the layer never attacks, so there is no bar of the form for it
+        to begin in. A figure that names anything does take the tune there - which is
+        what keeps this a rule about silence rather than about pickups.
+        """
+        self.assertTrue(parse_rhythm("none", 4).at(1, first_bar=2).is_none)
+        self.assertTrue(parse_rhythm("1,3", 4).at(1, first_bar=2).melody)
+
     def test_a_rhythm_is_at_least_one_bar(self):
         """Silence is spelled `none`; a value with no bars states nothing."""
         with self.assertRaises(ValueError):

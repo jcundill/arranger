@@ -91,6 +91,7 @@ __all__ = [
     "chord_slots",
     "expand_repeats",
     "fill_slots",
+    "first_complete_bar",
     "head_cli",
     "head_skeleton",
     "load_musicxml",
@@ -2579,6 +2580,21 @@ def _chord_grouping(
     return default_grouping(head.beats_per_bar, int(head.beat_type))
 
 
+def first_complete_bar(head: Head) -> int:
+    """The bar a requested figure's **first segment** lands on.
+
+    An anacrusis is not a bar of the form: the score says bar 1 is short, so the
+    first bar the form actually begins in is bar 2. A figure therefore starts there,
+    and the pickup bar takes the tune's own onsets instead - which is what keeps an
+    accompaniment from beginning one bar early on a head that opens with a pickup.
+
+    Exported through the importer's module rather than kept private, because it is the
+    one answer to "where does the form begin", and `arrange_xml_head` and the slot
+    builders must agree on it.
+    """
+    return head.bars[0] + (1 if head.first_bar_implicit else 0)
+
+
 def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
@@ -2668,7 +2684,10 @@ def rhythm_slots(
     holds through is still one the chord attacks on - a stab under a held note is
     wanted, so unlike the melody-anchored union there is no hold filter here. A
     figure longer than one bar gives each bar of the section its own segment
-    (`Rhythm.at`), so a two-bar figure alternates rather than repeating.
+    (`Rhythm.at`), so a two-bar figure alternates rather than repeating, and it
+    begins at `first_complete_bar`: an anacrusis states no requested position, because
+    the pickup bar takes the tune's own onsets and the figure starts where the form
+    does.
 
     `extra_positions` are the caller's own positions beside the rhythm's - the tune's
     written onsets, for a rhythm that names `melody` *and* positions and so plays
@@ -2678,9 +2697,11 @@ def rhythm_slots(
     """
     lo, hi = section if section is not None else head.bars
     grouping = _chord_grouping(head, grouping)
+    first_bar = first_complete_bar(head)
     at: Dict[Tuple[int, int], Tuple[int, float]] = {}
     for bar in range(lo, hi):
-        for beat in rhythm_beats(rhythm.at(bar), head.beats_per_bar, grouping):
+        segment = rhythm.at(bar, first_bar)
+        for beat in rhythm_beats(segment, head.beats_per_bar, grouping):
             at.setdefault(_tick_key(bar, beat), (bar, beat))
     for bar, beat in extra_positions:
         if lo <= bar < hi:
@@ -3145,7 +3166,9 @@ def _comp_only_timeline(
     attack in the short bar would erase it and move the head's downbeat.
     """
     onsets = [
-        (slot[1], slot[2]) for slot in skeleton if chord_on.at(slot[1]).melody
+        (slot[1], slot[2])
+        for slot in skeleton
+        if chord_on.at(slot[1], first_complete_bar(head)).melody
     ]
     slots = rhythm_slots(head, chord_on, section, grouping, onsets)
     base: List[Tuple[Tuple[Optional[str], str], int, float, float]] = []
@@ -3211,6 +3234,11 @@ def arrange_xml_head(
         request=request,
         time_signature=time_signature,
     )
+    # **Where the form begins**, stated once and read by both layers: the slot builders
+    # (`rhythm_slots`, `_comp_only_timeline`) and the engine's chord and bass rhythms all
+    # take their cycle's origin from this bar, so a figure lands on the first complete
+    # bar rather than on the pickup. Only the score knows which bar that is.
+    options = replace(options, first_full_bar=first_complete_bar(head))
     # Resolved once here, because this layer needs the tuple **before** the engine
     # sees it: `_merge_chord_slots` generates the comping positions, and the engine
     # resolves the same request again for the step loop. One pure function, two

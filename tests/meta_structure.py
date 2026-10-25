@@ -125,9 +125,13 @@ BUDGETS: Dict[str, Budget] = {
     # the metre's three facts cannot express (a sparse `1,3` is not a grouping).
     # Deliberate rather than an accident of growth - the metre's own three are one
     # grouping already, and the rhythm is a fourth fact rather than a second spelling
-    # of one. The body did not grow past its length budget: the pitch emission moved
-    # out to `_walk_notes`.
-    "arranger/bass.py": Budget(10, 78, 7),
+    # of one. The eighth is that rhythm's **origin** (`first_full_bar`): where a
+    # figure longer than a bar begins, which is a fact about the form rather than
+    # about the metre, so it cannot be folded into the rhythm value either - a caller
+    # spells the figure and the score states where it starts. The body did not grow
+    # past its length budget: the pitch emission moved out to `_walk_notes`, and the
+    # onsets to `_placed_onsets`.
+    "arranger/bass.py": Budget(10, 78, 8),
     "arranger/bass_merge.py": Budget(6, 66, 3),
     "arranger/chords.py": Budget(17, 46, 5),
     "arranger/cli.py": Budget(13, 131, 11),
@@ -148,8 +152,13 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/melody_alone.py": Budget(6, 74, 14),
     # The axes are one read of the request and two `settle_input_fact` calls, so the
-    # module ceiling is `resolve_policies`'s eleven rather than the reconciler's.
-    "arranger/resolution.py": Budget(7, 111, 11),
+    # module ceiling is `resolve_policies`'s twelve rather than the reconciler's. The
+    # twelfth is the form's first full bar (`first_full_bar`), which the walk needs
+    # because a figure longer than a bar has to begin where the form does; it is not
+    # one of the axes, and it is not folded into `timings` because a score's pickup
+    # says it and no timing does. `_first_full_bar` keeps the *reconciler* at its
+    # complexity budget rather than growing it by a branch.
+    "arranger/resolution.py": Budget(7, 111, 12),
     # `slot_state`'s grid branches left with the axis, so the ceiling is what it
     # measures rather than what it measured.
     "arranger/slot_plan.py": Budget(6, 78, 5),

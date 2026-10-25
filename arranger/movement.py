@@ -154,6 +154,7 @@ def arrange_progression(
         beat_type=_k.beat_type,
         grouping=_k.grouping,
         timings=timeline,
+        first_full_bar=_k.first_full_bar,
     )
     carried = Carried()
     loop = _loop_slots(progression, timeline, _p.slots)
@@ -166,7 +167,7 @@ def arrange_progression(
         rhythm=SlotRhythmFacts(
             beats_per_bar=_k.beats_per_bar, grouping=_k.grouping,
             chord_rhythm=_p.chord_rhythm, chord_fills=_p.chord_fills,
-            melody_onsets=_k.melody_onsets,
+            melody_onsets=_k.melody_onsets, first_bar=_k.first_full_bar,
         ),
         neck=SlotNeckFacts(
             fret_min=_k.fret_min, fret_max=_k.fret_max, top_strings=_k.top_strings
