@@ -114,10 +114,10 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
 | `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord keeps the tune's own written onsets |
-| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1and` or `every-beat` |
+| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, positions such as `1and`, `every-beat`, or a `:`-joined cycle of those bars (`1,3:none`) |
 | `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
-| `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
+| `--bass-on` | `none` | when the thumb attacks: positions, `every-beat`, or a `:`-joined cycle of them (`1,3:none`); `melody` is refused |
 | `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, a walk, or the note rules themselves (`root,approach`) |
 | `--fret-min` / `--fret-max` | `2` / `13` | neck window to aim for |
 | `--tab` | `line` | `staff` lays head on one six-line staff, spaced on real rhythm |
@@ -306,10 +306,10 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | question | flag | `Request(...)` | values |
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | the guitar does, unless this is passed |
-| when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, or `melody`, `none`, `every-beat` |
+| when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, the written `melody`, `none`, `every-beat`, or a `:`-joined cycle of those bars |
 | what does the chord state? | `--chord-notes` | `chord_notes="2"` | `full`, `targets`, `3`, `2`, `1` |
 | what does it do in a melody rest? | `--chord-fills` | `chord_fills="hold"` | `none`, `hold`, `comp` |
-| when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, or `none` |
+| when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, `none`, or a `:`-joined cycle of them (`melody` is refused: the thumb has no written onsets) |
 | what does each thumb note state? | `--bass-notes` | `bass_notes="walk"` | `root`, `root-5th`, `walk` |
 
 **The default adds nothing.** `head FILE` is one chord under each written melody note, held for that note — no bass, no extra attacks, no chord invented in a rest. Everything else is asked for. `Request()` is that same default, so `arrange_progression(progression)` and `arrange_progression(progression, request=Request())` are one arrangement.
@@ -349,6 +349,14 @@ python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chor
 ```
 
 `--chord-notes targets` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half is the same request value: `--chord-notes targets` says *how much of the chord sounds at a target and between them*, while `--chord-on` says *when* a chord attacks. The two are separate questions, which is why they are two flags: `--chord-on 1,3 --chord-notes targets` is a chord on 1 and 3 only, thinned inside each one.
+
+**A figure longer than a bar is written with `:` between its bars**, and it repeats from there: `--chord-on 1,3:none` attacks on 1 and 3 of one bar and not at all in the next. Each bar of the cycle keeps its own request, so a segment may say `melody`, `every-beat`, positions or `none` — an empty segment is refused rather than read as silence, because `none` is how silence is spelled.
+
+```bash
+python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-4 --chord-on 1:none
+```
+
+**A figure's first bar is the form's first complete bar**, so an anacrusis takes no bar of it: on a head that opens with a pickup, bar 2 is where segment one lands and the pickup bar is comped at its own written note. `--bass-on` takes the same grammar, so a thumb line can alternate (`1,3:none`) or mark one bar in two; `melody` is refused there, because the thumb has no written onsets of its own.
 
 **Under a note the tune is holding, the chord stays below it - and the stab ends the tie.** A
 comp is an accompaniment, so its top voice sits strictly under the tune's note: the shape can

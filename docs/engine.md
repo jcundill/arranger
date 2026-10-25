@@ -825,10 +825,10 @@ holding the two spellings together, and `tests/test_request.py` asserts it.
 | the question | the flag | `Request(...)` | the axis it resolves to |
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | `parts` — the melody part is dropped from the selection |
-| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls |
+| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls: one bar, or a `:`-joined cycle of them |
 | what does the chord state? | `--chord-notes full\|targets\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
 | what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
-| when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass` when it is not `none` |
+| when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm (the same grammar, without `melody`), and `bass` when it is not `none` |
 | what does each thumb note state? | `--bass-notes root\|root-5th\|walk\|rules` | `bass_notes="walk"` | the bass axis — the three names, or the rules themselves as a list (`root,approach`), which is what the names are sugar over |
 
 The values are the flags' own strings, so a request read off a run header is one a caller
@@ -1400,6 +1400,13 @@ what each of its notes states. `bass_on="none"` is the default and is **no line 
 a thumb line under it. A request that takes the bass part and nothing above it is a bass line
 already, and `bass_notes` is what states it.
 
+`bass_on` takes the same grammar as `--chord-on` — positions, `every-beat`, `none`, and a
+`:`-joined cycle of those bars — with one token removed: **`melody` is refused**
+(`options._refuse_bass_melody`). The thumb line has no written onsets to read: it marks
+bars, including the bars the tune rests in, so the spelling named the one rhythm the layer
+cannot follow. It resolved to `every-beat` anyway, which is the request a caller makes
+instead, and `1,3` is how a line stays sparse.
+
 The equivalences are asserted byte-for-byte against the rendered tab
 (`tests/test_request.py`, `tests/test_walking_bass.py`).
 
@@ -1940,7 +1947,8 @@ it twice or hand the horn's line back to the guitarist.
 `texture` answers *how many notes* the chord part states; this answers *where one lands*.
 It is the **request's**, not an axis: `--chord-on
 POSITIONS` and `Request(chord_on=...)` are its two spellings, and `grid.py`'s `Rhythm`
-is the value they resolve to (`parse_rhythm`, `felt_beat`, `rhythm_beats`, `beat_offset`).
+is the value they resolve to (`parse_rhythm`, `BarRhythm`, `felt_beat`, `rhythm_beats`,
+`beat_offset`).
 
 **A position is a felt beat, not a beat number.** `every-beat` is one attack per felt
 beat — four in 12/8, not twelve — and `1and` is the midpoint of a **group**, so a group
@@ -1958,6 +1966,61 @@ combined with either. A position the bar does not have is **refused** — `rhyth
 `&`, because an unquoted `&` is a shell's background operator. The run header prints the
 one spelling the parser accepts, in the player's own mirror order (`1`, `1e`, `1and`,
 `1a`).
+
+### A rhythm longer than a bar
+
+`:` separates the bars of a figure, and the figure repeats from there: `--chord-on
+1,3:none` attacks on the first bar's 1 and 3 and not at all in the second. Each bar of the
+cycle is a `BarRhythm` carrying its own request, so a segment may name `melody`,
+`every-beat`, positions or `none`. Silence is **spelled, not implied** — an empty segment
+is refused (`rhythm bar 2 is empty; spell a silent bar 'none'`) — and a refused position
+names its bar when there is more than one to confuse it with. The canonical spelling joins
+the bars the same way, so the line the run header prints parses back to the same value.
+
+The cycle is **reduced to its shortest period**: `1,3:1,3` is `1,3`, and `none:none` is
+`none`. A period has to divide the count, so `1:1,3` stays a two-bar figure — its bars
+differ, and the repeat is the whole of the spelling.
+
+`--bass-on` takes the same grammar, so a thumb line can alternate or mark one bar in two.
+A bar whose segment is `none` silences that layer there rather than shortening the bar: the
+tune is still playing, and `--chord-on` still decides what the chord part states above the
+thumb. `melody` is the one token the **bass** layer refuses (`bass-on='melody' is not a
+request the bass can answer`): the thumb has no written onsets of its own — a bar where the
+tune is silent is a bar it still has to mark — so the spelling named the one rhythm that
+layer cannot read. The message names `every-beat` and a sparse `1,3` in its place, which is
+what it had always resolved to.
+
+### Where a figure begins
+
+A figure's **first segment lands on the form's first complete bar**, not on bar 1 of the
+file. `headxml.first_complete_bar` answers it — `head.bars[0]`, plus one when the score
+marks the first measure `implicit` — and `ArrangeOptions.first_full_bar` carries that
+number to the engine: `resolve_knobs` → `SlotRhythmFacts.first_bar` for the chord's
+attacks, and `walking_slots` → `_walked_beats` for the thumb's. A hand-built progression
+states no form, so its own numbering **is** its form: the first bar its timings name is the
+origin, and `ArrangeOptions(first_full_bar=...)` overrides that when a caller knows better.
+There is no CLI flag, for the same reason `grouping` has none: `head` reads it from the
+score.
+
+**A bar before the origin is not a bar of the figure: it takes the tune's own onsets, in
+both layers.** The anacrusis is the case this exists for — its short bar is what the pickup
+*is* — so `--chord-on 1,3:none` on a head that opens with two beats of pickup comps that
+bar under the tune's note and starts the figure at bar 2. The thumb reads it the same way,
+and that half of the rule is the one a committed head witnesses: `synthetic_pickup_cut` is a
+single quarter in 2/2, and the walk used to invent a felt beat inside it. The chord's half
+has **no corpus witness** — every committed anacrusis is scored without a `<harmony>` — so
+its test writes the document inline (`tests/test_headxml_timeline.py`,
+`TestAFigureLandsOnTheForm`).
+
+Two consequences of the same rule are deliberate:
+
+- **a figure whose every bar is `none` stays silent before the origin too.** `none` asks
+  that the layer never attack, so there is no bar of the form for it to begin in — which is
+  what keeps `--chord-on none --chord-fills hold` as sparse as it asked to be.
+- **a pickup bar takes no position that something *adds*.** The tune's own onsets are the
+  bar's rhythm there, so a fill, a generated `chord_slots` position and a named position all
+  stay out of it: a chord attack in the short bar would fill the pickup and move the head's
+  downbeat. What sounds in the bar is the chord under the tune's own note.
 
 **A requested attack rings its felt beat and no further** (`headxml._stab_length`). The
 chord part states a harmony to somebody else's ear, so an attack that rang until the next

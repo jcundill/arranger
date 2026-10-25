@@ -172,7 +172,9 @@ HEAD_HELP = _CommonHelp(
         "default) at every written melody note, 'none', 'every-beat', or positions "
         "such as '1', '1and' (the and of 1) or 'lastand'. A list replaces the "
         "default, so '1and' is only the stab and 'melody,1and' is the harmonisation "
-        "plus the stab. A position the metre does not have is refused, not dropped"
+        "plus the stab. A position the metre does not have is refused, not dropped. "
+        "Colon-separate the bars of a longer figure ('1,3:none'), which repeats "
+        "from the form's first complete bar"
     ),
     chord_notes=(
         "how many chord notes to state: 'full' (the default) is the most the right "
@@ -189,7 +191,9 @@ HEAD_HELP = _CommonHelp(
     bass_on=(
         "when the bass attacks, comma-separated, in felt beats: 'none' (the "
         "default), 'every-beat', or positions such as '1' or '1and' (the and of "
-        "1). The melody alone is the default, so a bass line is always asked for"
+        "1). The melody alone is the default, so a bass line is always asked for. "
+        "A colon-separated cycle works here too ('1,3:none'); 'melody' is refused, "
+        "because the thumb has no written onsets of its own"
     ),
     bass_notes=(
         "what each bass attack states: 'root' (the default), 'root-5th' "
