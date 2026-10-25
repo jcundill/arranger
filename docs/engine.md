@@ -825,7 +825,7 @@ holding the two spellings together, and `tests/test_request.py` asserts it.
 | the question | the flag | `Request(...)` | the axis it resolves to |
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | `parts` — the melody part is dropped from the selection |
-| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls: one bar, or a `:`-joined cycle of them |
+| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls: `melody` at every written onset, `sustain` only at onsets whose note runs at least one felt beat, positions such as `1and`, `every-beat`, `none`, or a `:`-joined cycle of them |
 | what does the chord state? | `--chord-notes full\|targets\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
 | what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
 | when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm (the same grammar, without `melody`), and `bass` when it is not `none` |

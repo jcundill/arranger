@@ -178,7 +178,7 @@ HEAD_HELP = _CommonHelp(
     chord_on=(
         "when the chord attacks, comma-separated, in felt beats: 'melody' (the "
         "default) at every written melody note, 'sustain' only at onsets whose note "
-        "outruns one felt beat, 'none', 'every-beat', or positions "
+        "runs at least one felt beat, 'none', 'every-beat', or positions "
         "such as '1', '1and' (the and of 1) or 'lastand'. A list replaces the "
         "default, so '1and' is only the stab and 'melody,1and' is the harmonisation "
         "plus the stab. A position the metre does not have is refused, not dropped. "

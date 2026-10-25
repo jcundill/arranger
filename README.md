@@ -114,7 +114,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
 | `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord keeps the tune's own written onsets |
-| `--chord-on` | `melody` | when the chord attacks: the written onsets, `sustain` only at onsets whose note outruns one felt beat, `none`, positions such as `1and`, `every-beat`, or a `:`-joined cycle of those bars (`1,3:none`) |
+| `--chord-on` | `melody` | when the chord attacks: the written onsets, `sustain` only at onsets whose note runs at least one felt beat, `none`, positions such as `1and`, `every-beat`, or a `:`-joined cycle of those bars (`1,3:none`) |
 | `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
 | `--bass-on` | `none` | when the thumb attacks: positions, `every-beat`, or a `:`-joined cycle of them (`1,3:none`); `melody` is refused |
