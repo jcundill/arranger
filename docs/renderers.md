@@ -114,7 +114,7 @@ Two consequences worth knowing:
 
 An arrangement is data; four renderers read it. **They must agree about which notes are new
 attacks**, because a note drawn twice is a wrong rhythm and a note drawn nowhere is a note
-the arrangement does not really contain. Four facts drive that agreement, and each has one
+the arrangement does not really contain. These facts drive that agreement, and each has one
 owner.
 
 | fact | the field | what a renderer does with it |
@@ -124,6 +124,15 @@ owner.
 | the thumb has **moved** under a held shape | `_moved_thumb` compares `(bass_midi, bass_string)` | the hold column draws **the bass string only** |
 | the thumb is **sounding and not plucked** | `ArrangementStep.bass_held` | the tab mutes that string, the staff leaves it blank, the score ties it, GP5 writes a tie note |
 | the step exists for the thumb: **nothing above it is struck** | `ArrangementStep.bass_only` | the tab and the staff draw the bass string only; the score re-states the ringing pitches **as ties**; GP5 writes the thumb as a new note and those pitches as ties |
+| the tune's note was **released** by a chord attack | `ArrangementStep.melody_released` | the melody row is blank (`tabstaff._melody_label`), the compact line prints no note and no degree, and the writers need nothing: the note is not in the shape, so it is neither written nor tied |
+
+**The last row is the melody row's one exception.** That row labels *every* step - the tune
+moves on while the shape under it is held, so a held column is exactly where the name is
+wanted - and the cell it must not label is a note a stab ended. The note is not sounding, so
+its name would claim the tune is still in; the line is told which note it was by
+`annotation._comping_tail` (`the stab ends the tied Eb4`) rather than by the column. The
+writers agree for free, because a released note is absent from the shape: MusicXML has
+nothing to tie, and GP5 nothing to restate.
 
 **The first row cannot decide on its own, and the second is why.** A comp on
 `--chord-on every-beat` states the *same shape* on every beat, and so does a slot the
@@ -176,7 +185,20 @@ sounding, so each renderer has to say "not plucked" in its own way:
   string is the same fret, because a GP5 tie carries no fret of its own.
 
 A **rest column** is drawn by all four as silence: a blank cell, an `x` under `--mutes`, an
-explicit `<rest>` in the score. A **fill** is not a rest — it is a step with no melody — so
+explicit `<rest>` in the score. Two things about it are stated rather than left to a reader:
+
+- **a rest is cut at a bar line and not tied.** A measure cannot overfill, so a rest longer
+  than the room in its bar is split like any other event — but `<tie>` inside a `<rest>` is
+  not legal MusicXML, and the claim it would make is false: a tie says *this pitch
+  continues*, and a silence makes no such claim. `tabxml.write_event` sets the tie on a
+  sounding event only, so the two pieces are the two silences they are.
+- **a rest step is a rest beat in GP5.** The status is read off the beat's own notes rather
+  than off `step is not None`: a rest *step* is still a step — the engine emits one for a
+  position the guitar declines — and written `normal` it goes out as an ordinary beat with an
+  empty string-flags byte, which MuseScore reads as a rest in the right place and TuxGuitar
+  puts at the end of the bar instead of the head.
+
+A **fill** is not a rest — it is a step with no melody — so
 it draws the chord it states and its line says *the tune is silent here*, which is what stops
 a chord with no melody above it from reading as a mistake.
 

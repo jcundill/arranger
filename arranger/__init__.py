@@ -61,6 +61,8 @@ from . import (
     bass_rules,
     chords,
     cli,
+    comp_line,
+    comp_line_route,
     context,
     cost,
     decisions,
@@ -105,6 +107,7 @@ from .chords import (
 from .cost import SelectionCriteria, VoicingScore
 from .demo import main
 from .grid import (
+    BarRhythm,
     Rhythm,
     beat_offset,
     felt_beat,
@@ -224,6 +227,7 @@ if TYPE_CHECKING:
 __all__ = [
     "ArrangeOptions",
     "ArrangementStep",
+    "BarRhythm",
     "BassNote",
     "ChordParser",
     "CompingRequest",

@@ -23,6 +23,7 @@ from headxml import (
     arrange_xml_head,
     chord_at,
     chord_slots,
+    first_complete_bar,
     head_skeleton,
     load_musicxml,
     melody_at,
@@ -33,6 +34,7 @@ from tabstaff import format_tab_staff, write_tab_html
 from tests.support import (
     BUT_NOT_FOR_ME,
     I_WAS_DOING_ALL_RIGHT,
+    MISTY,
     RAINY_DAY,
     TENOR_MADNESS,
     arranged,
@@ -40,6 +42,7 @@ from tests.support import (
     note,
     rest,
     score,
+    score_bars,
     sweep_head_paths,
     write_score,
 )
@@ -1059,4 +1062,139 @@ class TestTheUnionAdmitsTheReleaseInstant(unittest.TestCase):
         line = format_progression(released)
         self.assertIn("the tune is silent here", line)
         self.assertNotIn("E4", line)
+
+
+class TestAFigureLandsOnTheForm(unittest.TestCase):
+    """A rhythm longer than a bar begins where the **form** does, not where the file does.
+
+    The pickup is the whole difficulty. `synthetic_pickup_common` opens with one beat
+    of tune in a short bar, so a two-bar figure beginning in bar 1 would be one bar
+    early for the rest of the head - and the bar it consumed would be a bar the form
+    does not have. `first_complete_bar` is the one answer, and the slot builders and
+    the engine both read it.
+
+    **The chord half of the rule has no corpus witness.** All three committed pickup
+    fixtures leave the anacrusis with no `<harmony>`, so a pickup bar they could
+    accompany has to be written inline (`_pickup_with_changes`) rather than borrowed:
+    the tune's own onsets are what the bar takes, in *both* layers.
+    """
+
+    def setUp(self):
+        self.misty = load_musicxml(MISTY)
+
+    def _stabs(self, head, spelling, beat: float = 1.5):
+        """The bars a requested rhythm puts an attack at `beat` in."""
+        rhythm = parse_rhythm(spelling, head.beats_per_bar, None)
+        return {
+            bar
+            for _melody, _name, bar, at, _length in rhythm_slots(head, rhythm)
+            if abs(at - beat) <= 1e-6
+        }
+
+    def _beats_of(self, steps, beat: float = 1.5):
+        """The bars a finished arrangement attacks at `beat` in."""
+        return {
+            step.bar
+            for step in steps
+            if abs((step.beat or 0.0) - beat) <= 1e-6
+        }
+
+    def test_the_form_begins_after_an_anacrusis(self):
+        """One beat of pickup, so the form's first complete bar is bar 2."""
+        self.assertTrue(self.misty.first_bar_implicit)
+        self.assertEqual(self.misty.bars, (1, 5))
+        self.assertEqual(first_complete_bar(self.misty), 2)
+
+    def test_a_two_bar_figure_alternates_from_the_form(self):
+        """`1and:none` attacks in bars 2 and 4 - not in the pickup, and not in bar 3."""
+        self.assertEqual(self._stabs(self.misty, "1and:none"), {2, 4})
+
+    def test_a_one_bar_figure_starts_after_the_pickup(self):
+        """A repeated figure has no bar for the anacrusis either."""
+        self.assertEqual(self._stabs(self.misty, "1and"), {2, 3, 4})
+
+    def test_a_silent_segment_silences_its_bar(self):
+        """`none:1and` leaves bar 2's beat 1.5 empty and attacks bar 3's."""
+        self.assertEqual(self._stabs(self.misty, "none:1and"), {3})
+
+    def test_a_comp_only_selection_plays_the_figure_from_the_form(self):
+        """The comp-only timeline takes the same origin as the slot builders.
+
+        A selection with no tune to play lays its timeline out from the rhythm alone,
+        so this is the route where a wrong origin would be invisible in the slots and
+        plain in the steps.
+        """
+        steps, _head, _notes = arrange_xml_head(
+            MISTY, request=Request(melody=False, chord_on="1and:none")
+        )
+        self.assertEqual(self._beats_of(steps), {2, 4})
+
+    def _pickup_with_changes(self) -> str:
+        """A head whose anacrusis carries a `<harmony>`: the case the corpus lacks.
+
+        Three bars: a pickup with a rest then a note, a whole note under `Dm7`, and a
+        half note under `G7` followed by a half-note rest - so the *rest* rules have
+        something to answer in both bar 1 and bar 3.
+        """
+        document = score_bars(
+            [
+                harmony("F", "major-seventh", text="Fmaj7") + rest(4) + note("C", 5, 4),
+                harmony("D", "minor-seventh", text="Dm7") + note("F", 4, 16),
+                harmony("G", "dominant", text="G7") + note("B", 4, 8) + rest(8),
+            ],
+            divisions=4,
+            beats=4,
+            beat_type=4,
+        )
+        # `implicit="yes"` is how a score says bar 1 is an anacrusis; the older spelling
+        # is to number the measure 0, which the importer reads the same way.
+        return write_score(
+            document.replace(
+                '<measure number="1">', '<measure number="1" implicit="yes">', 1
+            )
+        )
+
+    def test_the_pickup_bar_is_accompanied_at_the_tune_s_own_onsets(self):
+        """The pickup takes the tune, not segment 1 of the figure.
+
+        `chord_on=1and:none` names one position in bar 2 and none in bar 3, and the
+        anacrusis is not a bar of the figure at all - so what sounds there is the chord
+        under the tune's own note rather than a stab at a position that bar has not got.
+        """
+        path = self._pickup_with_changes()
+        try:
+            head = load_musicxml(path)
+            self.assertTrue(head.first_bar_implicit)
+            self.assertEqual(first_complete_bar(head), 2)
+            steps, _head, _notes = arrange_xml_head(
+                path, request=Request(chord_on="1and:none")
+            )
+        finally:
+            os.unlink(path)
+        pickup = [step for step in steps if step.bar == 1]
+        self.assertEqual(
+            [(step.beat, step.melody, step.chord) for step in pickup],
+            [(2.0, "C5", "Fmaj7")],
+        )
+        self.assertTrue(pickup[0].voicing.active_frets(), "the pickup is accompanied")
+        self.assertEqual(self._beats_of(steps), {2})
+
+    def test_a_fill_is_not_placed_in_the_pickup_bar(self):
+        """`--chord-fills` fills the tune's rests, and the anacrusis is not one of them.
+
+        Bar 1's rest is the pickup itself: a chord there would fill the short bar and
+        move the head's downbeat. Bar 3's rest is a rest, and it is filled - which is
+        what keeps this a rule about the pickup rather than about rests.
+        """
+        path = self._pickup_with_changes()
+        try:
+            steps, _head, _notes = arrange_xml_head(
+                path, request=Request(chord_on="melody", chord_fills="comp")
+            )
+        finally:
+            os.unlink(path)
+        positions = {(step.bar, step.beat) for step in steps}
+        self.assertNotIn((1, 1.0), positions)
+        self.assertIn((3, 3.0), positions)
+
 

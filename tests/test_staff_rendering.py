@@ -18,7 +18,7 @@ from arranger import (
     format_tab_staff,
 )
 from tabstaff import _NOTE_VALUES, _staff_columns, _staff_rhythm
-from tests.support import make_voicing
+from tests.support import make_step, make_voicing
 
 
 def _timed(chords, beats=None, durations=None, frets=None):
@@ -54,6 +54,35 @@ def _timed(chords, beats=None, durations=None, frets=None):
 #: attacks rather than one held note. `collapse` compares sounding pitches, so the
 #: same voicing twice would print the second as a tie.
 _TWO_SHAPES = [[-1, -1, 10, 10, 10, 10], [-1, -1, 9, 9, 8, 8]]
+
+
+class TestTheMelodyRowOnAReleasedTie(unittest.TestCase):
+    """A note a stab ended is blank on the row that says what the tune is doing.
+
+    The melody row labels **every** step, because the tune moves on while the shape under
+    it is held - which is why the one cell it must not label is a note a chord attack took.
+    That note is not sounding, and its name on the row would say the tune is still in.
+    """
+
+    def test_a_released_note_is_blank_and_a_sounding_one_is_not(self):
+        """The same note twice, and only the step that sounds it carries the name."""
+        sounding = make_step(
+            [-1, -1, -1, 7, -1, -1], chord="Dm7", melody="C5", bar=1, beat=1.0
+        )
+        released = make_step(
+            [-1, -1, -1, 9, -1, -1],
+            chord="Dm7",
+            melody="C5",
+            melody_voiced=False,
+            melody_released=True,
+            bar=1,
+            beat=2.0,
+        )
+        staff = format_tab_staff(
+            [sounding, released], show_chords=False, show_melody=True
+        )
+        row = [line for line in staff.splitlines() if "C5" in line]
+        self.assertEqual(len(row), 1, staff)
 
 
 class TestStaffTab(unittest.TestCase):

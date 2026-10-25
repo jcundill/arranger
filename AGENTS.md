@@ -23,6 +23,7 @@ gate and the conventions — not the explanation.
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/meta_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/text_layout.py`, `arranger/render.py`, `arranger/movement.py` |
 | the chord part's content (`--chord-notes`), target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
+| the comp's **top voice** - the home band, the walk's direction and no-retrace window, the approach's pivot, the opening, the fill's interpolation, **the tune as the comp's ceiling** (`leaving_room_for_the_tune`), a stab that **releases** a held melody note (`melody_released`, `tie_ended_by_a_stab`), or `top_role` / `Palette.dropped_for_line` | [docs/engine.md](docs/engine.md) §"The comp line: the top voice moves" | `arranger/comp_line.py`, `arranger/comp_line_route.py` (`line_target`, `line_narrowed`, `leaving_room_for_the_tune`), `arranger/grip_place.py` (`frets_in_band`), `arranger/routes.py` (`_comping_choice`, `_comping_candidates`, `_emit_comping_step`), `arranger/grips.py` (`CompingRequest.band`, `_comping_collapse_key`), `arranger/decisions.py` (`tie_ended_by_a_stab`), `arranger/step_history.py` (`sounding_tops`), `tests/test_comp_line.py`, `tests/test_comping.py` (`TestTheCompStaysUnderTheTune`), `tests/test_chord_attack.py` (`TestATieEndsAtAStab`) |
 | non-chord melody notes, a new chord quality, or a chord **spelling** that has to read | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` (`QUALITY_ALIASES`, `parse_symbol`), `tests/meta_chord_names.py` |
 | the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/routes.py`, `arranger/step_history.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/meta_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters, and the `SlotInputs` groups under it (`SlotArrangementFacts`, `SlotRhythmFacts`, `SlotNeckFacts`, `SlotBassFacts`) | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/slot_plan.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
@@ -30,13 +31,14 @@ gate and the conventions — not the explanation.
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: pairs to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the **request** — the six questions, spelled by `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` and by `Request(...)` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/engine.md](docs/engine.md) §"The request, and the axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py` (`_REQUEST_DESTS` is the one list holding the two spellings to the same six), `tests/test_rhythm.py`, `tests/test_request.py` |
-| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/history/open-issues.md](docs/history/open-issues.md) item 6 for the release instant — closed by reading a note as sounding over `[onset, end)` | `headxml.py` (`chord_at`, `rhythm_slots`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding** while admitting the instant it is released. The engine's own union - one position per subdivision of each bar's rhythm - is what a selection that **comps** gets when the request names nothing added: a chord part with no tune to play, which is how it states the chord in a bar the tune never enters. The gate reads that selection and not the *spelling*, so a request and its axis spelling are one arrangement |
+| a rhythm **longer than a bar**, the bar its cycle begins on, or why a pickup bar is accompanied at the tune's own onsets (`BarRhythm`, `Rhythm.at`, `first_full_bar`) | [docs/engine.md](docs/engine.md) §"A rhythm longer than a bar" and §"Where a figure begins" | `arranger/grid.py` (`BarRhythm`, `Rhythm.at`, `RHYTHM_BAR_SEPARATOR`), `arranger/resolution.py` (`_first_full_bar`), `arranger/slot_plan.py` (`SlotRhythmFacts.first_bar`, `_chord_here`), `arranger/bass.py` (`_walked_beats`), `headxml.py` (`first_complete_bar`, `rhythm_slots`, `_comp_only_timeline`), `tests/test_rhythm.py` (`TestTheCycle`), `tests/test_headxml_timeline.py` (`TestAFigureLandsOnTheForm`) |
+| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/history/open-issues.md](docs/history/open-issues.md) item 6 for the release instant — closed by reading a note as sounding over `[onset, end)` | `headxml.py` (`chord_at`, `rhythm_slots`, `_comp_only_timeline`, `_stab_length`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding** while admitting the instant it is released. **A selection that comps has the request for a timeline**: `_comp_only_timeline` lays it out on `rhythm_slots` alone, each attack ringing its felt beat, so no step - and so no rest - exists at a position nobody named; the engine's own union - one position per subdivision of each bar's rhythm - is what it gets only when the request names nothing added, which is how it states the chord in a bar the tune never enters. The gate reads that selection and not the *spelling*, so a request and its axis spelling are one arrangement |
 | an issue — where a new one is filed, and where the closed ones are recorded | [docs/open-issues.md](docs/open-issues.md) (the live ledger; none is open) and [docs/history/open-issues.md](docs/history/open-issues.md) (the record of the six it filed) | — each item is stated as **issue / problem / why it exists** with its measurement, and the figures and the behaviour are that document's own business: no test compares them with the prose or is keyed to these items |
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
 | the left hand's budget — four fingers and the hand's five-fret reach; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` — **only** the budget: `bass_place` and `bass_merge` read `can_fret` for the four-finger budget **and the hand's five-fret reach**, and `tests/test_fingers.py` holds the caller set to exactly `{bass_place, bass_merge}`. The finger-skip rule is enforced by the tables **not offering** the shapes that fail it (`tests/support.finger_skip_count`, held by `tests/test_grip_tables.py`); the thumb's reach changes no count (`tests/test_texture.py::TestTheThumbReach` pins it); a requested bass note moves the shape rather than being dropped (`decisions.leaving_room_for_the_bass`) |
 | which of melody / bass / chord the guitar plays (derived from the request) | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parts_have_melody`, `parts_has_melody_only`) |
 | the harmonisation axes — the parts selection, the chord part's content, the bass policy, and the metre — and the four-string arithmetic | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
-| a **held thumb**, a **restruck chord**, a **held shape the walk invented** (`bass_only`, `is_bass_only`, `melody_is_ringing`) or a stab's length — `bass_held`, `chord_attack`, `carry_bass`, `_stab_length`, and what each renderer draws for a note that sounds and is not plucked | [docs/renderers.md](docs/renderers.md) §"What the four renderers must agree about", and [docs/engine.md](docs/engine.md) §"The other hold: a beat the thumb invented" | `arranger/decisions.py` (`is_bass_only`, `melody_is_ringing`), `arranger/bass_merge.py` (`carry_bass`), `arranger/slot_plan.py` (`_chord_attacks`), `headxml.py` (`_stab_length`), `tabscore.py` (`_is_hold`, `_capped_span`), `tabstaff.py` (`_strikes_here`, `_moved_thumb`, `_draws`), `tabxml.py` (`_sounding`, `_build_note`), `tabgp.py` (`_sounding_frets`, `_strike_notes`), `tests/test_bass_hold.py`, `tests/test_chord_attack.py`, `tests/test_staff_thumb.py`, `tests/test_bass_placement.py`, `tests/test_guitarpro.py` |
+| a **held thumb**, a **restruck chord**, a **held shape the walk invented** (`bass_only`, `is_bass_only`, `melody_is_ringing`) or a stab's length — `bass_held`, `chord_attack`, `melody_released`, `carry_bass`, `_stab_length`, and what each renderer draws for a note that sounds and is not plucked | [docs/renderers.md](docs/renderers.md) §"What the four renderers must agree about", and [docs/engine.md](docs/engine.md) §"The other hold: a beat the thumb invented" | `arranger/decisions.py` (`is_bass_only`, `melody_is_ringing`, `tie_ended_by_a_stab`), `arranger/bass_merge.py` (`carry_bass`), `arranger/slot_plan.py` (`_chord_attacks`), `headxml.py` (`_stab_length`), `tabscore.py` (`_is_hold`, `_capped_span`), `tabstaff.py` (`_strikes_here`, `_moved_thumb`, `_draws`, `_melody_label`), `tabxml.py` (`_sounding`, `_build_note`), `tabgp.py` (`_sounding_frets`, `_strike_notes`), `tests/test_bass_hold.py`, `tests/test_chord_attack.py`, `tests/test_staff_thumb.py`, `tests/test_bass_placement.py`, `tests/test_guitarpro.py` |
 | a **lone bass line**, or a slot with nothing above the thumb (`bass_alone_step`, `lone_bass_case`, `is_shape_held`) | [docs/engine.md](docs/engine.md) | `arranger/decisions.py`, `arranger/routes.py`, `arranger/bass_place.py`, `arranger/annotation.py`, `tests/test_lone_bass.py` |
 
 | how a **compound metre is felt** — `time_signature=`, `TimeSignature`, `TARGET_BEATS` as felt beats, a walk on the pulses, a requested chord rhythm's positions in groups, the `n+n+…` refusal, and the direction / beaming / metronome channels a lead sheet states it through | [docs/engine.md](docs/engine.md) | `arranger/grouping.py` (`TimeSignature`, `COMMON_TIME`), `arranger/texture.py`, `arranger/grid.py`, `arranger/bass.py`, `headxml.py` (`Head.grouping`, `Head.grouping_source`, `_score_grouping`, `_beam_partition`, `_grouping_hint`, `_metronome_pulse`), `tests/test_grouping.py`, `tests/test_headxml_arrangement.py` |
@@ -58,7 +60,7 @@ quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1304 feature + 87 meta tests OK (skipped=2)**, pyright
+Current measured state: **1387 feature + 91 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -80,7 +82,7 @@ because that half runs first, so a mis-filed test is seen early rather than neve
 `tests/meta_structure.py::TestTheSplit` fails on a module matching neither pattern, which
 is the only way a pattern-based gate could go quiet, and `test` running both is what keeps
 the split a way *in* rather than a smaller gate. The split is a reading aid, not a speed
-fix: **85 of 1377 tests are meta**, and both halves run in seconds, so `make test-one` on
+fix: **91 of 1478 tests are meta**, and both halves run in seconds, so `make test-one` on
 the module you are touching is a convenience rather than the difference between a fast
 loop and a slow one.
 
@@ -189,6 +191,7 @@ arranger/
 │   ├── grouping.py      #   TimeSignature and the metre's grouping algebra
 │   ├── grid.py          #   the request's rhythm: `Rhythm`, felt beats, the lattice
 │   ├── texture.py       #   how many notes the chord part states; metric roles
+│   ├── comp_line.py     #   the comp's home band and its walk / approach / opening / fill
 │   ├── bass_rules.py    #   the bass vocabulary, capacities and refusals
 │   ├── bass_place.py    #   the thumb's octave and string: the cost and `place_bass`
 │   ├── bass.py          #   the walking-bass thumb line
@@ -197,6 +200,7 @@ arranger/
 │   ├── resolution.py    #   what the caller asked for, resolved once
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── step_history.py  #   reading the arrangement's own history: the last sounding step
+│   ├── comp_line_route.py #  what the comp line is told about a slot: band, state, fill
 │   ├── melody_alone.py  #   where a lone note is fretted: the tune alone, chord or not
 │   ├── routes.py        #   the route handlers: rest, fill, NC and the comping route
 │   ├── slot_plan.py     #   one slot's plan: `slot_state` and the value it returns
@@ -237,10 +241,10 @@ The engine is a package of focused modules in a strict dependency order:
 
 ```
 tuning -> step_types -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> text_layout -> parts
-                             -> grouping -> grid -> texture -> bass_rules -> bass_place -> bass -> bass_merge
+                             -> grouping -> grid -> texture -> comp_line -> bass_rules -> bass_place -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
-                       step_history -> melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
+                       step_history -> comp_line_route -> melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
                                                                                     |
                                                     route_dispatch -> movement -> steps -> slots -> render -> cli
 ```
@@ -424,6 +428,16 @@ correct:
   than onto it, and why a target under a thumb may sound at most three strings
   (`grips.thumb_safe_grips`);
 - the melody is on that entry's soprano string, and is the highest sounding note;
+- **one pitch per string** — no two sounding strings carry the same note, because a unison
+  is not a voice: two strings stopped for one pitch state the chord with a voice fewer than
+  the shape claims, and they beat against each other. It is reachable only across the G/B
+  **third** — a top tone on the B is repeatable four frets up the G — so `x-x-8-8-4-x` (a
+  Cm7 shell sounding `Eb4` twice) is the shape that named it. `grip_place.sounds_distinct_pitches`
+  is the rule, asked by `candidate` for every family and by `grips._shell_voicing` for the
+  melody-free shell, which is the one builder that does not go through `candidate`; it is
+  swept per shape in `tests/test_grips.py`, per palette in `tests/test_comping.py` and
+  directly in `tests/test_placement.py`. It is stated over the **pitch** and not the pitch
+  class: a root doubled an octave down is a voice as usual;
 - `0 <= fret <= 18` and `fret_span() <= GRIP_MAX_SPAN[grip]` (5, or 4 for a duo).
   The span is checked on the frets actually placed, **not** as "within N of the
   soprano": those differ, and the second admits a span of ten;
@@ -486,6 +500,13 @@ renderer**, never re-derived at a call site:
   the whole fact — the
   routed chord's tones against the pitches sounding — is already on the step, and a field
   beside it would be a second source for one fact;
+- the **comp line's move** is recorded (`ArrangementStep.top_role`, from `comp_line`'s role
+  constants, which live in `step_types` so this module can read them) and phrased by
+  `_comp_line_clause`: `top D4 - walks up`. `Palette.dropped_for_line` - the shape the ranking
+  preferred before the line narrowed the palette - is **recorded and not printed**, and that is
+  a measurement rather than an omission: the line narrows on almost every comping step, so a
+  sentence for it said the same thing on fourteen of the four-bar example's sixteen steps
+  ([history/comp-line.md](docs/history/comp-line.md) §"The measurement");
 - a **route that chose no shape** states its own (`_comping_clause` names the voices it
   states, each by note and degree; "the tune is silent here"; "the guitar rests here"; "the
   shape above is held"; "the most a fill's palette offers" — the last is the difference

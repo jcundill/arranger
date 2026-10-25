@@ -6,6 +6,10 @@ inert: every published arrangement must come out byte-identical, which is assert
 against the same progression arranged both ways. Note what is *not* claimed: that the
 melody's pitch never appears, because a guide tone can share its pitch class. The
 invariant is the identical candidate set whatever melody is asked about.
+
+**The route narrows that set, the generator does not** - `TestTheCompStaysUnderTheTune` is
+the other half: on a singing selection the shape's top stays strictly below the tune note in
+force, so a stab neither restates it nor takes the string a tie is held on.
 """
 
 import inspect
@@ -18,31 +22,39 @@ from arranger import (
     ChordParser,
     TimeSignature,
     VoiceLeadingEngine,
+    Voicing,
     format_progression,
     get_comping_voicings,
     parts_has_melody_only,
     resolve_request,
     supported_string_sets,
 )
+from arranger.comp_line import LineShape
+from arranger.comp_line_route import leaving_room_for_the_tune
 from arranger.grip_place import snapshot
 from arranger.grip_tables import (
-    GRIP_MAX_SPAN,
+    COMPING_MAX_SPAN,
     GRIP_STRING_SETS,
     comping_string_sets,
 )
 from arranger.grips import (
     CompingRequest,
+    _comping_collapse_key,
     _comping_palette,
     _search_comping_voicings,
     get_comping_voicings_for,
 )
 from arranger.options import ArrangeOptions, Request
-from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
+from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN, SILENCE_GRID
 from tests.support import (
     PROGRESSION,
+    TROUBLE_IN_MIND,
+    arranged,
     chord_pcs,
     comping,
     guide_pcs,
+    make_voicing,
+    sweep_head_paths,
 )
 
 
@@ -81,8 +93,8 @@ class TestCompingGenerator(unittest.TestCase):
 
         The clause that is dropped is "the melody is on the topmost string", and it is
         dropped for the only reason there is: there is no melody. Everything else -
-        three voices, one of the `shell` sets, span within `GRIP_MAX_SPAN["shell"]` -
-        is asserted exactly as it is for every other grip.
+        three voices, one of the `shell` sets, span within `COMPING_MAX_SPAN` - is
+        asserted exactly as it is for every other grip.
         """
         supported = {frozenset(s) for s in supported_string_sets()}
         shell_sets = {frozenset(strings) for strings, _ in GRIP_STRING_SETS["shell"]}
@@ -95,7 +107,7 @@ class TestCompingGenerator(unittest.TestCase):
                 self.assertIn(active, supported, voicing.tab_string())
                 self.assertIn(active, shell_sets, voicing.tab_string())
                 self.assertLessEqual(
-                    voicing.fret_span(), GRIP_MAX_SPAN["shell"], voicing.tab_string()
+                    voicing.fret_span(), COMPING_MAX_SPAN, voicing.tab_string()
                 )
 
     def test_the_high_e_is_not_on_the_palette_at_any_arity(self):
@@ -152,6 +164,182 @@ class TestCompingGenerator(unittest.TestCase):
         narrow = get_comping_voicings("Cmaj7", fret_min=0, fret_max=0)
         self.assertTrue(wide)
         self.assertTrue(narrow, "a zero-width window must still voice the chord")
+
+
+class TestTheCompingReach(unittest.TestCase):
+    """A comping shape fills its strings and stays inside `COMPING_MAX_SPAN` frets.
+
+    Two rules, and neither implies the other. The **reach** (`COMPING_MAX_SPAN`) is four,
+    because a comping shape has no melody pinned to it and every tone it can state on
+    adjacent strings is statable inside four; the fifth fret is what a **pinned** melody
+    costs (`GRIP_MAX_SPAN["shell"]`). The **hole** (`grip_tables._fills_its_strings`) is
+    that the strings between the shape's bottom and its top all sound. The cap alone was
+    not enough and `x-6-x-5-9-x` is the shape that proved it: the A string's 6, the G
+    string's 5 and the B string's 9, with the D string muted under the fingers - a span of
+    four, so it survived the cap, and `grips._comping_collapse_key` ranks a shape's
+    register **before** its span, so the wide spelling of that top tone still beat the
+    tight one. A skip is the right answer when a melody is pinned to a string or a drop-2
+    needs a deep bass; a comp has neither.
+
+    `docs/engine.md` §"`get_comping_voicings`: a chord with no melody on top" carries the
+    measurement of what the two rules cost, and the acceptance example's tops are unchanged
+    by them (`tests/test_comp_line.py`).
+    """
+
+    #: The default band: the palette collapses one shape per top tone only when a band is
+    #: present, so a witness built without one would not be the palette a comp reads.
+    BAND = (3, 10)
+
+    def _palette(self, name: str, notes: int = 3):
+        return get_comping_voicings_for(
+            CompingRequest(name, NECK_FRET_MIN, NECK_FRET_MAX, notes, False, self.BAND)
+        )
+
+    def test_no_shape_the_palette_offers_crosses_four_frets(self):
+        """The limit is the search's own, so it holds at every arity and every quality.
+
+        Swept over `CHORD_TONES_FROM_ROOT` because a quality added later must not be the
+        one that reintroduces a stretch, and over the arities because the family changes
+        with them (`duo` pairs, `shell` sets, `duo` tops).
+        """
+        widest = 0
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            for notes in (1, 2, 3):
+                for voicing in self._palette(f"C{quality}", notes):
+                    widest = max(widest, voicing.fret_span())
+        self.assertLessEqual(widest, COMPING_MAX_SPAN)
+
+    def test_no_shape_the_palette_offers_leaves_a_hole_in_its_strings(self):
+        """Every string between a shape's bottom and its top sounds, at every arity.
+
+        Read as the sounding strings being a *run* of neighbours: `len(active) ==
+        max - min + 1`. A one-note shape is trivially a run, which is why the arities are
+        swept rather than asserted one by one - and why the rule is stated as an equality
+        on the shape rather than as a list of refused sets.
+        """
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            for notes in (1, 2, 3):
+                for voicing in self._palette(f"C{quality}", notes):
+                    strings = [
+                        index for index, fret in enumerate(voicing.frets) if fret >= 0
+                    ]
+                    self.assertEqual(
+                        len(strings),
+                        max(strings) - min(strings) + 1,
+                        f"C{quality} {notes} voices: {voicing.tab_string()}",
+                    )
+
+    def test_a_step_the_thumb_joins_keeps_the_hole_rule_scoped_to_the_shape(self):
+        """The skipped string the *bass layer* leaves is not the palette's business.
+
+        `3-x-4-4-8-x` is the C-shape G every player knows - a root on the low E with the
+        chord above on the D, G and B - and the A string is muted in it. The rule the
+        palette holds is about the **chord part's own shape**; a thumb merged underneath
+        is placed by its own cost (`bass_place`), and a comp that refused that shape would
+        be refusing an idiom rather than a compromise.
+        """
+        steps, _head, _notes = arranged(
+            "tests/data/synthetic_repeat_slash.musicxml",
+            section=(1, 2),
+            request=Request(melody=False, bass_on="every-beat", bass_notes="root"),
+        )
+        self.assertIn("3-x-4-4-8-x", [step.tab_line() for step in steps])
+
+    def test_the_stretch_a_fifth_fret_bought_is_off_the_palette(self):
+        """`Dm7` in the default band: the same top tone, spelled inside the hand's four.
+
+        `8-x-3-7-x-x` states Dm7 with its top on D4 and spans the fifth the **shell's**
+        limit allows - the shape the four-bar example's walk used to be played with - and
+        it leaves the B string muted between two sounding neighbours. `x-8-10-7-x-x`
+        states the same chord with the same top tone on adjacent strings, a span of three.
+        What the rules change is the register the lowest voice sits in (C3 becomes F3),
+        which is the cost the document states; the harmony and the line are the same,
+        which is why the example's tops do not move.
+        """
+        tabs = [voicing.tab_string() for voicing in self._palette("Dm7")]
+        self.assertIn("x-8-10-7-x-x", tabs)
+        self.assertNotIn("8-x-3-7-x-x", tabs)
+
+    def test_the_shape_that_named_the_hole_rule_is_off_the_palette(self):
+        """`x-6-x-5-9-x`: an A string 6, a G string 5 and a B string 9, and no D string.
+
+        A span of four, so the cap let it through - and its top tone is statable on the
+        D, G and B strings, which is what makes it a compromise rather than the only
+        spelling. Swept over the roots as well as the qualities, because the pitch classes
+        have to be chord tones of *some* chord for the shape ever to be generated, and the
+        rule is that it is generated for none of them.
+        """
+        for root in ("C", "Eb", "E", "G", "Ab", "A"):
+            for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+                for notes in (2, 3):
+                    tabs = {
+                        voicing.tab_string()
+                        for voicing in self._palette(f"{root}{quality}", notes)
+                    }
+                    self.assertNotIn("x-6-x-5-9-x", tabs)
+                    self.assertNotIn("5-x-5-9-x-x", tabs)
+
+    def test_no_shape_the_palette_offers_states_a_pitch_twice(self):
+        """A unison is not a voice, at every arity and every quality.
+
+        Read as an equality on the shape rather than as a list of refused tabs, because the
+        reason is the tuning: the G and B strings are a third apart, so a top tone on the B
+        can be repeated four frets up the G. `x-x-8-8-4-x` is the shape that named the rule
+        - a Cm7 shell sounding `Eb4` on two strings, which states two pitches where the
+        arity claims three.
+        """
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            for notes in (1, 2, 3):
+                for voicing in self._palette(f"C{quality}", notes):
+                    midis = voicing.midi_notes()
+                    self.assertEqual(
+                        len(set(midis)), len(midis),
+                        f"C{quality} {notes} voices: {voicing.tab_string()}",
+                    )
+
+    def test_the_shape_that_named_the_unison_rule_is_off_the_palette(self):
+        """`x-x-8-8-4-x`: a G string 8 and a B string 4, and both of them `Eb4`.
+
+        A Cm7 shell whose third note is the same pitch as its second, so it states `Bb3`
+        and `Eb4` and calls it three voices. Its top tone is statable on other sets, which
+        is what makes it a compromise rather than the only spelling: the step it was
+        reported on (`synthetic_pickup_cut`, bar 3, under `--no-melody`) now plays
+        `x-6-8-8-x-x`, a four-voice Cm7 with the same top.
+        """
+        for name in ("Cm7", "Cm", "Cm9"):
+            tabs = {
+                voicing.tab_string()
+                for voicing in self._palette(name)
+            }
+            self.assertNotIn("x-x-8-8-4-x", tabs, name)
+        for name in ("Cm7", "Cm", "Cm9"):
+            tabs = {
+                voicing.tab_string()
+                for voicing in self._palette(name)
+            }
+            self.assertNotIn("x-x-8-8-4-x", tabs, name)
+
+    def test_no_comping_step_of_a_committed_head_crosses_four_frets(self):
+        """The rule read on the **step**, not only on the shape the palette offered.
+
+        A step's frets are the chosen shape's plus whatever a later merge writes into
+        them, and that is the level at which the four-finger invariant is stated for the
+        same reason: a rule asserted over a voicing says nothing about a step assembled
+        after the choice.
+        """
+        steps = 0
+        for path in sweep_head_paths():
+            head_steps, _head, _notes = arranged(path, request=Request(melody=False))
+            for step in head_steps:
+                if step.silence is not None or not step.voicing.active_frets():
+                    continue
+                steps += 1
+                self.assertLessEqual(
+                    step.voicing.fret_span(),
+                    COMPING_MAX_SPAN,
+                    f"{path} bar {step.bar} beat {step.beat}: {step.tab_line()}",
+                )
+        self.assertGreater(steps, 30, "the sweep measured almost no comping steps")
 
 
 class TestTheCompingPaletteIsRemembered(unittest.TestCase):
@@ -285,6 +473,50 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
             [voicing.tab_string() for voicing in get_comping_voicings("A7")],
             [voicing.tab_string() for voicing in first],
         )
+
+
+class TestTheBandedCollapseReadsOneBand(unittest.TestCase):
+    """The collapse and the line answer "inside the band?" the same way.
+
+    A banded palette keeps **one shape per top tone**, and the comp line then filters
+    that palette on `LineShape.in_band`. When the two asked different questions - an
+    average here, every fret there - the collapse could keep a shape the line refused
+    to walk, so the tone's in-band shape never reached the selector
+    (`docs/history/comp-line.md`). `grip_place.frets_in_band` is now the one answer.
+    """
+
+    @staticmethod
+    def _voicing(frets: Tuple[int, ...]) -> Voicing:
+        """A `Voicing` sounding `frets` on the top three strings."""
+        padded = [-1, -1, -1, -1, -1, -1]
+        for index, fret in zip((3, 4, 5), frets):
+            padded[index] = fret
+        return Voicing(
+            frets=padded,
+            top_fret=max(frets),
+            avg_fret=sum(frets) / len(frets),
+        )
+
+    def test_the_collapse_and_the_line_agree_shape_by_shape(self):
+        """Over a spread of registers, the two predicates never disagree."""
+        band = (3, 10)
+        for frets in [(3, 5, 10), (7, 9, 12), (2, 5, 9), (4, 6, 8), (3, 11, 11)]:
+            with self.subTest(frets=frets):
+                _window, outside_band, _middle, _span = _comping_collapse_key(
+                    frets, band, NECK_FRET_MIN, NECK_FRET_MAX
+                )
+                in_band = LineShape.of(self._voicing(frets), band).in_band
+                self.assertEqual(outside_band, 0 if in_band else 1)
+
+    def test_the_measured_shape_is_outside_for_both(self):
+        """`x-7-x-9-12-x`: average 9.3 inside the band, top voice at fret 12 outside."""
+        frets = (7, 9, 12)
+        band = (3, 10)
+        _window, outside_band, _middle, _span = _comping_collapse_key(
+            frets, band, NECK_FRET_MIN, NECK_FRET_MAX
+        )
+        self.assertEqual(outside_band, 1)
+        self.assertFalse(LineShape.of(self._voicing(frets), band).in_band)
 
 
 class TestTheAxisIsInertByDefault(unittest.TestCase):
@@ -606,10 +838,10 @@ class TestTheCompingArrangement(unittest.TestCase):
         path = "tests/data/Trouble_in_Mind_Blues.musicxml"
         rows = (
             ("chord", Request(melody=False)),
-            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            ("chord+bass", Request(melody=False, bass_on="every-beat", bass_notes="root")),
             (
                 "bass",
-                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+                Request(melody=False, chord_on="none", bass_on="every-beat", bass_notes="root"),
             ),
         )
         for label, selection in rows:
@@ -713,10 +945,10 @@ class TestCompingMelodyIndependence(unittest.TestCase):
 
         for label, selection in (
             ("chord", Request(melody=False)),
-            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            ("chord+bass", Request(melody=False, bass_on="every-beat", bass_notes="root")),
             (
                 "bass",
-                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+                Request(melody=False, chord_on="none", bass_on="every-beat", bass_notes="root"),
             ),
         ):
             with self.subTest(selection=label):
@@ -1108,3 +1340,286 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
             len(walked), len(silent),
             "a walking line adds no beats, so the walk is not being heard",
         )
+
+
+class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
+    """`chord_on` selects among the arrangement's own positions; it never adds one.
+
+    The producer that *invents* positions is the importer's - one per subdivision of each
+    bar's own rhythm (`headxml.chord_slots`) - which is what lets a comping part state the
+    chord of the tune in a bar the tune never enters. A progression written in code has no
+    such generator: its positions are its entries and their `timings`, so a rhythm naming a
+    position none of them occupies leaves the guitar **resting** rather than inventing the
+    beat - and the rest is emitted, so the part still lines up against the tune. Spelling
+    the rhythm in the progression is how a caller comps one.
+    """
+
+    NAMES = ("Dm7", "G7", "Cmaj7", "A7")
+
+    def _steps(self, chord_on, progression=None, timings=None):
+        return VoiceLeadingEngine().arrange_progression(
+            [(None, name) for name in self.NAMES]
+            if progression is None
+            else progression,
+            timings=timings,
+            request=Request(melody=False, chord_on=chord_on),
+        )
+
+    @staticmethod
+    def _sounding(steps):
+        """The beats a chord is actually struck on, read off the tab rather than a flag."""
+        return [step.beat for step in steps if step.voicing.active_frets()]
+
+    def test_a_named_position_the_progression_occupies_attacks(self):
+        """Beats 1 and 3 are entries, so `1,3` comps them and rests the two between.
+
+        The rests are asserted to be **steps of their own** carrying the chord's name and
+        a reason, which is what keeps the comp lined up against the tune rather than being
+        one bar short.
+        """
+        steps = self._steps("1,3")
+        self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual(self._sounding(steps), [1.0, 3.0])
+        for step in steps:
+            if step.voicing.active_frets():
+                self.assertIsNone(step.silence, step.tab_line())
+                continue
+            self.assertEqual(step.silence, SILENCE_GRID, step.tab_line())
+            self.assertIn(step.chord, self.NAMES, step.tab_line())
+
+    def test_a_named_position_the_progression_does_not_occupy_is_a_rest(self):
+        """`1and` is a position four entries at 1-4 do not have, so nothing sounds.
+
+        A count as well as the assertion: a request that emitted no step at all would
+        satisfy "nothing sounds" silently, and the point is that the *rests* are emitted.
+        """
+        steps = self._steps("1and")
+        self.assertEqual(len(steps), 4)
+        self.assertEqual(self._sounding(steps), [])
+        for step in steps:
+            self.assertEqual(step.silence, SILENCE_GRID, step.tab_line())
+
+    def test_the_rhythm_is_compped_when_the_progression_spells_it(self):
+        """The positive half: the offbeats are reachable, as entries of their own.
+
+        A bar whose entries include 1.5 and 2.5 answers `every-beat` with the two beats -
+        the same request that left a four-entry bar silent above.
+        """
+        progression = [(None, name) for name in ("Dm7", "Dm7", "G7", "G7")]
+        timings = [(1, beat, 0.5) for beat in (1.0, 1.5, 2.0, 2.5)]
+        steps = self._steps("every-beat", progression=progression, timings=timings)
+        self.assertEqual([step.beat for step in steps], [1.0, 1.5, 2.0, 2.5])
+        self.assertEqual(self._sounding(steps), [1.0, 2.0])
+
+    def test_the_importer_is_the_other_producer_of_positions(self):
+        """The same request that leaves a bare progression silent comps a written head.
+
+        The difference between the two entry points, asserted rather than assumed: a
+        head has a metre, so `1and` is a place on its grid and no place at all among a
+        bare progression's entries.
+        """
+        import os
+
+        from tests.support import arranged
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "synthetic_cut_time.mxl"
+        )
+        steps, _head, _notes = arranged(
+            path, request=Request(melody=False, chord_on="1and")
+        )
+        self.assertTrue(steps, "an arrangement with no steps at all is a defect")
+        self.assertTrue(
+            self._sounding(steps),
+            "the importer's rhythm did not produce the requested position",
+        )
+        for step in steps:
+            if not step.voicing.active_frets():
+                continue
+            self.assertEqual(step.beat % 1, 0.5, step.tab_line())
+
+
+class TestACompOnlySelectionPlaysTheRhythmItNames(unittest.TestCase):
+    """A selection with no tune to play is not laid out on the tune's rhythm.
+
+    `headxml._comp_only_timeline`: the positions the request names are the whole
+    timeline, and each rings its felt beat. The alternative - the melody-anchored union
+    - makes the tune's written rhythm the bar's, so a note beginning between two named
+    positions becomes a slot of its own (a **rest**, since nothing is asked to sound
+    there) and a named position inherits the length of the note that happens to begin
+    on it. Measured at 791d13b over `synthetic_triplets.mxl` bars 1-2,
+    `--no-melody --chord-on 1,2` came out as **8 steps, 4 of them rests**, and the stab
+    on bar 1 beat 1 rang 0.104167 of a whole note where the beat is a half.
+    """
+
+    def _steps(self):
+        import os
+
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "synthetic_triplets.mxl",
+        )
+        steps, head, _notes = arrange_xml_head(
+            path, section=(1, 3), request=Request(melody=False, chord_on="1,2")
+        )
+        return steps, head
+
+    def test_the_named_positions_are_the_whole_timeline(self):
+        """Two attacks per bar, each a half note, and nothing else at all."""
+        steps, head = self._steps()
+        self.assertEqual(head.beats_per_bar, 2, "the fixture is in 2/2")
+        self.assertEqual(
+            [(step.bar, step.beat) for step in steps],
+            [(1, 1.0), (1, 2.0), (2, 1.0), (2, 2.0)],
+        )
+        self.assertEqual([step.duration for step in steps], [0.5] * 4)
+        self.assertEqual([step.silence for step in steps], [None] * 4)
+
+    def test_the_figure_begins_where_the_form_says(self):
+        """`first_full_bar` states where segment 1 lands; a bar before it takes the tune.
+
+        The same progression and the same figure, read two ways. With no form stated its
+        own first bar is the origin - a hand-built progression's numbering *is* its form -
+        so `1:none` attacks bar 1 and rests in bar 2. Told the form begins at bar 2, bar 1
+        is a pickup that takes the tune's own onsets, and the figure starts in bar 2.
+        """
+        progression = [(None, "Dm7")] * 3
+        timings = [(1, 1.0, 1.0), (2, 1.0, 1.0), (3, 1.0, 1.0)]
+        request = Request(melody=False, chord_on="1:none")
+        engine = VoiceLeadingEngine()
+        stated = engine.arrange_progression(
+            progression,
+            timings=timings,
+            request=request,
+            options=ArrangeOptions(first_full_bar=2),
+        )
+        self.assertEqual(
+            [bool(step.voicing.active_frets()) for step in stated],
+            [True, True, False],
+        )
+        unstated = engine.arrange_progression(
+            progression, timings=timings, request=request
+        )
+        self.assertEqual(
+            [bool(step.voicing.active_frets()) for step in unstated],
+            [True, False, True],
+        )
+
+    def test_the_shapes_are_the_chords_own_and_did_not_move(self):
+        """What the rule changes is *when* a chord is struck, not which shape it is."""
+        steps, _head = self._steps()
+        self.assertEqual(
+            [step.tab_line() for step in steps],
+            ["x-5-9-7-x-x", "x-x-9-7-8-x", "x-x-5-5-5-x", "x-7-5-5-x-x"],
+        )
+
+
+
+class TestTheCompStaysUnderTheTune(unittest.TestCase):
+    """A stab never sounds at or above the tune note in force.
+
+    The comp part is an accompaniment, so its top voice sits below the tune: a shape whose
+    soprano *is* the tune's pitch restrikes the note, and where the tune is holding it the
+    shape takes the fingered string and cuts the tie (`TestATieEndsAtAStab`). The narrowing
+    is `comp_line_route.leaving_room_for_the_tune`, applied before the ranking so the cost
+    tuple is unchanged and no criterion learns about the tune.
+    """
+
+    def test_the_ceiling_is_strict(self):
+        """A shape whose top *is* the tune's pitch is refused; one below it is kept.
+
+        Strict rather than "not above": a shape that tops out on the tune's own pitch is
+        the note restruck on the chord's string, which is the sound the rule exists to
+        avoid. Measured on B3-string shapes over a held `Eb4`: the `Eb4` shape and the
+        `E4` one both go, the `D4` one stays.
+        """
+        below = make_voicing([-1, -1, -1, 7, -1, -1])   # G string 7 = D4
+        at = make_voicing([-1, -1, -1, -1, 4, -1])      # B string 4 = Eb4
+        above = make_voicing([-1, -1, -1, 9, -1, -1])   # G string 9 = E4
+        kept = leaving_room_for_the_tune(
+            [above, at, below], Note("Eb4"), melody_voiced=True
+        )
+        self.assertEqual([voicing.midi_notes() for voicing in kept], [[62]])
+
+    def test_nothing_below_the_tune_leaves_the_palette_alone(self):
+        """A tune above every shape loses the narrowing, not the chord.
+
+        The ceiling is a *preference* over shapes - the same trade the neck window makes -
+        so a chord that cannot sit under the note is still stated. Losing the chord of the
+        tune is worse than playing it high.
+        """
+        above = make_voicing([-1, -1, -1, 9, -1, -1])
+        self.assertEqual(
+            leaving_room_for_the_tune([above], Note("C4"), melody_voiced=True), [above]
+        )
+
+    def test_a_horn_line_is_not_the_guitars_ceiling(self):
+        """`melody_voiced=False` is the other part's tune, so the comp stays melody-blind.
+
+        This is the half that keeps the default inert: a comping selection's shapes are
+        chosen from the chord alone, which is `TestCompingMelodyIndependence`'s claim
+        about the generator holding at this layer too.
+        """
+        shapes = [
+            make_voicing([-1, -1, -1, 7, -1, -1]),
+            make_voicing([-1, -1, -1, 9, -1, -1]),
+        ]
+        self.assertEqual(
+            leaving_room_for_the_tune(shapes, Note("Eb4"), melody_voiced=False), shapes
+        )
+        self.assertEqual(
+            leaving_room_for_the_tune(shapes, None, melody_voiced=True), shapes
+        )
+
+    def test_the_tune_is_the_ceiling_on_a_real_slot(self):
+        """`Trouble_in_Mind_Blues` bar 5 beat 1: `x-x-2-0-x-x`, top `G3`, under a held `C4`.
+
+        The pinned tab is the acceptance gate. The ranking's answer before the ceiling was
+        `x-x-5-9-x-x` - the same `G` string the tied `C4` was holding, fretted at 9, with
+        its top a third *above* the tune. Under the ceiling the shape is stated an octave
+        down instead, so the accompaniment is under the line rather than through it.
+        """
+        steps, _head, _notes = arranged(
+            TROUBLE_IN_MIND,
+            section=(1, 8),
+            request=Request(chord_on="1", chord_notes="2"),
+        )
+        slot = [step for step in steps if step.bar == 5 and step.beat == 1.0]
+        self.assertEqual(len(slot), 1)
+        step = slot[0]
+        self.assertEqual(step.melody, "C4")
+        self.assertFalse(step.melody_voiced)
+        self.assertEqual(step.tab_line(), "x-x-2-0-x-x")
+        self.assertLess(max(step.voicing.midi_notes()), Note("C4").midi_note())
+
+    def test_every_comp_under_a_tune_note_stays_below_it(self):
+        """The corpus sweep: no comping attack reaches the tune note's pitch.
+
+        A sweep rather than one slot, because the shape comes from a ranking: a cost
+        criterion that preferred a higher top voice would satisfy the pinned slot above
+        and fail here. Both a positional rhythm and the tune's own onsets are swept, so
+        the held-note case and the silent-position case are both covered.
+        """
+        checked = 0
+        for head in sweep_head_paths():
+            for request in (
+                Request(chord_on="1", chord_notes="2"),
+                Request(chord_on="every-beat"),
+            ):
+                steps, _head, _notes = arranged(head, request=request)
+                for step in steps:
+                    if step.melody_voiced or step.melody is None:
+                        continue
+                    if not step.voicing.active_frets():
+                        continue
+                    tune = Note(step.melody).midi_note()
+                    self.assertLess(
+                        max(step.voicing.midi_notes()), tune,
+                        f"{head} {step.chord} {step.melody} {step.tab_line()}",
+                    )
+                    checked += 1
+        self.assertGreater(checked, 20, "the sweep stopped arranging a comp under a tune")
+

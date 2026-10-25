@@ -70,7 +70,7 @@ class TestTheShippedRequest(unittest.TestCase):
     def test_the_chord_attacks_at_the_written_melody(self):
         """`chord_on=melody` is the written onsets, and no bass attacks at all."""
         resolved = resolve_request(Request(), 4)
-        self.assertTrue(resolved.chord_rhythm.wants_melody)
+        self.assertTrue(resolved.chord_rhythm.at(1).melody)
         self.assertTrue(resolved.bass_rhythm.is_none)
 
 
@@ -84,7 +84,7 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
             Request(bass_on="every-beat", bass_notes="walk"), 4
         )
         self.assertIn(PART_BASS, resolved.parts)
-        self.assertEqual(resolved.bass_rhythm.positions, (1.0, 2.0, 3.0, 4.0))
+        self.assertEqual(resolved.bass_rhythm.at(1).positions, (1.0, 2.0, 3.0, 4.0))
         self.assertIn(BASS_RULE_APPROACH, resolved.bass)
 
     def test_root_and_fifth_is_a_two_rule_line(self):
@@ -232,9 +232,8 @@ class TestTheRefusals(unittest.TestCase):
     def test_no_melody_keeps_the_tune_s_own_rhythm(self):
         """`--no-melody` reads the written onsets, as every other request does.
 
-        The written onsets are a fact about the *score*, which is how `bass_on="melody"`
-        reads them too, so the comp states the chord where the tune states a note. Every
-        felt beat is the request that names it.
+        The written onsets are a fact about the *score*, so the comp states the chord
+        where the tune states a note. Every felt beat is the request that names it.
         """
         for spelling in ("melody", ""):
             request = Request(melody=False, **({"chord_on": spelling} if spelling else {}))
@@ -261,6 +260,23 @@ class TestTheRefusals(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             resolve_request(Request(bass_on="none", bass_notes="walk"), 4)
         self.assertIn("bass-notes=walk", str(caught.exception))
+
+    def test_the_bass_has_no_written_onsets_to_read(self):
+        """`bass-on=melody` is refused rather than kept as a synonym for `every-beat`.
+
+        The thumb line has no written onsets of its own - it marks bars the tune rests
+        in - so the spelling named a rhythm the layer cannot follow. The message names
+        both the replacement and the way to be sparse.
+        """
+        with self.assertRaises(ValueError) as caught:
+            resolve_request(Request(bass_on="melody", bass_notes="root"), 4)
+        message = str(caught.exception)
+        self.assertIn("every-beat", message)
+        self.assertIn("1,3", message)
+        # The chord layer's `melody` is untouched: it reads the score's onsets.
+        self.assertEqual(
+            resolve_request(Request(chord_on="melody"), 4).chord_on, "melody"
+        )
 
     def test_an_empty_selection_is_refused(self):
         with self.assertRaises(ValueError) as caught:
@@ -324,6 +340,7 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             (Request(bass_on="every-beat", chord_on="none"), 2),
             (Request(chord_notes="targets"), 4),
             (Request(chord_notes="targets", bass_on="every-beat"), 4),
+            (Request(chord_on="1and:none", bass_on="none:1"), 4),
         ):
             with self.subTest(request=request, beats=beats):
                 resolved = resolve_request(request, beats)
@@ -347,7 +364,7 @@ class TestTheCanonicalSpelling(unittest.TestCase):
 
     def test_the_rhythm_spellings_are_the_grammar_s(self):
         """The request does not re-spell the positions `parse_rhythm` owns."""
-        for text in ("melody", "none", "1and", "lastand", "every-beat"):
+        for text in ("melody", "none", "1and", "lastand", "every-beat", "1,3:none"):
             with self.subTest(text=text):
                 resolved = resolve_request(Request(chord_on=text), 4)
                 self.assertEqual(str(parse_rhythm(text, 4)), resolved.chord_on)

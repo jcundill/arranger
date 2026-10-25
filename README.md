@@ -114,10 +114,10 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
 | `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord keeps the tune's own written onsets |
-| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1and` or `every-beat` |
+| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, positions such as `1and`, `every-beat`, or a `:`-joined cycle of those bars (`1,3:none`) |
 | `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
-| `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
+| `--bass-on` | `none` | when the thumb attacks: positions, `every-beat`, or a `:`-joined cycle of them (`1,3:none`); `melody` is refused |
 | `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, a walk, or the note rules themselves (`root,approach`) |
 | `--fret-min` / `--fret-max` | `2` / `13` | neck window to aim for |
 | `--tab` | `line` | `staff` lays head on one six-line staff, spaced on real rhythm |
@@ -306,10 +306,10 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | question | flag | `Request(...)` | values |
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | the guitar does, unless this is passed |
-| when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, or `melody`, `none`, `every-beat` |
+| when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, the written `melody`, `none`, `every-beat`, or a `:`-joined cycle of those bars |
 | what does the chord state? | `--chord-notes` | `chord_notes="2"` | `full`, `targets`, `3`, `2`, `1` |
 | what does it do in a melody rest? | `--chord-fills` | `chord_fills="hold"` | `none`, `hold`, `comp` |
-| when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, or `none` |
+| when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, `none`, or a `:`-joined cycle of them (`melody` is refused: the thumb has no written onsets) |
 | what does each thumb note state? | `--bass-notes` | `bass_notes="walk"` | `root`, `root-5th`, `walk` |
 
 **The default adds nothing.** `head FILE` is one chord under each written melody note, held for that note — no bass, no extra attacks, no chord invented in a rest. Everything else is asked for. `Request()` is that same default, so `arrange_progression(progression)` and `arrange_progression(progression, request=Request())` are one arrangement.
@@ -349,6 +349,22 @@ python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chor
 ```
 
 `--chord-notes targets` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half is the same request value: `--chord-notes targets` says *how much of the chord sounds at a target and between them*, while `--chord-on` says *when* a chord attacks. The two are separate questions, which is why they are two flags: `--chord-on 1,3 --chord-notes targets` is a chord on 1 and 3 only, thinned inside each one.
+
+**A figure longer than a bar is written with `:` between its bars**, and it repeats from there: `--chord-on 1,3:none` attacks on 1 and 3 of one bar and not at all in the next. Each bar of the cycle keeps its own request, so a segment may say `melody`, `every-beat`, positions or `none` — an empty segment is refused rather than read as silence, because `none` is how silence is spelled.
+
+```bash
+python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-4 --chord-on 1:none
+```
+
+**A figure's first bar is the form's first complete bar**, so an anacrusis takes no bar of it: on a head that opens with a pickup, bar 2 is where segment one lands and the pickup bar is comped at its own written note. `--bass-on` takes the same grammar, so a thumb line can alternate (`1,3:none`) or mark one bar in two; `melody` is refused there, because the thumb has no written onsets of its own.
+
+**Under a note the tune is holding, the chord stays below it - and the stab ends the tie.** A
+comp is an accompaniment, so its top voice sits strictly under the tune's note: the shape can
+neither restrike that pitch nor take the string the held note is fingered on. Reaching for the
+chord therefore **releases** the tie rather than claiming a hold the engine cannot prove the
+hand makes — a player who can keep the note down is free to, but the tab does not assert it,
+and the line says which note the stab took. The melody column and the melody rows are blank
+there, because the note is no longer sounding.
 
 ```python
 progression = [
@@ -433,6 +449,8 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 
 **The tune is the guitar's unless `--no-melody` is passed**, and that flag is a complete request on its own: the chord's default is the written onsets, and those are a fact about the *score* rather than about who plays it, so the comp falls where the tune does — the tune's own rhythm, not a substitute for it. Every felt beat is the one flag away it always was (`--chord-on every-beat`), and the run header prints the resolved rhythm (`chord-on=melody`, or `1,2,3,4` for the explicit ask), so what the comp is doing is on the line rather than assumed.
 
+**A comp that names its positions plays them, and nothing else.** With no tune on this guitar the bar's rhythm is the request's, so `--no-melody --chord-on 1,2` in 2/2 is two half-note chords a bar: no step — and therefore no rest in the score — at a position the tune merely passes through, and no stab cut short because a written note there happened to be a triplet. Two consequences follow, and both are the request honoured rather than a gap: a harmony that changes *between* two named positions is stated at the next attack (`--chord-on every-beat` asks for them all), and a bar with no chord in force (`NC`) has nothing for the chord part to state at all.
+
 `--bass-notes` names what each thumb note is: `root` is the chord's root, `root-5th` alternates root and fifth, and `walk` is the full `root,5th,approach,nearest` chain — a note on every requested position, moving toward the next chord rather than repeating a grid. **The three names are sugar over the four rules**, so a chain the names do not offer is spelled out: `--bass-notes root,approach` is the root with an approach note between it and the next chord, and the order is the resolution order rather than formatting. The rhythm is `--bass-on`'s, so `--bass-on every-beat --bass-notes root` is a pedal on every felt beat, which is what it says.
 
 **A combination the left hand cannot accommodate at all is refused outright** (`ValueError`); a single note the thumb cannot reach is dropped and named on its own step (`bass_refused`), and the arrangement proceeds without it — a walking line with gaps is worse than none, but losing the bass costs less than losing the tune.
@@ -441,7 +459,7 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 
 The chord part states the **guide pair** — the 3rd and the 7th, the two notes that say major or minor — whenever the guitar is comping rather than singing. It is not a setting: a chord stated to somebody else's ear with no tune on top *is* a claim about its 3rd and 7th, and the guitar's own chord-melody takes its shape from the grip the selector picks instead.
 
-So a request that takes the chord part with a thumb line under it — `Request(melody=False, bass_on="every-beat")` — is the ensemble: horn on the tune, bassist on the root, guitar stating the quality in between — `8-x-8-8-x-x` for a `Cm7`, the root under the guide pair. What the comping part varies is *where* its chords fall (`--chord-on`), not which degrees they state.
+So a request that takes the chord part with a thumb line under it — `Request(melody=False, bass_on="every-beat")` — is the ensemble: horn on the tune, bassist on the root, guitar stating the quality in between — `8-6-8-5-x-x` for a `Cm7`, the root under the guide pair. What the comping part varies is *where* its chords fall (`--chord-on`) and *which tone is on top* (the comp line, below), not which degrees they state.
 
 ### The thumb alone
 
@@ -476,12 +494,17 @@ python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 1-2 \
 ```
 
 ```text
-Gmaj9    D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9    D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9/F# D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-9-x-4-x-x       (comping - B 3 & F# 7; the guitar does not play the tune -
+                                    top B3 - the opening, in the band's middle)
+Gmaj9    D4  5    x-x-x-4-7-x       (comping - B 3 & F# 7; the guitar does not play the tune -
+                                    top F#4 - walks up)
+Gmaj9/F# D4  5    x-9-x-4-x-x       (comping - B 3 & F# 7; the guitar does not play the tune -
+                                    top B3 - walks down)
 ```
 
 **The high E is not on the comping palette** — the same two guide tones, on the G and B strings rather than the B and high E. That string is where the tune itself is pinned first, and a comping part has no tune to put there: a chord whose top voice sits on it is heard as a melody, and heard *above* the horn playing the real one. Dropping it is a palette narrow rather than a cost criterion, so the chord is never lost — it moves.
+
+**The top voice walks.** Two voices is a thin shape to move, but the line is there: `B3` opens where the band's middle is, `F#4` is the nearest tone above it, and the slash chord comes back to `B3` because the chord changed and a new chord starts upward again — the roles are printed so the movement is not indistinguishable from the ranking being inconsistent.
 
 Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. The comp falls on the **tune's own onsets**: this bar of the head states three notes (beat 1, the and of 1 and the and of 2), so there are three attacks and no rests. Ask for a rhythm of its own and the positions it does not name become **rests**, emitted rather than dropped so the part keeps its place against the tune — `--chord-on 1,2` on the same bar comps beats 1 and 2 and rests the two offbeats the tune states between them. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
 
@@ -554,6 +577,78 @@ One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A st
 
 The old `--grid` figures were **presets of positions, and only of positions**: `freddie` was `--chord-on every-beat`, `charleston` `1,2and`, `joe_pass` `1and,2and,3and,4and` and `final_and` `lastand`. They were removed because they were a second spelling of the same question — and a slightly different one, since a preset also decided which union its positions were merged into, so `grid="chord:freddie"` and `--chord-on every-beat` could differ in shape while agreeing on every position. The request is the only spelling now.
 
+### A comping pattern for a progression written in code
+
+`Request(melody=False, chord_on=...)` is the whole of it — the same request `--no-melody --chord-on` spells:
+
+```python
+from arranger import VoiceLeadingEngine, Request
+
+engine = VoiceLeadingEngine()
+
+# (melody note, chord name). `None` is a position the tune does not state - which is
+# every position when the guitar is comping rather than singing.
+progression = [(None, "Dm7"), (None, "G7"), (None, "Cmaj7"), (None, "A7")]
+
+steps = engine.arrange_progression(
+    progression, request=Request(melody=False, chord_on="1,3")
+)
+```
+
+```text
+Dm7               x-8-7-5-x-x       (comping - F b3, A 5 & C b7; the tune is silent here - top C4 -
+                                    the opening, in the band's middle)
+G7                x-x-x-x-x-x       (the guitar rests here -
+                                    no part was asked to sound at this position)
+Cmaj7             x-x-9-5-5-x       (comping - C Root, E 3 & B 7; the tune is silent here - top E4 -
+                                    walks up)
+A7                x-x-x-x-x-x       (the guitar rests here -
+                                    no part was asked to sound at this position)
+```
+
+**The top voice is a line, not a plateau.** The comp states its chord in a register of its own — the **home band**, `--fret-min + 1` and eight frets wide, 3–10 by default — and voice-leads the top voice through the chord's tones from one position to the next: `top C4 - the opening, in the band's middle`, `top E4 - walks up`, `- approaches from below`, `- fills down toward the tune`. The tab cannot show why two shapes differ, so the role is printed beside them; the rules are in [engine.md](docs/engine.md#the-comp-line-the-top-voice-moves), and there is no flag for it, because the line is *how* the chord part plays the notes it already states.
+
+**The rhythm names positions the progression has to have already.** `chord_on` decides which of the arrangement's own positions attack; it does not add one. The producer that *invents* positions is the **importer's** — one per subdivision of each bar's own rhythm (`headxml.chord_slots`) — which is what lets a comp state the chord in a bar the tune never enters. A progression written in code has exactly the positions its entries and their `timings` give it, so a bar of entries at beats 1, 2, 3 and 4 answers a rhythm like this:
+
+| `chord_on` | over a bar of entries at beats 1, 2, 3 and 4 |
+|---|---|
+| `"melody"` *(default)* | four attacks — every entry is an onset |
+| `"every-beat"` | four attacks, and no rest |
+| `"1,3"` | two attacks, and a rest on beats 2 and 4 |
+| `"1and"` | **nothing at all** — 1.5 is not a position this bar has |
+
+So a rhythm of its own is spelled **in the progression** — one entry per position, with `timings` placing each one:
+
+```python
+# two chords a bar: entries at 1, 1.5, 2, 2.5, ... — `chord_on="every-beat"` then comps the beats
+progression = [(None, chord) for chord in ("Dm7", "Dm7", "G7", "G7", "Cmaj7", "Cmaj7", "A7", "A7")]
+timings = [(1, beat, 0.5) for beat in (1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5)]
+```
+
+Without `timings` the entries are laid out one per felt beat — four entries is bar 1 beats 1–4, eight is bars 1–2 — so a multi-bar comp wants its bars spelled out:
+
+```python
+progression = [(None, "Dm7"), (None, "G7"), (None, "Cmaj7"), (None, "A7")]
+timings = [(1, 1.0, 4.0), (2, 1.0, 4.0), (3, 1.0, 4.0), (4, 1.0, 4.0)]   # bar, beat, duration
+
+steps = engine.arrange_progression(
+    progression, timings=timings, request=Request(melody=False)
+)
+```
+
+```text
+Dm7               x-8-7-5-x-x       (comping - F b3, A 5 & C b7; the tune is silent here - top C4 -
+                                    the opening, in the band's middle)
+G7                x-8-9-4-x-x       (comping - B 3 & F b7; the tune is silent here - top B3 -
+                                    approaches from below)
+Cmaj7             x-x-9-5-5-x       (comping - C Root, E 3 & B 7; the tune is silent here - top E4 -
+                                    approaches from above)
+A7                x-x-5-6-8-x       (comping - Db 3 & G b7; the tune is silent here - top G4 -
+                                    walks up)
+```
+
+One attack per bar, on the felt beat its entry sits at: every entry is an onset, so the default `chord_on="melody"` already comps each one. Positions the rhythm does not name come back as **rest steps**, `step.silence` naming the reason, so the part keeps its place against the tune — and `Request(melody=False, chord_on="none")` with no bass position is refused outright (`ValueError`), because there is nothing left for the guitar to play.
+
 ### What the chord does in a rest: `--chord-fills`
 
 A **notated silence** in the melody line is the one span the chord rhythm says nothing about, and this is its policy. It is not a rhythm of its own and it never invents a melody.
@@ -572,11 +667,13 @@ python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 6-7 \
 ```
 
 ```text
-Am7               x-10-10-9-x-x     (comping - C b3, E 5 & G b7; the tune is silent here)
-D9                x-x-4-5-5-x       (comping - E 9, F# 3 & C b7; the tune is silent here)
+Am7               x-10-5-5-x-x      (comping - C b3 & G b7; the tune is silent here - top C4 -
+                                    fills up toward the tune)
+D9                x-9-7-5-x-x       (comping - F# 3, A 5 & C b7; the tune is silent here - top C4 -
+                                    fills up toward the tune)
 ```
 
-That is bar 6 of the head, which has no melody at all and two harmony changes: two rests, and one chord held in each. The line says why the chord is there — the tune is silent here — because a chord with no melody above it is otherwise indistinguishable from a mistake.
+That is bar 6 of the head, which has no melody at all and two harmony changes: two rests, and one chord held in each. The line says why the chord is there — the tune is silent here — and where the chord part's top voice is going: a fill **bridges** from the register the hand is in to the register the tune returns in, which is why bar 7's `D4` is what the second fill is aiming at even though it does not sound it.
 
 A rest is **split** where the harmony changes and where a `--chord-on` target falls inside it: a target always attacks, and the fill continues after it. The fill stops at the rest's end, so it cannot ring into the returning tune. A rest with **no chord** (`NC`) gets nothing, and `--no-melody` refuses the flag outright — a guitar that is not playing the tune has no melody rests to fill.
 

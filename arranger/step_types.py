@@ -193,6 +193,14 @@ class Palette:
     was never ranked at all, because the thumb could not reach the line's note under it. A
     step that carries no thumb line leaves it None, and so does a narrow that did not change
     the winner - in both cases the shape played is the ranking's own first choice.
+
+    `dropped_for_line` is the same fact one narrowing later: the shape the ranking preferred
+    before the **comp line** narrowed the palette to the tone it put on top. It is recorded
+    and deliberately **not printed** - the line narrows on almost every position, so a
+    sentence for it would repeat on nearly every step, while what a reader needs is the tone
+    and its role, which is `annotation._comp_line_clause`'s. What it is for is the
+    measurement: it is how `docs/history/comp-line.md` shows what the line took away from the
+    ranking.
     """
 
     available: int
@@ -200,6 +208,22 @@ class Palette:
     decided_by: Optional[int] = None
     inside_window: bool = False
     dropped_for_bass: Optional[Voicing] = None
+    dropped_for_line: Optional[Voicing] = None
+
+
+# What the comp line's top voice is *doing* on a step, recorded on
+# `ArrangementStep.top_role` and phrased by `annotation._comp_line_clause`. They live
+# beside the field rather than in `comp_line`, which writes them, because `annotation`
+# reads them and sits *below* `comp_line` in the dependency order - a vocabulary with
+# two spellings is the thing this module exists to prevent. `comp_line` imports them
+# back, so a caller that spells `comp_line.TOP_WALK_UP` still resolves.
+TOP_OPENING = "opening"
+TOP_WALK_UP = "walk up"
+TOP_WALK_DOWN = "walk down"
+TOP_APPROACH_FROM_ABOVE = "approach from above"
+TOP_APPROACH_FROM_BELOW = "approach from below"
+TOP_FILL_UP = "fill up"
+TOP_FILL_DOWN = "fill down"
 
 
 @dataclass
@@ -223,6 +247,7 @@ class ArrangementStep:
     role: str = ROLE_TARGET
     metric_weight: int = 0
     bass_role: Optional[str] = None
+    top_role: Optional[str] = None
     bass_only: bool = False
     bass_held: bool = False
     # True when this step's chord is a new attack here rather than a shape still
@@ -238,6 +263,14 @@ class ArrangementStep:
     # The pitch class of a bass note the left hand could not place, or None when
     # every thumb note the arrangement asked for sounded. Set by `bass_merge`.
     bass_refused: Optional[str] = None
+    # True when a chord attack here ends the tune's tie, so the note is not
+    # sounding rather than held. Nothing restrikes it - `comp_line_route`
+    # keeps the chord below the tune's register. Set by the comping route.
+    #
+    # Last in the dataclass rather than beside `melody_voiced`: a field added in the
+    # middle shifts every positional construction of a step, which is a silent
+    # mis-bind rather than a type error.
+    melody_released: bool = False
 
     @property
     def grip(self) -> str:

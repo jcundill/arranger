@@ -65,6 +65,8 @@ class _Knobs:
     melody_onsets: Optional[Container[int]]
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]]
     bass_pcs: Optional[Mapping[int, Optional[int]]]
+    #: The bar a requested figure's first segment lands on (`_first_timeline_bar`).
+    first_full_bar: int
 
 
 def _conflicts(**values: object) -> List[str]:
@@ -140,6 +142,25 @@ def felt_beat_timings(count: int, beats_per_bar: int) -> List[Timing]:
     ]
 
 
+def _first_full_bar(
+    options: Optional[ArrangeOptions],
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+) -> int:
+    """The bar a requested figure's first segment lands on: the form's first full bar.
+
+    A caller that knows its form states it (`ArrangeOptions.first_full_bar`, which the
+    score importer fills from the head, pickup and all). Otherwise a hand-built
+    progression's own numbering **is** its form: the first bar it places anything in is
+    the origin, and a timeline that starts at bar 0 begins there rather than taking
+    bar 0 for a pickup. No timeline at all is `felt_beat_timings`'s numbering, which
+    starts at bar 1.
+    """
+    if options is not None and options.first_full_bar is not None:
+        return options.first_full_bar
+    bars = [bar for bar, _beat, _duration in timings or () if bar is not None]
+    return min(bars) if bars else 1
+
+
 def resolve_knobs(
     options: Optional[ArrangeOptions],
     *,
@@ -200,6 +221,7 @@ def resolve_knobs(
         if options.timings is not None:
             timings = list(options.timings)
     bass_pcs = options.bass_pcs if options is not None else None
+    first_full_bar = _first_full_bar(options, timings)
 
     if non_chord_tone not in NON_CHORD_TONE_STRATEGIES:
         raise ValueError(
@@ -236,6 +258,7 @@ def resolve_knobs(
         melody_onsets=melody_onsets,
         timings=timings,
         bass_pcs=bass_pcs,
+        first_full_bar=first_full_bar,
     )
 
 
@@ -274,6 +297,7 @@ def resolve_policies(
     beat_type: int,
     grouping: Tuple[int, ...],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    first_full_bar: Optional[int] = None,
 ) -> _Policies:
     """The axes resolved once per arrangement, plus the walked-beat union.
 
@@ -293,6 +317,10 @@ def resolve_policies(
     The two resolutions are independent of each other, so the order between them
     carries no other meaning; what matters is that both finish before `has_thumb`
     is read, because that flag gates whether the walked-beat union is built.
+
+    `first_full_bar` is the form's first complete bar, which is where a requested
+    figure's first segment lands; `None` is a figure placed on no form, and the walk
+    then runs on absolute phase from bar 1.
     """
     melody_voiced = parts_have_melody(parts)
     # The melody-only selection, decided once here and read by the bass policy,
@@ -329,6 +357,7 @@ def resolve_policies(
             grouping=grouping,
             bass=bass,
             rhythm=bass_rhythm,
+            first_full_bar=first_full_bar,
         )
 
     return _Policies(

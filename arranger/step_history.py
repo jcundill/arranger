@@ -37,6 +37,22 @@ def last_sounding_step(
     return None
 
 
+def sounding_tops(arrangements: List[ArrangementStep]) -> List[int]:
+    """The top voices of the last **two** sounding steps, oldest first.
+
+    `last_sounding_step` is the same rule read one step back - a position the guitar
+    declined was never a shape anybody held - and this is it read twice, because the
+    comp line's walk needs the last two tops to keep from retracing them. A step with
+    no active fret sounds nothing to hold, so it is stepped over too.
+    """
+    sounded = [
+        max(step.voicing.midi_notes())
+        for step in arrangements
+        if step.silence is None and step.voicing.active_frets()
+    ]
+    return sounded[-2:]
+
+
 def previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
     """The voicing of the last sounding step, or None.
 

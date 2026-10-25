@@ -323,18 +323,21 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     """
 
     def test_a_silent_step_says_it_is_silent(self):
-        """A grid that places no chord leaves the guitar out, and the line says so.
+        """A step the request does not name leaves the guitar out, and the line says so.
 
         Measured before this clause existed: 74 of one head's 206 `--grid freddie` steps
         are silent, and every one of them carried `(harmony under <degree>)` - the one
         annotation that was not merely thin but false.
-        """
-        from headxml import arrange_xml_head
 
-        steps, _head, _notes = arrange_xml_head(
-            "tests/data/synthetic_repeat_slash.musicxml",
-            section=(1, 2),
-            options=ArrangeOptions(request=Request(melody=False, chord_on="every-beat")),
+        A progression written in code has no positions but its own entries, so a rhythm
+        that names beat 1 alone leaves the entry at 1.5 **resting** - which is the
+        engine's rule rather than the importer's: `chord_on` selects among a
+        progression's positions and never invents one.
+        """
+        steps = VoiceLeadingEngine().arrange_progression(
+            [(None, "Dm7"), (None, "Dm7")],
+            timings=[(0, 1.0, 1.0), (0, 1.5, 1.0)],
+            request=Request(melody=False, chord_on="1"),
         )
         silent = [step for step in steps if not step.voicing.active_frets()]
         self.assertTrue(silent, "the rhythm stopped leaving the guitar out")
@@ -358,22 +361,28 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         layers that attack - so the pair states the same three voices and adds only the
         thumb.
 
-        The voices named here are the ones the palette settles on, and the palette no
-        longer offers the high E (`grip_tables.COMPING_EXCLUDED_STRINGS`), so this chord's
-        shell is `x-12-x-11-12-x` - a 9th, a 3rd and a 7th rather than a 3rd, a 5th and a
-        7th. A pinned expectation is the point: the clause is read off the shape, and the
-        shape is what the palette decides.
+        The voices named here are the ones the palette settles on, and the palette offers
+        only shapes that **fill their strings** inside a four-fret reach
+        (`grip_tables.COMPING_MAX_SPAN`, `grip_tables._fills_its_strings`), so this chord's
+        shell is `x-x-7-4-7-x` - a 9th, a 3rd and a 7th rather than a 3rd, a 5th and a
+        7th, and its top is the 7th. A pinned expectation is the point: the clause is read
+        off the shape, and the shape is what the palette decides.
         """
         from headxml import arrange_xml_head
 
         head = "tests/data/synthetic_repeat_slash.musicxml"
-        comping = "; the guitar does not play the tune)"
+        comping = "; the guitar does not play the tune"
         chord, _head, _notes = arrange_xml_head(
             head,
             section=(1, 2),
             options=ArrangeOptions(request=Request(melody=False)),
         )
-        self.assertEqual(step_annotation(chord[0]), f" (comping - A 9, B 3 & F# 7{comping}")
+        self.assertEqual(chord[0].voicing.tab_string(), "x-x-7-4-7-x")
+        self.assertEqual(
+            step_annotation(chord[0]),
+            f" (comping - A 9, B 3 & F# 7{comping}"
+            " - top F#4 - the opening, in the band's middle)",
+        )
         self.assertFalse(chord[0].melody_voiced)
         # A bass line under that same chord part states the *same* three voices and
         # puts the thumb below them rather than widening the chord - which is what
@@ -383,7 +392,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             head,
             section=(1, 2),
             options=ArrangeOptions(
-                request=Request(melody=False, bass_on="melody", bass_notes="root")
+                request=Request(melody=False, bass_on="every-beat", bass_notes="root")
             ),
         )
         self.assertIn("comping - A 9, B 3 & F# 7", step_annotation(pair[0]))
@@ -399,7 +408,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             section=(1, 2),
             options=ArrangeOptions(
                 request=Request(
-                    melody=False, chord_on="none", bass_on="melody", bass_notes="root"
+                    melody=False, chord_on="none", bass_on="every-beat", bass_notes="root"
                 )
             ),
         )
@@ -513,12 +522,14 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     def test_a_written_bass_that_is_not_sounded_says_so(self):
         """A slash chord nobody can voice still prints, and the loss is reported.
 
-        `Trouble_in_Mind_Blues` has `Am7/D` steps whose shapes state the b3, the 5 and the
-        b7 and no D at all: the partition prefers the written bass and cannot reach it, so
-        the reader is handed a symbol asking for a note the tab does not contain. The
-        witness is a **named** grid, because the default now withholds a position the
-        tune is still holding (§9.2) and those `Am7/D` bars are a hold; `freddie` states
-        its figure regardless, which is what keeps the loss visible.
+        `Trouble_in_Mind_Blues` has `Am7/D` steps whose shapes state the root, the b3
+        and the b7 and no D at all: the partition prefers the written bass and cannot
+        reach it, so the reader is handed a symbol asking for a note the tab does not
+        contain - `x-x-7-5-8-x`, whose lowest voice is `A3`, five semitones from the D
+        the symbol names. The witness is a **named** grid, because the default now
+        withholds a position the tune is still holding (§9.2) and those `Am7/D` bars
+        are a hold; `freddie` states its figure regardless, which is what keeps the
+        loss visible.
         """
         from headxml import arrange_xml_head
 
@@ -533,7 +544,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         ]
         self.assertTrue(lost, "the head stopped losing its slash basses")
         self.assertIn(
-            "the written bass D is not sounded - the lowest voice (G3) is 5 semitones",
+            "the written bass D is not sounded - the lowest voice (A3) is 5 semitones",
             step_annotation(lost[0]),
         )
         kept = [

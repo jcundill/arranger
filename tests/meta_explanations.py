@@ -53,6 +53,7 @@ from arranger.tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
+    note_name,
 )
 from tests.support import arranged, make_step
 
@@ -75,7 +76,7 @@ CONFIGS: List[Dict[str, Any]] = [
     # it was this row's chord-only config twice over.
     {
         "options": ArrangeOptions(
-            request=Request(melody=False, bass_on="melody", bass_notes="root")
+            request=Request(melody=False, bass_on="every-beat", bass_notes="root")
         )
     },
     {
@@ -110,6 +111,23 @@ def _thin(step: ArrangementStep) -> bool:
 
 def _line(step: ArrangementStep) -> str:
     return step_annotation(step)
+
+
+def _names_the_top(step: ArrangementStep) -> bool:
+    """Whether the line names the tone the comp line put on top, and what it is doing.
+
+    Read from the step's own fields: the **top voice** it sounds, and one of the role
+    words `annotation._TOP_ROLE_PHRASES` spells. The role is the part the tab cannot show -
+    two shapes tell a reader nothing about whether the line walked or pivoted into the next
+    chord - so a witness that only checked for a note name would let the role go unsaid.
+    """
+    if not step.voicing.upper_midi_notes():
+        return True
+    line = _line(step)
+    top = note_name(max(step.voicing.upper_midi_notes()))
+    return f"top {top}" in line and any(
+        word in line for word in ("walks", "approach", "fill", "opening")
+    )
 
 
 def _missing_degree_names(step: ArrangementStep) -> List[str]:
@@ -336,6 +354,11 @@ WITNESSES: List[Witness] = [
         lambda step: "the tune is silent here" in _line(step),
     ),
     (
+        "a chord attack ended the tune's tie, so the note is not sounding",
+        lambda step: step.melody_released,
+        lambda step: "ends the tied" in _line(step),
+    ),
+    (
         "the guitar comps, so the voices it states are the only harmony a reader can see",
         lambda step: bool(_comping_names(step) or _comping_names_on_the_line(step)),
         lambda step: (
@@ -383,6 +406,26 @@ WITNESSES: List[Witness] = [
         "could not sound under it",
         lambda step: step.palette is not None and step.palette.dropped_for_bass is not None,
         lambda step: "leave room for the requested bass note" in _line(step),
+    ),
+    (
+        "the comp line chose the tone on top, which the frets cannot say",
+        # `upper_midi_notes`: the line has a top voice only where a shape sounds above
+        # the thumb, and a lone thumb has no role to report.
+        lambda step: bool(step.top_role)
+        and bool(step.voicing.upper_midi_notes())
+        and not step.repeated
+        and not step.bass_only,
+        _names_the_top,
+    ),
+    (
+        "the comp line narrowed the palette, so the tone that won is the fact to print",
+        # The narrowing is explained by *which tone* it chose and what that tone is doing:
+        # `Palette.dropped_for_line` records what the ranking would have taken, and the
+        # line's own sentence says why it did not. A second sentence for the shape given
+        # up would repeat on almost every comping step (`docs/history/comp-line.md` §"The
+        # measurement").
+        lambda step: step.palette is not None and step.palette.dropped_for_line is not None,
+        _names_the_top,
     ),
     (
         "a four-voice shape leaves a chord tone out, which the frets cannot show",
@@ -526,15 +569,19 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
             omitted, 135, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1347** of the steps it arranges sound two or more
+        # measured over this sweep, **1348** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 320, all of them from notes the old corpus did not have.
-        # Two of the 1347 come from the union's gate reading the *selection* rather than
+        # Two of them come from the union's gate reading the *selection* rather than
         # the spelling: the waltz's first note is harmonised rather than read as a repeat
         # of a comping position, and the walk re-plans one line around a position the
-        # union adds.
-        self.assertEqual(named, 1347, "the number of steps naming their voices moved")
+        # union adds. The last one is the tune's register as a ceiling on the comp
+        # (`comp_line_route.leaving_room_for_the_tune`): on the pickup head's bar 3 beat 2
+        # the comping shape moved below the held `F4`, so the melody step after it is no
+        # longer the *same* shape re-struck - it states its voices in full rather than
+        # reading as `repeated`.
+        self.assertEqual(named, 1348, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
         # measured over this sweep, **1475** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
@@ -556,7 +603,15 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # twice over. What it becomes (`melody=False` plus a thumb line) states the same
         # three voices with the thumb below them, so this sweep's *clause* coverage is
         # unchanged: what went is two configs that arranged what other rows already did.
-        self.assertEqual(comping, 1228, "the number of comping lines naming a voice moved")
+        #
+        # And **-1** for the pickup bar's invented beat. A figure longer than a bar now
+        # begins on the form's first complete bar (`grid.Rhythm.at`), and a bar before it
+        # takes the tune's own onsets in **both** layers - so the bass no longer walks a
+        # felt beat inside `synthetic_pickup_cut`'s one-quarter anacrusis, which was a
+        # comping step in a bar the form has not started in. The chord layer's own half
+        # of that rule is inert on the corpus, because every committed anacrusis is
+        # without a `<harmony>`; the thumb's half is not, and this is it.
+        self.assertEqual(comping, 1227, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -768,6 +823,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_bass_alone_clause",
             "_bass_refusal_clause",
             "_bass_room_clause",
+            "_comp_line_clause",
             "_comping_clause",
             # The step's own statement when it states a degree: it is read where no other
             # branch has claimed the line, so it is witnessed by the degree column rather

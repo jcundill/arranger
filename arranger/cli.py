@@ -120,6 +120,13 @@ class ScoreMeta:
     convention the writers already use, so this object does not force a default
     into a call that deliberately omitted one. `markers` are the head's repeat and
     ending instructions; a hand-built arrangement passes none.
+
+    `first_bar_implicit` is the same convention applied to the first bar: `None`
+    means nothing said it, `False` states a whole bar, `True` an anacrusis. It is
+    threaded to all four writers, because a pickup bar is a fact about the score and
+    not about the file format - a staff that drew a short bar as a pickup when the
+    score says it is whole is the same error as a MusicXML `<measure implicit="yes">`
+    that should not be there.
     """
 
     title: str
@@ -130,6 +137,7 @@ class ScoreMeta:
     fifths: Optional[int] = None
     mode: str = ""
     markers: Sequence[Any] = ()
+    first_bar_implicit: Optional[bool] = None
 
 
 #: The `arranger head` wording. Says "of the notated bar" because three of the four
@@ -147,7 +155,11 @@ class ScoreMeta:
 HEAD_HELP = _CommonHelp(
     bars="narrow to a half-open LO-HI bar range; bounds may be negative",
     bars_per_line="bars per system on the staff",
-    fret_min=f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter)",
+    fret_min=(
+        f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter). "
+        f"The comp's own register starts one fret above it, so this flag moves the "
+        f"comp as well as the tune"
+    ),
     fret_max=(
         f"highest fret to aim for (default {NECK_FRET_MAX}; a chord with no "
         f"voicing inside the window is still played, outside it)"
@@ -168,7 +180,9 @@ HEAD_HELP = _CommonHelp(
         "default) at every written melody note, 'none', 'every-beat', or positions "
         "such as '1', '1and' (the and of 1) or 'lastand'. A list replaces the "
         "default, so '1and' is only the stab and 'melody,1and' is the harmonisation "
-        "plus the stab. A position the metre does not have is refused, not dropped"
+        "plus the stab. A position the metre does not have is refused, not dropped. "
+        "Colon-separate the bars of a longer figure ('1,3:none'), which repeats "
+        "from the form's first complete bar"
     ),
     chord_notes=(
         "how many chord notes to state: 'full' (the default) is the most the right "
@@ -185,7 +199,9 @@ HEAD_HELP = _CommonHelp(
     bass_on=(
         "when the bass attacks, comma-separated, in felt beats: 'none' (the "
         "default), 'every-beat', or positions such as '1' or '1and' (the and of "
-        "1). The melody alone is the default, so a bass line is always asked for"
+        "1). The melody alone is the default, so a bass line is always asked for. "
+        "A colon-separated cycle works here too ('1,3:none'); 'melody' is refused, "
+        "because the thumb has no written onsets of its own"
     ),
     bass_notes=(
         "what each bass attack states: 'root' (the default), 'root-5th' "
@@ -378,6 +394,10 @@ def render_and_write(
     renderer that draws the signs is handed the **written** bars instead - see
     `_as_written`. The plain `line` tab keeps the played arrangement, which is the one
     place every bar of a repeated head is still listed.
+
+    `meta.first_bar_implicit` reaches **every** writer, the two on-screen ones
+    included: whether the first bar is an anacrusis is a fact about the score, and it
+    is not one the onsets can say.
     """
     from tabgp import write_gp5
     from tabstaff import format_tab_staff, write_tab_html
@@ -413,6 +433,7 @@ def render_and_write(
                 show_melody=args.note_names,
                 show_mutes=args.mutes,
                 markers=written_markers,
+                first_bar_implicit=meta.first_bar_implicit,
             )
         )
     else:
@@ -431,6 +452,7 @@ def render_and_write(
             show_mutes=args.mutes,
             notes=list(notes),
             markers=written_markers,
+            first_bar_implicit=meta.first_bar_implicit,
         )
         print(f"\nwrote {out_path}")
 
@@ -455,6 +477,7 @@ def render_and_write(
                 fifths=key_fifths,
                 mode=meta.mode,
                 markers=written_markers,
+                first_bar_implicit=meta.first_bar_implicit,
             )
         except ImportError as error:
             print(f"\n{error}")

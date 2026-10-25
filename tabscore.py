@@ -25,6 +25,7 @@ def score_events(
     beats_per_bar: int,
     rhythm: bool,
     beat_type: int = 4,
+    first_bar_implicit: Optional[bool] = None,
 ) -> Tuple[List[Tuple[Optional[ArrangementStep], bool, float]], float]:
     """
     The arrangement as (step, strikes, quarter_length) events, and the pickup.
@@ -55,6 +56,18 @@ def score_events(
     mark it `implicit` and close it with a thin double bar line, and what lets
     `tabgp` - whose measures are fixed-length - write the same silence as a leading
     rest, padding before the pickup notes rather than after them.
+
+    `first_bar_implicit` is what the **source** said about the first bar, and it is a
+    tri-state rather than a flag. `None` is "nothing said", so the shortfall is the only
+    evidence there is and is read as an anacrusis - every arrangement built without a
+    score. `False` is a **whole** first bar: its silence is written instead (the lead-in
+    becomes a leading rest, the trailing rest stays, the pickup is 0, so the measure adds
+    up to its signature), which is the one answer onsets cannot give, because a complete
+    first bar can still begin with three beats of rest. `True` is a stated anacrusis, and
+    its amount is still measured here: a score states *that* the bar is short, not by how
+    much, so `True` and `None` answer alike and only the writer's certainty differs. The
+    test is `is False`, never falsiness: `None` means "no opinion", the opposite of
+    "complete".
 
     It matters because the onsets are counted from zero at the first note, so the bar
     lines are not at multiples of the bar length - the first note of a Blue Train
@@ -95,11 +108,20 @@ def score_events(
     beat_in_quarters = 4.0 / float(beat_type)
     bar_length = float(beats_per_bar) * beat_in_quarters
     timed = bool(rhythm) and all(step.has_timing for step in steps)
-    placed, pickup = _placed_steps(steps, beats_per_bar, beat_type, rhythm)
+    placed, lead_in = _placed_steps(steps, beats_per_bar, beat_type, rhythm)
 
     events, first_bar, first_bar_content, first_bar_end = _build_events(
         placed, beats_per_bar, beat_in_quarters, timed
     )
+    # **A first bar the source states is complete stays complete.** Its silence is
+    # written rather than turned into an anacrusis: the lead-in becomes a rest event at
+    # the head of the bar, and the trailing rest stays where the cap put it, so the
+    # measure adds up to its signature. See `first_bar_implicit` in the docstring.
+    if first_bar_implicit is False:
+        if lead_in > 1e-9:
+            events.insert(0, (None, False, lead_in))
+        return events, 0.0
+    pickup = lead_in
     # **An incomplete first bar is an anacrusis.** Its music does not fill the bar,
     # so the first written measure is short by exactly the difference, and the
     # trailing rest that would have filled it is dropped: the bar is short by
@@ -218,7 +240,7 @@ def _placed_steps(
     beat_type: int,
     rhythm: bool,
 ) -> Tuple[List[Tuple[float, ArrangementStep]], float]:
-    """Each step's absolute onset, sorted, and how long the first bar is as a pickup.
+    """Each step's absolute onset, sorted, and the first bar's lead-in.
 
     The onset is the bar's downbeat plus the beat within the bar, with signed bars so
     a pickup in a negative bar sorts before bar 0 with no special case - exactly what
@@ -226,14 +248,15 @@ def _placed_steps(
     steps fall back to the uniform one-chord-per-beat grid the other two renderers
     also use.
 
-    The pickup is how far the first note sits past the bar line **before** it, which
+    The **lead-in** is how far the first note sits past the bar line before it, which
     is why it is a modulo of the bar length: the onsets are counted from zero at the
     first note, so the bar lines are not at multiples of the bar length, and this
     offset is what recovers the real metre.
 
     That answers only the silence *before* the first note. `score_events` extends it
-    with a first bar that stops early - the silence *after* the last note - which is
-    why this one is returned rather than written straight into the events.
+    with a first bar that stops early - the silence *after* the last note - and decides
+    from `first_bar_implicit` whether the lead-in is a pickup or a rest inside a whole
+    bar, which is why it is returned rather than written straight into the events.
     """
     beat_in_quarters = 4.0 / float(beat_type)
     if rhythm and all(step.has_timing for step in steps):
@@ -244,8 +267,8 @@ def _placed_steps(
     else:
         placed = [(float(index), step) for index, step in enumerate(steps)]
     placed.sort(key=lambda item: item[0])
-    pickup = (placed[0][0] % beats_per_bar) * beat_in_quarters
-    return placed, pickup
+    lead_in = (placed[0][0] % beats_per_bar) * beat_in_quarters
+    return placed, lead_in
 
 
 def _group_span(

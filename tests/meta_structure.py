@@ -125,9 +125,13 @@ BUDGETS: Dict[str, Budget] = {
     # the metre's three facts cannot express (a sparse `1,3` is not a grouping).
     # Deliberate rather than an accident of growth - the metre's own three are one
     # grouping already, and the rhythm is a fourth fact rather than a second spelling
-    # of one. The body did not grow past its length budget: the pitch emission moved
-    # out to `_walk_notes`.
-    "arranger/bass.py": Budget(10, 78, 7),
+    # of one. The eighth is that rhythm's **origin** (`first_full_bar`): where a
+    # figure longer than a bar begins, which is a fact about the form rather than
+    # about the metre, so it cannot be folded into the rhythm value either - a caller
+    # spells the figure and the score states where it starts. The body did not grow
+    # past its length budget: the pitch emission moved out to `_walk_notes`, and the
+    # onsets to `_placed_onsets`.
+    "arranger/bass.py": Budget(10, 78, 8),
     "arranger/bass_merge.py": Budget(6, 66, 3),
     "arranger/chords.py": Budget(17, 46, 5),
     "arranger/cli.py": Budget(13, 131, 11),
@@ -148,8 +152,13 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/melody_alone.py": Budget(6, 74, 14),
     # The axes are one read of the request and two `settle_input_fact` calls, so the
-    # module ceiling is `resolve_policies`'s eleven rather than the reconciler's.
-    "arranger/resolution.py": Budget(7, 111, 11),
+    # module ceiling is `resolve_policies`'s twelve rather than the reconciler's. The
+    # twelfth is the form's first full bar (`first_full_bar`), which the walk needs
+    # because a figure longer than a bar has to begin where the form does; it is not
+    # one of the axes, and it is not folded into `timings` because a score's pickup
+    # says it and no timing does. `_first_full_bar` keeps the *reconciler* at its
+    # complexity budget rather than growing it by a branch.
+    "arranger/resolution.py": Budget(7, 111, 12),
     # `slot_state`'s grid branches left with the axis, so the ceiling is what it
     # measures rather than what it measured.
     "arranger/slot_plan.py": Budget(6, 78, 5),
@@ -162,6 +171,9 @@ BUDGETS: Dict[str, Budget] = {
     # hand held - split out of `routes`: two readers of the value types above it.
     # Measured as it stood when it moved.
     "arranger/step_history.py": Budget(3, 17, 1),
+    # The comp line's route adapter: what the line is told about a slot. Split out of
+    # `routes`, measured as it stood when it moved.
+    "arranger/comp_line_route.py": Budget(6, 35, 6),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The dispatch table: eleven small functions, each an entry's claim or emit, so
     # the ceiling is `dispatch_step`'s four branches rather than any one route. The
@@ -179,13 +191,18 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(11, 64, 2),
     # The step-history readers left for `step_history`, so the ceiling is what this
-    # module measures rather than what it measured. The parameter ceiling moves with
-    # it: the widest signature here takes six, and a ceiling of twelve was permission
-    # for a function twice the size of anything in the file.
-    "arranger/routes.py": Budget(6, 93, 6),
+    # module measures rather than what it measured. The parameter ceiling is
+    # `comping_step`'s seven: the six facts of a slot plus the metre's count, which the
+    # comp line needs and the context cannot hold. The branch ceiling is
+    # `_comping_choice`'s seven, which is one per narrowing and per value it threads.
+    "arranger/routes.py": Budget(7, 101, 7),
     "arranger/slots.py": Budget(9, 136, 12),
     # The facade's `arrange_progression` loses the same five (16 -> 10).
     "arranger/steps.py": Budget(1, 54, 10),
+    # The comp line: the band, the walk, the approach, the opening and the fill, each a
+    # small pure function over pitch lists. Measured rather than a policy ceiling now
+    # that the route calls it: `chosen_top` branches once per rule it dispatches to.
+    "arranger/comp_line.py": Budget(10, 37, 5),
     "arranger/texture.py": Budget(11, 57, 6),
     # The instrument: tuning, the fretboard, the neck limits and the sentinels. The
     # value types (`Voicing`, `ArrangementStep`, `Palette`) and the tab-cell
@@ -196,12 +213,20 @@ BUDGETS: Dict[str, Budget] = {
     # (13 -> 8): the metre is one value, `time_signature=`, whose grouping is the one
     # fact of it a caller may set. `head_cli`'s branches live in `_print_metre_notes`,
     # and the merge block in `_head_slots`, so neither raises this budget.
-    "headxml.py": Budget(17, 113, 8),
+    #
+    # `first_bar_implicit` is the one fact each of the five below grew by, and it grew
+    # in all five for the same reason: whether bar 1 is an anacrusis is a **score**
+    # fact, not one a writer can infer, so `headxml` hands it to `ScoreMeta`, the CLI
+    # hands it to all four writers, and `tabscore` owns the rule the writers now share
+    # (a stated whole bar writes its silence as rests instead of becoming a pickup).
+    # One parameter on each writer's keyword surface and the placement's branch, rather
+    # than a second spelling of a fact the score already stated.
+    "headxml.py": Budget(17, 117, 8),
     "grip_chart.py": Budget(14, 84, 5),
-    "tabgp.py": Budget(19, 151, 13),
-    "tabscore.py": Budget(10, 98, 5),
-    "tabstaff.py": Budget(17, 195, 13),
-    "tabxml.py": Budget(12, 176, 12),
+    "tabgp.py": Budget(19, 151, 14),
+    "tabscore.py": Budget(10, 114, 5),
+    "tabstaff.py": Budget(18, 204, 14),
+    "tabxml.py": Budget(12, 176, 13),
 }
 
 # Importing a `_`-prefixed name from a sibling is the coupling this test exists to
@@ -238,6 +263,7 @@ TEST_SEAMS: Set[str] = {
     # Bass rules tests read the no-room reason.
     "test_bass -> arranger.bass_rules._comping_no_room_reason",
     # Comping tests read the grip generators and palette directly.
+    "test_comping -> arranger.grips._comping_collapse_key",
     "test_comping -> arranger.grips._comping_palette",
     "test_comping -> arranger.grips._search_comping_voicings",
     # The generated-grips witness reads the drop-2 palette and guide tones.

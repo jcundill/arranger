@@ -43,6 +43,20 @@ def frets_in_span(
             yield (first,) + tail
 
 
+def frets_in_band(frets: Iterable[int], band: Tuple[int, int]) -> bool:
+    """True when every sounded fret lies inside `band`, inclusive.
+
+    **Every fret, not the average.** A shape whose average sits inside the band while
+    one fret reaches above it is not a shape the band holds: `Cmaj7`'s `x-7-x-9-12-x`
+    (avg 9.3, up to fret 12) would otherwise be handed to the walk in bar 3, jumping
+    the hand to fret 12 for one beat of a bar otherwise at frets 4-9
+    (`docs/history/comp-line.md`). The banded palette's collapse reads this same
+    predicate, so the shape it keeps per top tone is one the line can actually walk.
+    """
+    lo, hi = band
+    return all(lo <= fret <= hi for fret in frets)
+
+
 @dataclass(frozen=True)
 class Placement:
     """
@@ -84,6 +98,55 @@ class Placement:
 _SUPPORTED_STRING_SETS = frozenset(supported_string_sets())
 
 
+def sounds_distinct_pitches(midis: List[int]) -> bool:
+    """
+    True when no two sounding strings carry the same pitch - "a unison is not a voice".
+
+    A shape claims one voice per sounding string, and two strings stopped for the *same*
+    note state the chord with one voice fewer than it claims while the pair beats against
+    itself. It is reachable only because the neck's intervals are not all fourths: the G
+    and B strings are a third apart, so a top tone on the B string can be repeated four
+    frets up the G string - `x-x-8-8-4-x`, a Cm7 shell that sounds `Eb4` twice. The
+    measurement, and what the rule costs, are in `docs/engine.md` §"`get_comping_voicings`:
+    a chord with no melody on top".
+
+    The rule is stated over the **pitch**, never the pitch class: a root doubled an octave
+    down is a second voice and a legitimate one, and a family's `lowest_pc_allowed` is a
+    claim about which *degree* is in the bass rather than about how many strings carry it.
+    `grips._duo_offsets` states the same rule from the guide-tone side, where it is a
+    choice between two intervals; this is it stated where every producer meets it - the
+    search and the layouts through `candidate`, and the melody-free shell builder, which
+    is the one shape that does not go through `candidate`.
+    """
+    return len(set(midis)) == len(midis)
+
+
+def _states_the_family_claim(
+    midis: List[int], placement: Placement, allowed: Optional[FrozenSet[int]]
+) -> bool:
+    """
+    The pitch-class half of `candidate`'s rules: the family's claim, and its bass.
+
+    `required` is the family's claim about which of the chord's tones have to be present;
+    `allowed` is what may sound at all, and None when the family makes no claim about the
+    chord's tones - a template-laid shape, whose template *is* the claim, and the interval
+    family, which may sound a key tone under a passing note; `lowest_pc_allowed` is the
+    claim about the **bottom** voice, for the families whose shape is defined by its bass
+    (a 6-4-3-2 states the chord's function, so its lowest note is a root or a 5th).
+
+    Split out so `candidate` reads as the sequence of rules it enforces rather than as
+    their text. `midis` is ascending, so `midis[0]` is the bottom voice.
+    """
+    pcs = {midi % 12 for midi in midis}
+    if not placement.required <= pcs:
+        return False
+    if allowed is not None and not pcs <= allowed:
+        return False
+    # The bass claim, where the family makes one: the shape is defined by its bottom voice.
+    lowest = placement.lowest_pc_allowed
+    return lowest is None or midis[0] % 12 in lowest
+
+
 def candidate(
     placement: Placement, frets: List[int], allowed: Optional[FrozenSet[int]]
 ) -> Optional[Voicing]:
@@ -91,8 +154,9 @@ def candidate(
     The one place a set of frets becomes a candidate voicing, or None when it is not one.
 
     Every rule a candidate has to satisfy is here, so no family can be placed by a path that
-    skips one: the melody sounds and is the **highest** sounding note, every fret is on the
-    board, the fret span is within `GRIP_MAX_SPAN[placement.grip]`, the family's tone claim
+    skips one: the melody sounds and is the **highest** sounding note, no two sounding
+    strings carry the same pitch (`sounds_distinct_pitches`), every fret is on the board,
+    the fret span is within `GRIP_MAX_SPAN[placement.grip]`, the family's tone claim
     (`required`) and bass claim (`lowest_pc_allowed`) hold, nothing outside `allowed`
     sounds - `allowed` being None when the family makes no claim about the chord's tones at
     all, which is what a template-laid shape is: the template *is* the claim, and the
@@ -133,15 +197,11 @@ def candidate(
     )
     if midis[-1] != GuitarFretboard.fret_to_midi(strings[0], top_fret):
         return None
-    pcs = {midi % 12 for midi in midis}
-    if not placement.required <= pcs:
+    # A unison is not a voice - the G and B strings are a third apart, so one pitch can be
+    # stopped twice down the shape.
+    if not sounds_distinct_pitches(midis):
         return None
-    if allowed is not None and not pcs <= allowed:
-        return None
-    if (
-        placement.lowest_pc_allowed is not None
-        and midis[0] % 12 not in placement.lowest_pc_allowed
-    ):
+    if not _states_the_family_claim(midis, placement, allowed):
         return None
     return Voicing(
         frets=list(frets),

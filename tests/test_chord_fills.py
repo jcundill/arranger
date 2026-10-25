@@ -318,7 +318,13 @@ class TestAFillInARealHead(unittest.TestCase):
             beats_per_bar=head.beats_per_bar,
             beat_type=head.beat_type,
         )
-        self.assertIn("4", "".join(staff), "the fill's fret is missing from the staff")
+        # Two fill columns, `x-x-7-5-8-x` and `x-9-7-5-x-x`. Nothing else sounds in this
+        # section - the tune is silent across the two bars and no chord position is asked
+        # for - so the staff's digits are exactly the frets of those two shapes.
+        frets = sorted({glyph for glyph in "".join(staff) if glyph.isdigit()})
+        self.assertEqual(frets, ["5", "7", "8", "9"])
+
+
 
 
 if __name__ == "__main__":

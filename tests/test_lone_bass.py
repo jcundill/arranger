@@ -159,10 +159,12 @@ class TestAMelodylessRequest(unittest.TestCase):
 
     The chord's default is "the written onsets", and those are a fact about the
     **score** rather than about who plays it: a request that hands the tune to somebody
-    else still comps the tune's own rhythm, which is how `bass_on="melody"` has always
-    read them. Every felt beat is the metre's reading, and it is the one a caller asks
-    for by naming it - `chord_on="every-beat"` - rather than the answer the engine
-    substitutes for a request it thinks is incomplete.
+    else still comps the tune's own rhythm. Every felt beat is the metre's reading, and
+    it is the one a caller asks for by naming it - `chord_on="every-beat"` - rather than
+    the answer the engine substitutes for a request it thinks is incomplete.
+
+    The bass layer has no such reading: `bass_on="melody"` is **refused**, because the
+    thumb line has no written onsets of its own (`options._refuse_bass_melody`).
     """
 
     def test_the_resolved_request_keeps_the_tune_s_rhythm(self):

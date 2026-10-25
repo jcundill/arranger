@@ -14,6 +14,7 @@ from typing import Container, List, Optional, Tuple
 
 from musthe import Note
 
+from . import comp_line_route as _comp_line_route
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass, next_resolution_melody
@@ -28,6 +29,7 @@ from .decisions import (
     melody_is_ringing,
     palette_facts,
     select_step_voicing,
+    tie_ended_by_a_stab,
 )
 from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
@@ -304,6 +306,7 @@ def _comping_candidates(
     *,
     notes: int,
     bass_voice: bool,
+    band: Optional[Tuple[int, int]],
 ) -> List[Voicing]:
     """The melody-free shapes a comping step may state, in a playable position.
 
@@ -315,9 +318,19 @@ def _comping_candidates(
     the melody part has no note to sing there, and the arity already excludes it -
     `derived_arity` counts the melody only when the selection takes it. `comping_arity`,
     not `derived_arity`: this position has no note of the tune for the soprano string
-    to carry - the tune belongs to the horn or is held across this beat - so the string
-    is free for the chord part. Reserving it anyway costs the chord its 5th, which is
-    what this arity avoids.
+    to carry - the tune belongs to the horn or is held across this beat - so the chord
+    part is not the melody's voice. Reserving the string anyway costs the chord its 5th,
+    which is what this arity avoids.
+
+    **A different fact is the tune's register, and the chord does not go above it.** A
+    note the tune is holding is not on this shape's strings, so the string really is
+    free - but a shape whose top *is* that pitch restrikes it, and a stab that takes the
+    string under a tie cuts the note. `comp_line_route.leaving_room_for_the_tune` narrows
+    the palette on the way out: a narrowing, and the ranking sees the result unchanged.
+
+    `band` is the comp's register, decided once by `comp_line_route.line_target` and
+    shared by the generator and the line so the palette and the narrowing can never
+    disagree about whether the line runs at all.
 
     **`bass_voice`** is whether this selection is the bass voice and nothing else,
     which arity cannot say: an inner voice and the bass both ask for one note, and only
@@ -325,13 +338,19 @@ def _comping_candidates(
     resolved parts rather than an extra flag, so the two spellings of one request
     cannot disagree.
     """
-    return _grips.get_comping_voicings_for(_grips.CompingRequest(
+    candidates = _grips.get_comping_voicings_for(_grips.CompingRequest(
         chord_name=harmony.name,
         fret_min=context.neck.fret_min,
         fret_max=context.neck.fret_max,
         notes=notes,
         bass_voice=bass_voice,
+        band=band,
     ))
+    return _comp_line_route.leaving_room_for_the_tune(
+        candidates,
+        context.harmony.melody_note,
+        melody_voiced=context.arrangement.melody_voiced,
+    )
 
 
 def _comping_choice(
@@ -340,7 +359,10 @@ def _comping_choice(
     context: SlotContext,
     harmony: _CompingHarmony,
     slot: Slot,
-) -> Tuple[Voicing, Palette]:
+    *,
+    beats_per_bar: int,
+    band: Optional[Tuple[int, int]],
+) -> Tuple[Voicing, Palette, Optional[str]]:
     """The comping shape the selector prefers, and the palette it chose from.
 
     The root is read once for the bass-function tie-break. `get_comping_voicings`
@@ -348,12 +370,14 @@ def _comping_choice(
     None - the check is read from the same place the generator read it rather than
     re-derived, so the two cannot disagree.
 
-    **The requested bass note narrows the palette here**, exactly as it does on the
-    melody-bearing route: a comping shape the thumb cannot reach that beat's note under is
-    not offered, so the chord part moves instead of the line losing a note. The palette
-    that comes back therefore records the shape the ranking preferred *before* the narrow
-    (`Palette.dropped_for_bass`) - a comping step states its voices through
-    `_comping_clause`, but *why this shape* is a palette fact like any other.
+    **Two narrowings, in this order: the bass, then the line.** The requested bass note
+    runs first, exactly as on the melody-bearing route - a comping shape the thumb
+    cannot reach that beat's note under is not offered, so the chord part moves instead
+    of the line losing a note. The comp line then narrows what survives to the top tone
+    it chose. Each records the shape it gave up against the palette it received
+    (`Palette.dropped_for_bass`, `Palette.dropped_for_line`), because a comping step
+    states its voices through `_comping_clause` while *why this shape* is a palette fact
+    like any other.
     """
     _canonical, root_pc, _tones = _grips.chord_context(harmony.name)
     # The last *sounding* shape: a silent position between here and the previous chord
@@ -384,7 +408,6 @@ def _comping_choice(
             else None
         ),
     )
-    chosen = select_step_voicing(candidates, criteria) or candidates[0]
     offered = candidates
     candidates = leaving_room_for_the_bass(
         offered, slot.bass, arrangements,
@@ -394,12 +417,36 @@ def _comping_choice(
             slot.bass_only, chord_attack=context.state.chord_attack, holds=False
         ),
     )
-    chosen = select_step_voicing(candidates, criteria) or candidates[0]
-    palette = palette_facts(candidates, chosen, criteria)
-    dropped = dropped_for_the_bass(offered, candidates, chosen, criteria)
-    if dropped is not None:
-        palette = replace(palette, dropped_for_bass=dropped)
-    return chosen, palette
+    ranked = select_step_voicing(candidates, criteria) or candidates[0]
+    palette = palette_facts(candidates, ranked, criteria)
+    dropped_bass = dropped_for_the_bass(offered, candidates, ranked, criteria)
+    if dropped_bass is not None:
+        palette = replace(palette, dropped_for_bass=dropped_bass)
+    narrowed, top_role = _comp_line_route.line_narrowed(
+        arrangements, candidates, context, slot,
+        beats_per_bar=beats_per_bar, band=band,
+    )
+    chosen = select_step_voicing(narrowed, criteria) or narrowed[0]
+    palette = _apply_line_narrowing(palette, candidates, ranked, chosen, top_role)
+    return chosen, palette, top_role
+
+
+def _apply_line_narrowing(
+    palette: Palette,
+    candidates: List[Voicing],
+    ranked: Voicing,
+    chosen: Voicing,
+    top_role: Optional[str],
+) -> Palette:
+    """Record the shape the comp line gave up, but only when it actually moved.
+
+    When the line held the previous top there is no move - `top_role` is None - so
+    `dropped_for_line` would have no honest sentence to back it: a hold is not
+    re-explained, and claiming a walk or an approach over a static top would be false.
+    """
+    if chosen is not ranked and top_role is not None:
+        return replace(palette, dropped_for_line=ranked)
+    return palette
 
 
 def _emit_comping_step(
@@ -409,6 +456,7 @@ def _emit_comping_step(
     harmony: _CompingHarmony,
     chosen: Voicing,
     palette: Palette,
+    top_role: Optional[str] = None,
 ) -> None:
     """Append the comping shape, then merge the thumb into it.
 
@@ -444,6 +492,16 @@ def _emit_comping_step(
         # one already ringing: a comp on `--chord-on every-beat` is four attacks a bar,
         # and the renderers would otherwise fold beats 2..n into one long chord.
         chord_attack=context.state.chord_attack,
+        # A chord attack inside the tune's tie takes the left hand, so the tune's note
+        # is **released** here rather than held: the engine has a finger budget and no
+        # per-finger assignment, so it cannot claim the finger stays down. Nothing
+        # restrikes the note either - `leaving_room_for_the_tune` kept this shape below
+        # it. See `decisions.tie_ended_by_a_stab`.
+        melody_released=tie_ended_by_a_stab(
+            arrangements,
+            context.harmony.note_str,
+            attacked=context.state.chord_attack,
+        ),
         # What the substitution changed about the *harmony*, reported the
         # way the melody route reports it: `chord` stays the written
         # symbol, and these three say what was actually stated under the
@@ -451,6 +509,7 @@ def _emit_comping_step(
         non_chord_tone=harmony.is_non_chord_tone,
         strategy=harmony.strategy,
         harmonized_as=harmony.harmonized_as,
+        top_role=top_role,
     ))
     attach_bass(arrangements[-1], slot.bass, arrangements)
 
@@ -511,6 +570,7 @@ def comping_step(
     chord_type: str,
     melody_onsets: Optional[Container[int]],
     parts: Tuple[str, ...],
+    beats_per_bar: int,
 ) -> bool:
     """The comping route: the guitar harmonises, somebody else sings.
 
@@ -534,6 +594,11 @@ def comping_step(
     so the caller should fall through to the melody-bearing route: the chord of
     the tune is still owed to the band, and the guitar playing the tune is a worse
     answer than a thin shape and a better one than silence.
+
+    **`beats_per_bar` is the metre's count**, and it is here because the comp line needs
+    one thing the context cannot hold: whether this slot's own duration reaches the
+    barline, which is what makes it the last position before a harmony change. The
+    metre's other facts stay on the plan - this is a number rather than a `Rhythm`.
     """
     # An `NC` bar has no chord, so there is no guide tone to state and
     # nothing at all for the guitar to play under the horn's line. That is
@@ -544,10 +609,7 @@ def comping_step(
     # state it twice or hand the horn's line back to the guitarist. The guitar
     # is silent on this bar, and the horn is not - so the line says which.
     if chord_type == NO_CHORD or context.harmony.name == NO_CHORD:
-        rest_step(
-            arrangements, slot, context,
-            sings_here=False, silence=SILENCE_NC_COMPING,
-        )
+        rest_step(arrangements, slot, context, sings_here=False, silence=SILENCE_NC_COMPING)
         return True
     # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
     harmony = _comping_harmony(
@@ -565,10 +627,12 @@ def comping_step(
     notes = 1 if standalone_bass else comping_arity(
         context.arrangement.texture, parts, context.arrangement.has_thumb
     )
+    band = _comp_line_route.line_target(context, notes, standalone_bass)
     candidates = _comping_candidates(
         context, harmony,
         notes=notes,
         bass_voice=standalone_bass,
+        band=band,
     )
     if not candidates:
         if context.harmony.melody_note is None:
@@ -577,10 +641,7 @@ def comping_step(
             # the tune cannot be stated here at all. Reported as the hole it is, and
             # the position emitted silent; the next grid position still gets its
             # chance.
-            rest_step(
-                arrangements, slot, context,
-                sings_here=False, silence=SILENCE_NO_SHAPE,
-            )
+            rest_step(arrangements, slot, context, sings_here=False, silence=SILENCE_NO_SHAPE)
             return True
         # No guide-tone shape in a playable position. The chord of the tune is still
         # owed to the band, so fall through to the ordinary melody-bearing route
@@ -592,6 +653,9 @@ def comping_step(
     # cannot reach that beat's note under is not offered, so the chord part moves instead
     # of the line losing a note. A narrowing of what the axis offered, never a widening -
     # see `decisions.leaving_room_for_the_bass`.
-    chosen, palette = _comping_choice(arrangements, candidates, context, harmony, slot)
-    _emit_comping_step(arrangements, slot, context, harmony, chosen, palette)
+    chosen, palette, top_role = _comping_choice(
+        arrangements, candidates, context, harmony, slot,
+        beats_per_bar=beats_per_bar, band=band,
+    )
+    _emit_comping_step(arrangements, slot, context, harmony, chosen, palette, top_role=top_role)
     return True

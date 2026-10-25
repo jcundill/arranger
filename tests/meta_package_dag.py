@@ -53,6 +53,7 @@ ORDER = [
     "grouping",     # the metre's third fact: which denominator units are felt as a beat
     "grid",         # the request's rhythm: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
+    "comp_line",    # the comp line: home band and the walk/approach/opening/fill rules
     "bass_rules",   # the bass vocabulary, capacities and refusals
     "bass_place",   # the thumb's octave and string: the cost and `place_bass`
     "bass",         # the walking-bass thumb line
@@ -61,6 +62,7 @@ ORDER = [
     "resolution",   # what the caller asked for, resolved once: the six resolvers
     "decisions",    # the decisions both step loops share
     "step_history", # reading the arrangement's own history: the last sounding step, its shape
+    "comp_line_route", # what the comp line is told about a slot: band, state, fill target
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
     "slot_plan",    # one slot's plan: `slot_state` and the value it returns

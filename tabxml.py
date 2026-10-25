@@ -394,13 +394,13 @@ def _build_part(
 
     def write_event(step: Optional[ArrangementStep], length: float) -> None:
         """
-        Writes one event, cutting it at a bar line and tying the halves.
+        Writes one event, cutting it at a bar line and **tying only what sounds**.
 
-        A note cannot cross a bar line in MusicXML, and a measure holding more than
-        its time signature is not a measure. So an event that runs across one becomes
-        two notes tied together - which is what an engraver does too, and it keeps
-        the written rhythm: a transcription whose phrasing disagrees with the metre
-        comes out as the player heard it rather than silently straightened.
+        A note cannot cross a bar line, and a measure holding more than its time
+        signature is not a measure, so an event that runs across one becomes two
+        pieces: tied when it sounds, which keeps the written rhythm, and **cut but
+        not tied when it is a rest** - `<tie>` inside a `<rest>` is not legal, and a
+        silence continues no pitch.
         """
         nonlocal offset
         from music21 import tie as tie_module
@@ -429,7 +429,7 @@ def _build_part(
 
         for index, (where, at, piece) in enumerate(pieces):
             built = _build_note(step, piece, state, len(pieces) > 1)
-            if len(pieces) > 1:
+            if len(pieces) > 1 and not built.isRest:
                 built.tie = tie_module.Tie(
                     "start" if index == 0
                     else "stop" if index == len(pieces) - 1
@@ -931,6 +931,7 @@ def format_musicxml(
     collapse: bool = True,
     show_chords: bool = True,
     markers: Optional[Sequence[Any]] = None,
+    first_bar_implicit: Optional[bool] = None,
 ) -> str:
     """
     Renders a whole progression as a MusicXML (score-partwise) document.
@@ -968,6 +969,11 @@ def format_musicxml(
             `None` for none. Each carries the **absolute** bar it sits on, so the signs
             land on the measures a repeated head expanded to. Written as MusicXML
             `<barline>` `<repeat>` and `<ending>` elements.
+        first_bar_implicit: what the source said about the first bar, or `None` when
+            nothing did. `False` is a **whole** first bar, so its silence is written as
+            a rest inside it and the measure comes out full; `True` and `None` both let
+            the shortfall be read as an anacrusis. See `tabscore.score_events`, which
+            owns the rule - this writer only passes the answer on.
 
     Returns:
         A complete MusicXML document as a string, or "" for no steps. Pure: nothing
@@ -996,7 +1002,8 @@ def format_musicxml(
     # because a substitution is a property of the *step* - it changes the chord name
     # printed above the shape, not the pitches of the shape.
     events, pickup = score_events(
-        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type,
+        first_bar_implicit,
     )
     if not any(step is not None for step, _, _ in events):
         return ""

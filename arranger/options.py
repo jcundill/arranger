@@ -130,7 +130,9 @@ class Request:
     #: How many chord notes to state, `full` being "the most that fits" and
     #: `targets` "the most that fits on a strong beat, thinner between".
     chord_notes: str = CHORD_NOTES_FULL
-    #: When the bass attacks. `none` is no bass line.
+    #: When the bass attacks: `none`, a position such as `1,3`, or `every-beat` for
+    #: the metre's pulses. `melody` is refused - the thumb line has no written onsets
+    #: of its own (`options._refuse_bass_melody`).
     bass_on: str = RHYTHM_NONE
     #: What each bass note is: the root, root and fifth, or a walk.
     bass_notes: str = BASS_NOTES_ROOT
@@ -191,11 +193,11 @@ def resolve_request(
     answers a different one.
 
     **`chord_on="melody"` reads the same whether or not this guitar sings the tune.**
-    The written onsets are a fact about the *score* - which is how `bass_on="melody"`
-    has always read them - so a comping selection states the chord on the tune's own
-    rhythm rather than being handed the metre's reading in its place. A caller who
-    wants every felt beat asks for it: `chord_on="every-beat"` is the same request
-    whichever part is the guitar's.
+    The written onsets are a fact about the *score*, so a comping selection states the
+    chord on the tune's own rhythm rather than being handed the metre's reading in its
+    place. A caller who wants every felt beat asks for it: `chord_on="every-beat"` is
+    the same request whichever part is the guitar's. `bass_on="melody"` is refused for
+    the reason `_refuse_bass_melody` gives: the thumb line has no written onsets.
     """
     chord_rhythm = parse_rhythm(request.chord_on, beats_per_bar, grouping)
     bass_rhythm = parse_rhythm(request.bass_on, beats_per_bar, grouping)
@@ -332,9 +334,29 @@ def _request_parts(melody: bool, has_chord: bool, has_bass: bool) -> Tuple[str, 
 
 def _refuse(resolved: ResolvedRequest) -> None:
     """Every request the engine cannot honour, refused before any voicing work."""
+    _refuse_bass_melody(resolved)
     _refuse_melody(resolved)
     _refuse_content(resolved)
     _refuse_capacity(resolved)
+
+
+def _refuse_bass_melody(resolved: ResolvedRequest) -> None:
+    """`bass-on=melody` is not a request the thumb can answer.
+
+    `melody` names the tune's **written onsets**, and the bass layer has never had
+    them: the thumb under a tune walks the metre's pulses, so the spelling was a
+    synonym for `every-beat` that read like a different question. Refused rather than
+    kept as that synonym, because the one reading a caller would expect - the tune's
+    own rhythm - is the one the line cannot follow: the thumb is *under* the tune, and
+    a bar where the tune is silent is a bar it still has to mark.
+    """
+    if not any(bar.melody for bar in resolved.bass_rhythm.bars):
+        return
+    raise ValueError(
+        "bass-on='melody' is not a request the bass can answer: the thumb line has "
+        "no written onsets of its own - name the positions it should walk (such as "
+        "'1,3'), or ask for the metre's pulses with 'every-beat'"
+    )
 
 
 def _refuse_melody(resolved: ResolvedRequest) -> None:
@@ -447,6 +469,18 @@ class ArrangeOptions:
     # This is the third time list invariance in a signature has cost this library
     # something, and the fourth would not have been a surprise.
     timings: Optional[Sequence[Timing]] = None
+    # The bar a requested rhythm's **first segment lands on**: the form's first
+    # complete bar. `None` is "this figure was placed on no form" - a hand-built
+    # progression, whose first named bar is its own origin - which `resolution` reads
+    # off the timings. A bar before it is not a bar of the figure, so a pickup takes
+    # the tune's own onsets (`grid.Rhythm.at`).
+    #
+    # It sits here rather than on the rhythm because it is a fact about **what is being
+    # arranged**, like the timings: the same `--chord-on 1,3:none` lands differently on a
+    # form that opens with an anacrusis, and the score is what says so. There is no CLI
+    # flag for the same reason `grouping` has none: `head` reads it from the file, and a
+    # progression written in code states it here.
+    first_full_bar: Optional[int] = None
     # Per-progression-index bass pitch class: the note a written slash chord asks
     # for (`A-/G` wants G). It narrows *which candidates are considered*, and the
     # engine's own rule then decides within that narrowed set, so the two selection

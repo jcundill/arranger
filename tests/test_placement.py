@@ -37,6 +37,7 @@ from arranger.grip_place import (
     Placement,
     _searched_shape,
     candidate,
+    frets_in_band,
     frets_in_span,
     place_shape,
     place_template,
@@ -167,6 +168,33 @@ class TestTheSearchIsExhaustive(unittest.TestCase):
     def test_an_empty_string_set_yields_the_empty_shape(self):
         """The recursion's base case, which a one-voice shape would reach."""
         self.assertEqual(list(frets_in_span((), 0, 5, 5)), [()])
+
+
+class TestFretsInBand(unittest.TestCase):
+    """One band test for the two readers that narrow to a register.
+
+    `comp_line.LineShape` and `grips._comping_collapse_key` both ask "is this shape
+    inside the comp's home band?", and a divergence between them is a shape the
+    palette keeps and the line then refuses. `frets_in_band` is the one answer.
+    """
+
+    def test_the_edges_are_inside(self):
+        """A band is inclusive: a fret on either boundary belongs to it."""
+        self.assertTrue(frets_in_band((3, 5, 10), (3, 10)))
+
+    def test_one_fret_outside_is_outside(self):
+        """The predicate is over every fret, so a reach outside ends the claim."""
+        self.assertFalse(frets_in_band((3, 5, 10), (3, 9)))
+        self.assertFalse(frets_in_band((2, 5, 10), (3, 10)))
+
+    def test_a_shape_whose_average_is_inside_but_a_fret_is_not_is_outside(self):
+        """The measured case: an average test would hand this shape to the walk.
+
+        `Cmaj7`'s `x-7-x-9-12-x` has an average of 9.3, inside the 3-10 band, while
+        its top voice is at fret 12 - a hand that would jump five frets for one beat
+        (`docs/history/comp-line.md`).
+        """
+        self.assertFalse(frets_in_band((7, 9, 12), (3, 10)))
 
 
 def _requests(
@@ -404,6 +432,29 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         # The same frets read as a two-voice shape sound the high E and the G, which is
         # `{3, 5}` - a set no table entry offers.
         self.assertIsNone(candidate(replace(placement, voices=2), frets, None))
+
+    def test_two_strings_stopped_for_one_pitch_are_not_two_voices(self):
+        """A unison is refused wherever a fret set becomes a candidate.
+
+        `x-x-8-8-4-x` is a Cm7 shell: the G string's 8 and the B string's 4 are both
+        `Eb4`, so the shape states two pitches rather than the three it claims, and the
+        pair beats against itself. The G and B strings are a third apart rather than a
+        fourth, which is the only reason the neck can do this at all - and it is why the
+        rule has to be stated, since no other interval reaches a unison inside a span.
+
+        The rule is over the **pitch**, not the pitch class: the second shape sounds
+        `Bb3`, `D4` and `Eb4`, and a root doubled an octave down is a voice like any other.
+        """
+        placement = Placement(
+            grip="shell",
+            strings=(4, 3, 2),
+            melody_midi=Note("Eb4").midi_note(),
+            top_fret=GuitarFretboard.note_to_fret(4, Note("Eb4")),
+            required=frozenset(),
+        )
+        # D 8 (`Bb3`), G 8 (`Eb4`), B 4 (`Eb4`) - the melody's own pitch, twice.
+        self.assertIsNone(candidate(placement, [-1, -1, 8, 8, 4, -1], None))
+        self.assertIsNotNone(candidate(placement, [-1, -1, 8, 7, 4, -1], None))
 
     def test_a_voice_below_a_strings_open_pitch_refuses_the_shape(self):
         """A fret of -1 is a refusal here, not a mute - and it is reachable.

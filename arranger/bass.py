@@ -175,6 +175,9 @@ def walking_slots(
     # own felt beats - the reading every caller had before a request could name a
     # rhythm - so a sparse `--bass-on 1` walks beat 1 and nothing else.
     rhythm: Optional[Rhythm] = None,
+    # The form's first complete bar, where a figure's first segment lands. `None` is a
+    # figure placed on no form, which runs on absolute phase from bar 1.
+    first_full_bar: Optional[int] = None,
 ) -> List[Slot]:
     """
     The walking-bass slot union: the melody grid plus the walked beats.
@@ -188,6 +191,10 @@ def walking_slots(
     `rhythm` replaces that grid. A request names its own positions, so
     `--bass-on every-beat` and `--bass-on 1,3` are one spelling of "where the thumb
     sounds" and the metre fills the beats in; with no rhythm the felt beats stand.
+    `first_full_bar` is where that figure's **first segment** lands - the form's first
+    complete bar - so a figure longer than one bar begins with the form rather than
+    consuming the pickup. `None` is a figure placed on no form, which the walk runs on
+    absolute phase from bar 1 instead.
 
     **The one place the union is built**: the reason is in the module docstring, and
     it is that a path which arranged the shells but not the walk would look plausible
@@ -201,22 +208,31 @@ def walking_slots(
     degrades to one note per slot: the documented gridless case.
     """
     chords = _walked_chords(progression)
+    onsets = _placed_onsets(timings, len(progression))
+    bass_line = bass_line_for(
+        bass, chords, onsets, beats_per_bar, grouping, rhythm, first_full_bar
+    )
+    return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
 
+
+def _placed_onsets(
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    count: int,
+) -> List[Optional[Tuple[int, float]]]:
+    """The `(bar, beat)` of every slot the caller could place, and `None` where it could not.
+
+    A slot with no beat has no place on the grid, which is what the walk needs to know:
+    an onset it cannot locate is a beat it does not invent one for.
+    """
     onsets: List[Optional[Tuple[int, float]]] = []
-    for index in range(len(progression)):
+    for index in range(count):
         timing = timings[index] if timings is not None and index < len(timings) else None
         bar = timing[0] if timing is not None else None
         beat = timing[1] if timing is not None else None
-        # A slot with no beat has no place on the grid, which is what the walk needs
-        # to know: an onset it cannot locate is a beat it does not invent one for.
         onsets.append(
             (bar, float(beat)) if bar is not None and beat is not None else None
         )
-
-    bass_line = bass_line_for(
-        bass, chords, onsets, beats_per_bar, grouping, rhythm
-    )
-    return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
+    return onsets
 
 
 def _melody_in_force(
@@ -512,6 +528,7 @@ def _walked_beats(
     beats_per_bar: int,
     grouping: Optional[Sequence[int]] = None,
     rhythm: Optional[Rhythm] = None,
+    first_full_bar: Optional[int] = None,
 ) -> List[Tuple[int, float]]:
     """One beat per **requested position** in every bar the melody touches.
 
@@ -520,17 +537,30 @@ def _walked_beats(
     yields four. With no grouping every denominator unit is its own group, which is
     the reading this function had before grouping existed.
 
-    `rhythm` replaces the felt beats with the positions a request named. A sparse
-    `--bass-on 1,3` walks two notes in every bar, and the bars are unchanged - the
+    `rhythm` replaces the felt beats with the positions a request named, **bar by
+    bar**: a sparse `--bass-on 1,3` walks two notes in every bar of a one-bar
+    figure, a bar the cycle leaves silent walks nothing, and a longer figure gives
+    each bar its own segment from `first_full_bar` onwards. A bar that names
+    `melody` - only a bar before the figure's origin can, the chord layer's own
+    reading of a pickup - walks the tune's **own onsets** there, which is the same
+    answer `Rhythm.at` gives the chord part. The bars are unchanged either way - the
     melody's own span is what says how much music there is.
     """
-    starts = (
-        rhythm_beats(rhythm, beats_per_bar, grouping)
-        if rhythm is not None and not rhythm.is_none and not rhythm.wants_melody
-        else group_starts(beats_per_bar, grouping)
-    )
     bars = sorted({bar for bar, _beat, _index in located})
-    return [(bar, beat) for bar in bars for beat in starts]
+    metre_beats = group_starts(beats_per_bar, grouping)
+    walked: List[Tuple[int, float]] = []
+    for bar in bars:
+        segment = rhythm.at(bar, first_full_bar) if rhythm is not None else None
+        if segment is None:
+            starts: Tuple[float, ...] = tuple(metre_beats)
+        elif segment.melody:
+            starts = tuple(beat for at, beat, _index in located if at == bar)
+        elif segment.is_none:
+            starts = ()
+        else:
+            starts = rhythm_beats(segment, beats_per_bar, grouping)
+        walked.extend((bar, beat) for beat in starts)
+    return walked
 
 
 def _walked_harmony(
@@ -539,6 +569,7 @@ def _walked_harmony(
     beats_per_bar: int,
     grouping: Optional[Sequence[int]] = None,
     rhythm: Optional[Rhythm] = None,
+    first_full_bar: Optional[int] = None,
 ) -> Tuple[
     List[Tuple[int, float]], List[Optional[_Harmony]], List[_HarmonyKey]
 ]:
@@ -552,7 +583,7 @@ def _walked_harmony(
     located = _located_onsets(onsets)
     if not located:
         return [], [], []
-    walked = _walked_beats(located, beats_per_bar, grouping, rhythm)
+    walked = _walked_beats(located, beats_per_bar, grouping, rhythm, first_full_bar)
     harmonies, keys = _filled_harmony(walked, chords, located)
     return walked, harmonies, keys
 
@@ -738,6 +769,7 @@ def _walking_bass_line(
     beats_per_bar: int = 4,
     grouping: Optional[Sequence[int]] = None,
     rhythm: Optional[Rhythm] = None,
+    first_full_bar: Optional[int] = None,
 ) -> List[BassNote]:
     """
     The bass line for a progression: one `BassNote` per **walked beat**.
@@ -776,7 +808,7 @@ def _walking_bass_line(
         return []
 
     walked, harmonies, keys = _walked_harmony(
-        chords, onsets, beats_per_bar, grouping, rhythm
+        chords, onsets, beats_per_bar, grouping, rhythm, first_full_bar
     )
     if not walked:
         return _anchor_only_line(chords)
@@ -834,6 +866,7 @@ def _simple_bass_line(
     beats_per_bar: int,
     grouping: Optional[Sequence[int]],
     rhythm: Optional[Rhythm],
+    first_full_bar: Optional[int],
     alternate: bool,
 ) -> List[BassNote]:
     """The `root` and `root-5th` lines: one note at **every** walked position.
@@ -856,7 +889,7 @@ def _simple_bass_line(
     if not chords:
         return []
     walked, harmonies, keys = _walked_harmony(
-        chords, onsets, beats_per_bar, grouping, rhythm
+        chords, onsets, beats_per_bar, grouping, rhythm, first_full_bar
     )
     if not walked:
         return _anchor_only_line(chords)
@@ -904,6 +937,7 @@ def bass_line_for(
     beats_per_bar: int = 4,
     grouping: Optional[Sequence[int]] = None,
     rhythm: Optional[Rhythm] = None,
+    first_full_bar: Optional[int] = None,
 ) -> List[BassNote]:
     """The bass line for one style: `_walking_bass_line`, filtered by the roles its rules admit.
 
@@ -941,6 +975,7 @@ def bass_line_for(
             beats_per_bar,
             grouping,
             rhythm,
+            first_full_bar,
             alternate=BASS_RULE_5TH in rules,
         )
     admitted: FrozenSet[str] = frozenset()
@@ -951,6 +986,8 @@ def bass_line_for(
             raise ValueError(
                 f"Unknown bass rule {rule!r}; expected any of {BASS_RULES}"
             ) from None
-    line = _walking_bass_line(chords, onsets, beats_per_bar, grouping, rhythm)
+    line = _walking_bass_line(
+        chords, onsets, beats_per_bar, grouping, rhythm, first_full_bar
+    )
     return [note for note in line if note.role in admitted]
 
