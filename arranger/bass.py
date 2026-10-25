@@ -539,24 +539,27 @@ def _walked_beats(
 
     `rhythm` replaces the felt beats with the positions a request named, **bar by
     bar**: a sparse `--bass-on 1,3` walks two notes in every bar of a one-bar
-    figure, a bar naming `melody` walks the metre's own felt beats, a bar the cycle
-    leaves silent walks nothing, and a longer figure gives each bar its own segment
-    from `first_full_bar` onwards. The bars are unchanged either way - the melody's
-    own span is what says how much music there is.
+    figure, a bar the cycle leaves silent walks nothing, and a longer figure gives
+    each bar its own segment from `first_full_bar` onwards. A bar that names
+    `melody` - only a bar before the figure's origin can, the chord layer's own
+    reading of a pickup - walks the tune's **own onsets** there, which is the same
+    answer `Rhythm.at` gives the chord part. The bars are unchanged either way - the
+    melody's own span is what says how much music there is.
     """
     bars = sorted({bar for bar, _beat, _index in located})
     metre_beats = group_starts(beats_per_bar, grouping)
     walked: List[Tuple[int, float]] = []
     for bar in bars:
-        segment = (
-            rhythm.at(bar, first_full_bar) if rhythm is not None else None
-        )
-        if segment is None or segment.melody:
-            walked.extend((bar, beat) for beat in metre_beats)
-        elif not segment.is_none:
-            walked.extend(
-                (bar, beat) for beat in rhythm_beats(segment, beats_per_bar, grouping)
-            )
+        segment = rhythm.at(bar, first_full_bar) if rhythm is not None else None
+        if segment is None:
+            starts: Tuple[float, ...] = tuple(metre_beats)
+        elif segment.melody:
+            starts = tuple(beat for at, beat, _index in located if at == bar)
+        elif segment.is_none:
+            starts = ()
+        else:
+            starts = rhythm_beats(segment, beats_per_bar, grouping)
+        walked.extend((bar, beat) for beat in starts)
     return walked
 
 

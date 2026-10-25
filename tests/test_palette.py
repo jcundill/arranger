@@ -392,7 +392,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             head,
             section=(1, 2),
             options=ArrangeOptions(
-                request=Request(melody=False, bass_on="melody", bass_notes="root")
+                request=Request(melody=False, bass_on="every-beat", bass_notes="root")
             ),
         )
         self.assertIn("comping - A 9, B 3 & F# 7", step_annotation(pair[0]))
@@ -408,7 +408,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             section=(1, 2),
             options=ArrangeOptions(
                 request=Request(
-                    melody=False, chord_on="none", bass_on="melody", bass_notes="root"
+                    melody=False, chord_on="none", bass_on="every-beat", bass_notes="root"
                 )
             ),
         )

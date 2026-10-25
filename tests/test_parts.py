@@ -213,10 +213,10 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
 
 # The three selections this class reads, spelled as the requests they are.
 CHORD_ONLY = Request(melody=False)
-# The thumb alone, on the tune's own onsets: one low note per written attack.
-LONE_BASS = Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root")
+# The thumb alone, on every felt beat: one low note per pulse, under nothing.
+LONE_BASS = Request(melody=False, chord_on="none", bass_on="every-beat", bass_notes="root")
 # The pair: a thumb line under a comped chord.
-BASS_AND_CHORD = Request(melody=False, bass_on="melody", bass_notes="root")
+BASS_AND_CHORD = Request(melody=False, bass_on="every-beat", bass_notes="root")
 
 
 class TestABassPartIsABassNote(unittest.TestCase):

@@ -232,9 +232,8 @@ class TestTheRefusals(unittest.TestCase):
     def test_no_melody_keeps_the_tune_s_own_rhythm(self):
         """`--no-melody` reads the written onsets, as every other request does.
 
-        The written onsets are a fact about the *score*, which is how `bass_on="melody"`
-        reads them too, so the comp states the chord where the tune states a note. Every
-        felt beat is the request that names it.
+        The written onsets are a fact about the *score*, so the comp states the chord
+        where the tune states a note. Every felt beat is the request that names it.
         """
         for spelling in ("melody", ""):
             request = Request(melody=False, **({"chord_on": spelling} if spelling else {}))
@@ -261,6 +260,23 @@ class TestTheRefusals(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             resolve_request(Request(bass_on="none", bass_notes="walk"), 4)
         self.assertIn("bass-notes=walk", str(caught.exception))
+
+    def test_the_bass_has_no_written_onsets_to_read(self):
+        """`bass-on=melody` is refused rather than kept as a synonym for `every-beat`.
+
+        The thumb line has no written onsets of its own - it marks bars the tune rests
+        in - so the spelling named a rhythm the layer cannot follow. The message names
+        both the replacement and the way to be sparse.
+        """
+        with self.assertRaises(ValueError) as caught:
+            resolve_request(Request(bass_on="melody", bass_notes="root"), 4)
+        message = str(caught.exception)
+        self.assertIn("every-beat", message)
+        self.assertIn("1,3", message)
+        # The chord layer's `melody` is untouched: it reads the score's onsets.
+        self.assertEqual(
+            resolve_request(Request(chord_on="melody"), 4).chord_on, "melody"
+        )
 
     def test_an_empty_selection_is_refused(self):
         with self.assertRaises(ValueError) as caught:

@@ -76,7 +76,7 @@ CONFIGS: List[Dict[str, Any]] = [
     # it was this row's chord-only config twice over.
     {
         "options": ArrangeOptions(
-            request=Request(melody=False, bass_on="melody", bass_notes="root")
+            request=Request(melody=False, bass_on="every-beat", bass_notes="root")
         )
     },
     {
@@ -603,7 +603,15 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # twice over. What it becomes (`melody=False` plus a thumb line) states the same
         # three voices with the thumb below them, so this sweep's *clause* coverage is
         # unchanged: what went is two configs that arranged what other rows already did.
-        self.assertEqual(comping, 1228, "the number of comping lines naming a voice moved")
+        #
+        # And **-1** for the pickup bar's invented beat. A figure longer than a bar now
+        # begins on the form's first complete bar (`grid.Rhythm.at`), and a bar before it
+        # takes the tune's own onsets in **both** layers - so the bass no longer walks a
+        # felt beat inside `synthetic_pickup_cut`'s one-quarter anacrusis, which was a
+        # comping step in a bar the form has not started in. The chord layer's own half
+        # of that rule is inert on the corpus, because every committed anacrusis is
+        # without a `<harmony>`; the thumb's half is not, and this is it.
+        self.assertEqual(comping, 1227, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

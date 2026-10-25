@@ -241,7 +241,7 @@ class TestTheCompingReach(unittest.TestCase):
         steps, _head, _notes = arranged(
             "tests/data/synthetic_repeat_slash.musicxml",
             section=(1, 2),
-            request=Request(melody=False, bass_on="melody", bass_notes="root"),
+            request=Request(melody=False, bass_on="every-beat", bass_notes="root"),
         )
         self.assertIn("3-x-4-4-8-x", [step.tab_line() for step in steps])
 
@@ -838,10 +838,10 @@ class TestTheCompingArrangement(unittest.TestCase):
         path = "tests/data/Trouble_in_Mind_Blues.musicxml"
         rows = (
             ("chord", Request(melody=False)),
-            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            ("chord+bass", Request(melody=False, bass_on="every-beat", bass_notes="root")),
             (
                 "bass",
-                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+                Request(melody=False, chord_on="none", bass_on="every-beat", bass_notes="root"),
             ),
         )
         for label, selection in rows:
@@ -945,10 +945,10 @@ class TestCompingMelodyIndependence(unittest.TestCase):
 
         for label, selection in (
             ("chord", Request(melody=False)),
-            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            ("chord+bass", Request(melody=False, bass_on="every-beat", bass_notes="root")),
             (
                 "bass",
-                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+                Request(melody=False, chord_on="none", bass_on="every-beat", bass_notes="root"),
             ),
         ):
             with self.subTest(selection=label):
