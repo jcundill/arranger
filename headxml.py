@@ -2664,9 +2664,11 @@ def rhythm_slots(
     """Every position `rhythm` names, as slots, including positions no note has.
 
     The complement of `head_skeleton` for a **requested** chord rhythm: `1and` in a
-    4/4 bar is beat 1.5 of every bar in the section, and a position the tune merely
+    4/4 bar is beat 1.5 of every bar the figure covers, and a position the tune merely
     holds through is still one the chord attacks on - a stab under a held note is
-    wanted, so unlike the melody-anchored union there is no hold filter here.
+    wanted, so unlike the melody-anchored union there is no hold filter here. A
+    figure longer than one bar gives each bar of the section its own segment
+    (`Rhythm.at`), so a two-bar figure alternates rather than repeating.
 
     `extra_positions` are the caller's own positions beside the rhythm's - the tune's
     written onsets, for a rhythm that names `melody` *and* positions and so plays
@@ -2676,10 +2678,9 @@ def rhythm_slots(
     """
     lo, hi = section if section is not None else head.bars
     grouping = _chord_grouping(head, grouping)
-    beats = rhythm_beats(rhythm, head.beats_per_bar, grouping)
     at: Dict[Tuple[int, int], Tuple[int, float]] = {}
     for bar in range(lo, hi):
-        for beat in beats:
+        for beat in rhythm_beats(rhythm.at(bar), head.beats_per_bar, grouping):
             at.setdefault(_tick_key(bar, beat), (bar, beat))
     for bar, beat in extra_positions:
         if lo <= bar < hi:
@@ -2970,7 +2971,7 @@ def _melodyless(
     rhythm = resolve_request(
         options.request, head.beats_per_bar, _chord_grouping(head, None)
     ).chord_rhythm
-    if not rhythm.wants_melody or rhythm.positions:
+    if not rhythm.is_melody_only:
         return options, None
     return (
         replace(
@@ -3096,9 +3097,7 @@ def _head_slots(
     chord_on = request.chord_rhythm
     # `melody` alone adds nothing to the union: the skeleton already has one chord per
     # written note. A **positions** rhythm adds the attacks the caller named.
-    named = not chord_on.is_none and not (
-        chord_on.wants_melody and not chord_on.positions
-    )
+    named = not chord_on.is_none and not chord_on.is_melody_only
     comps = parts_have_chord(parts) and not parts_have_melody(parts)
     if named and comps:
         return _comp_only_timeline(head, slots, chord_on, section, grouping)
@@ -3145,7 +3144,9 @@ def _comp_only_timeline(
     reason `_merge_chord_slots` gives: they are what the pickup *is*, and a chord
     attack in the short bar would erase it and move the head's downbeat.
     """
-    onsets = [(slot[1], slot[2]) for slot in skeleton] if chord_on.wants_melody else []
+    onsets = [
+        (slot[1], slot[2]) for slot in skeleton if chord_on.at(slot[1]).melody
+    ]
     slots = rhythm_slots(head, chord_on, section, grouping, onsets)
     base: List[Tuple[Tuple[Optional[str], str], int, float, float]] = []
     if head.first_bar_implicit:

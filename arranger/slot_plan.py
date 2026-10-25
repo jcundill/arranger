@@ -322,13 +322,17 @@ def _texture_grips(
 
 
 def _chord_here(
-    rhythm: SlotRhythmFacts, beat: Optional[float], melody_absent: bool
+    rhythm: SlotRhythmFacts,
+    bar: Optional[int],
+    beat: Optional[float],
+    melody_absent: bool,
 ) -> bool:
     """Whether the chord part attacks at this position.
 
-    The request's `chord_on` decides - `melody` at every written onset, or the
-    positions it names - and `wants_melody` is true for every slot because the
-    slots that exist are the melody's.
+    The request's `chord_on` decides, **bar by bar**: a bar that names `melody`
+    attacks at every written onset, a bar that names positions attacks on those, and
+    a silent bar of a cycle never attacks. `Rhythm.at` answers which of those bars a
+    place in the form takes.
 
     A slot with **no melody** is one the chord layer asked for: either a
     `--chord-on` target or a rest `--chord-fills` fills, and a slot nothing asked
@@ -338,11 +342,13 @@ def _chord_here(
     """
     if melody_absent and rhythm.chord_fills != CHORD_FILLS_NONE:
         return True
-    if rhythm.chord_rhythm is None or rhythm.chord_rhythm.wants_melody:
+    chord_rhythm = rhythm.chord_rhythm
+    if chord_rhythm is None:
         return True
-    return rhythm.chord_rhythm.includes(
-        beat, rhythm.beats_per_bar, rhythm.grouping
-    )
+    segment = chord_rhythm.at(bar)
+    if segment.melody:
+        return True
+    return segment.includes(beat, rhythm.beats_per_bar, rhythm.grouping)
 
 
 def _tune_onset_attack(
@@ -401,9 +407,10 @@ def _chord_attacks(
     chord_rhythm = rhythm.chord_rhythm
     if chord_rhythm is None:
         return False
-    if chord_rhythm.includes(slot.beat, rhythm.beats_per_bar, rhythm.grouping):
+    segment = chord_rhythm.at(slot.bar)
+    if segment.includes(slot.beat, rhythm.beats_per_bar, rhythm.grouping):
         return True
-    if not chord_rhythm.wants_melody:
+    if not segment.melody:
         return False
     return _tune_onset_attack(arrangement, rhythm, slot, melody_note)
 
@@ -460,7 +467,7 @@ def slot_state(
     # takes the comping-route branches inside `melody_alone_case`, so an
     # off-grid note-less slot rests rather than asserting a melody it has not
     # got. §9.3 step D.
-    chord_here = _chord_here(inputs.rhythm, beat, melody_note is None)
+    chord_here = _chord_here(inputs.rhythm, slot.bar, beat, melody_note is None)
     melody_alone = melody_alone_case(
         inputs.arrangement.texture, role, slot_grips, quality_of(name), name,
         inputs.arrangement.has_thumb, melody_voiced=sings_here, on_grid=chord_here,

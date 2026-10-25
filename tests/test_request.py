@@ -70,7 +70,7 @@ class TestTheShippedRequest(unittest.TestCase):
     def test_the_chord_attacks_at_the_written_melody(self):
         """`chord_on=melody` is the written onsets, and no bass attacks at all."""
         resolved = resolve_request(Request(), 4)
-        self.assertTrue(resolved.chord_rhythm.wants_melody)
+        self.assertTrue(resolved.chord_rhythm.at(1).melody)
         self.assertTrue(resolved.bass_rhythm.is_none)
 
 
@@ -84,7 +84,7 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
             Request(bass_on="every-beat", bass_notes="walk"), 4
         )
         self.assertIn(PART_BASS, resolved.parts)
-        self.assertEqual(resolved.bass_rhythm.positions, (1.0, 2.0, 3.0, 4.0))
+        self.assertEqual(resolved.bass_rhythm.at(1).positions, (1.0, 2.0, 3.0, 4.0))
         self.assertIn(BASS_RULE_APPROACH, resolved.bass)
 
     def test_root_and_fifth_is_a_two_rule_line(self):

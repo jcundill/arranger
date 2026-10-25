@@ -520,17 +520,25 @@ def _walked_beats(
     yields four. With no grouping every denominator unit is its own group, which is
     the reading this function had before grouping existed.
 
-    `rhythm` replaces the felt beats with the positions a request named. A sparse
-    `--bass-on 1,3` walks two notes in every bar, and the bars are unchanged - the
-    melody's own span is what says how much music there is.
+    `rhythm` replaces the felt beats with the positions a request named, **bar by
+    bar**: a sparse `--bass-on 1,3` walks two notes in every bar of a one-bar
+    figure, a bar naming `melody` walks the metre's own felt beats, a bar the cycle
+    leaves silent walks nothing, and a longer figure gives each bar its own segment.
+    The bars are unchanged either way - the melody's own span is what says how much
+    music there is.
     """
-    starts = (
-        rhythm_beats(rhythm, beats_per_bar, grouping)
-        if rhythm is not None and not rhythm.is_none and not rhythm.wants_melody
-        else group_starts(beats_per_bar, grouping)
-    )
     bars = sorted({bar for bar, _beat, _index in located})
-    return [(bar, beat) for bar in bars for beat in starts]
+    metre_beats = group_starts(beats_per_bar, grouping)
+    walked: List[Tuple[int, float]] = []
+    for bar in bars:
+        segment = rhythm.at(bar) if rhythm is not None else None
+        if segment is None or segment.melody:
+            walked.extend((bar, beat) for beat in metre_beats)
+        elif not segment.is_none:
+            walked.extend(
+                (bar, beat) for beat in rhythm_beats(segment, beats_per_bar, grouping)
+            )
+    return walked
 
 
 def _walked_harmony(
