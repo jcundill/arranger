@@ -120,6 +120,13 @@ class ScoreMeta:
     convention the writers already use, so this object does not force a default
     into a call that deliberately omitted one. `markers` are the head's repeat and
     ending instructions; a hand-built arrangement passes none.
+
+    `first_bar_implicit` is the same convention applied to the first bar: `None`
+    means nothing said it, `False` states a whole bar, `True` an anacrusis. It is
+    threaded to all four writers, because a pickup bar is a fact about the score and
+    not about the file format - a staff that drew a short bar as a pickup when the
+    score says it is whole is the same error as a MusicXML `<measure implicit="yes">`
+    that should not be there.
     """
 
     title: str
@@ -130,6 +137,7 @@ class ScoreMeta:
     fifths: Optional[int] = None
     mode: str = ""
     markers: Sequence[Any] = ()
+    first_bar_implicit: Optional[bool] = None
 
 
 #: The `arranger head` wording. Says "of the notated bar" because three of the four
@@ -386,6 +394,10 @@ def render_and_write(
     renderer that draws the signs is handed the **written** bars instead - see
     `_as_written`. The plain `line` tab keeps the played arrangement, which is the one
     place every bar of a repeated head is still listed.
+
+    `meta.first_bar_implicit` reaches **every** writer, the two on-screen ones
+    included: whether the first bar is an anacrusis is a fact about the score, and it
+    is not one the onsets can say.
     """
     from tabgp import write_gp5
     from tabstaff import format_tab_staff, write_tab_html
@@ -421,6 +433,7 @@ def render_and_write(
                 show_melody=args.note_names,
                 show_mutes=args.mutes,
                 markers=written_markers,
+                first_bar_implicit=meta.first_bar_implicit,
             )
         )
     else:
@@ -439,6 +452,7 @@ def render_and_write(
             show_mutes=args.mutes,
             notes=list(notes),
             markers=written_markers,
+            first_bar_implicit=meta.first_bar_implicit,
         )
         print(f"\nwrote {out_path}")
 
@@ -463,6 +477,7 @@ def render_and_write(
                 fifths=key_fifths,
                 mode=meta.mode,
                 markers=written_markers,
+                first_bar_implicit=meta.first_bar_implicit,
             )
         except ImportError as error:
             print(f"\n{error}")

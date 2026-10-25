@@ -213,12 +213,20 @@ BUDGETS: Dict[str, Budget] = {
     # (13 -> 8): the metre is one value, `time_signature=`, whose grouping is the one
     # fact of it a caller may set. `head_cli`'s branches live in `_print_metre_notes`,
     # and the merge block in `_head_slots`, so neither raises this budget.
-    "headxml.py": Budget(17, 113, 8),
+    #
+    # `first_bar_implicit` is the one fact each of the five below grew by, and it grew
+    # in all five for the same reason: whether bar 1 is an anacrusis is a **score**
+    # fact, not one a writer can infer, so `headxml` hands it to `ScoreMeta`, the CLI
+    # hands it to all four writers, and `tabscore` owns the rule the writers now share
+    # (a stated whole bar writes its silence as rests instead of becoming a pickup).
+    # One parameter on each writer's keyword surface and the placement's branch, rather
+    # than a second spelling of a fact the score already stated.
+    "headxml.py": Budget(17, 117, 8),
     "grip_chart.py": Budget(14, 84, 5),
-    "tabgp.py": Budget(19, 151, 13),
-    "tabscore.py": Budget(10, 98, 5),
-    "tabstaff.py": Budget(17, 195, 13),
-    "tabxml.py": Budget(12, 176, 12),
+    "tabgp.py": Budget(19, 151, 14),
+    "tabscore.py": Budget(10, 114, 5),
+    "tabstaff.py": Budget(18, 204, 14),
+    "tabxml.py": Budget(12, 176, 13),
 }
 
 # Importing a `_`-prefixed name from a sibling is the coupling this test exists to

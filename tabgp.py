@@ -816,6 +816,7 @@ def format_gp5(
     collapse: bool = True,
     show_chords: bool = True,
     markers: Sequence[Any] = (),
+    first_bar_implicit: Optional[bool] = None,
 ) -> bytes:
     """
     Renders an arrangement as a Guitar Pro 5 file and returns the bytes.
@@ -866,6 +867,12 @@ def format_gp5(
             **Only Guitar Pro and MuseScore 4 read that table.** TuxGuitar skips it (its
             importer has no jump in its model) and MuseScore 3 predates the import;
             `docs/renderers.md` records both, and says what to use for those readers.
+        first_bar_implicit: what the source said about the first bar, or `None` when
+            nothing did. `False` is a **whole** first bar, so its silence is written as
+            the leading rest of a full measure rather than making bar 1 a pickup;
+            `True` and `None` both let the shortfall be read as an anacrusis. See
+            `tabscore.score_events`, which owns the rule - this writer only passes the
+            answer on.
 
     Returns:
         The GP5 file as bytes, or b"" for no steps. Pure: nothing is printed and
@@ -885,7 +892,8 @@ def format_gp5(
     # is sounding a different chord from the one written is named the same way in
     # both files rather than only in the one that remembered to ask.
     events, pickup = score_events(
-        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type,
+        first_bar_implicit,
     )
     if not any(step is not None for step, _, _ in events):
         return b""

@@ -154,6 +154,7 @@ def _fill_rests(
     columns: List[Tuple[float, Optional[ArrangementStep]]],
     beats_per_bar: int,
     beat_type: int,
+    first_bar_implicit: Optional[bool] = None,
 ) -> List[Tuple[float, Optional[ArrangementStep]]]:
     """The grid: every onset, every hole between them, and the last bar padded out.
 
@@ -170,10 +171,21 @@ def _fill_rests(
     rest as dashes and puts the fret where it falls. The start is therefore rounded
     *down to the bar containing the first onset*, which preserves the rest inside
     that bar while still refusing to invent whole empty bars before it.
+
+    `first_bar_implicit` is what the source said about the first bar. `False` means the
+    bar is whole, so a short first bar is **filled** to its bar line like any other:
+    the silence after its last note is a rest the score states, not an anacrusis. On
+    `True` or `None` a short first bar is left short instead - the pickup convention
+    this renderer has always drawn - because a source that says nothing gives the
+    shortfall as the only evidence there is.
     """
     filled: List[Tuple[float, Optional[ArrangementStep]]] = []
     first_bar = int(columns[0][0] // beats_per_bar) if columns else 0
-    first_bar_end = _first_bar_content_end(columns, beats_per_bar, beat_type)
+    first_bar_end = (
+        None
+        if first_bar_implicit is False
+        else _first_bar_content_end(columns, beats_per_bar, beat_type)
+    )
     current = (
         float(first_bar * beats_per_bar)
         if columns else 0.0
@@ -353,6 +365,7 @@ def _staff_columns(
     beat_type: int,
     rhythm: bool,
     collapse: bool = True,
+    first_bar_implicit: Optional[bool] = None,
 ) -> List[Tuple[float, Optional[ArrangementStep], bool]]:
     """
     The grid both renderers draw: every step on an absolute beat, the holes a real
@@ -363,10 +376,13 @@ def _staff_columns(
     `_fill_rests` adds the rests and pads the last bar out; `_collapse_holds` marks a
     repeated shape as a hold rather than a new attack. `collapse=False` skips only
     the last - the columns are the same, and every one of them strikes.
+
+    `first_bar_implicit` is the source's statement about the first bar and reaches
+    `_fill_rests`, the stage that decides whether a short first bar is left short.
     """
     placed = _placed_steps(steps, beats_per_bar, rhythm)
     columns = _dedupe_onsets(placed)
-    filled = _fill_rests(columns, beats_per_bar, beat_type)
+    filled = _fill_rests(columns, beats_per_bar, beat_type, first_bar_implicit)
     if not collapse:
         return [(onset, step, True) for onset, step in filled]
     return _collapse_holds(filled)
@@ -1120,6 +1136,7 @@ def _mark_pickup_barline(
     barline_token: Dict[int, str],
     beats_per_bar: int,
     beat_type: int,
+    first_bar_implicit: Optional[bool] = None,
 ) -> Optional[float]:
     """Mark the anacrusis's end, and return the content end it was found at.
 
@@ -1127,11 +1144,19 @@ def _mark_pickup_barline(
     music stops - the same `light-light` the MusicXML writer puts there. A repeat
     sign already on that bar line wins, because `|:` carries play order and the
     double bar line is only a structural divider.
+
+    A source that states a **whole** first bar (`first_bar_implicit=False`) is not a
+    pickup however short its music is, so nothing is marked and `None` is returned:
+    the bar is drawn full width and closed by an ordinary bar line.
     """
-    pickup_end = _first_bar_content_end(
-        [(onset, step) for onset, step, _strikes in columns],
-        beats_per_bar,
-        beat_type,
+    pickup_end = (
+        None
+        if first_bar_implicit is False
+        else _first_bar_content_end(
+            [(onset, step) for onset, step, _strikes in columns],
+            beats_per_bar,
+            beat_type,
+        )
     )
     if pickup_end is not None:
         for index, bar in enumerate(bars):
@@ -1154,6 +1179,7 @@ def format_tab_staff(
     measures_per_line: int = 4,
     show_timing: bool = False,
     markers: Sequence[Any] = (),
+    first_bar_implicit: Optional[bool] = None,
 ) -> str:
     """
     Renders a whole progression as a standard six-line guitar staff.
@@ -1216,6 +1242,12 @@ def format_tab_staff(
             Off by default along with them: they say how long each chord sounds,
             which a score needs and a tab file does not carry. Pass `True` for a
             staff that reads as a score rather than as tab.
+        first_bar_implicit: what the source said about the first bar, or `None` when
+            nothing did. `False` is a **whole** first bar - its silence is filled with
+            rests and it is closed by an ordinary bar line; `True` and `None` both let a
+            short first bar be drawn as a pickup and closed with `||`. Measured from the
+            onsets on `None` because a progression with no score behind it has nothing
+            else to go on.
 
     Returns:
         The rendered staff as a newline-joined string, or "" for no steps. Pure:
@@ -1229,7 +1261,9 @@ def format_tab_staff(
     if not steps:
         return ""
 
-    columns = _staff_columns(steps, beats_per_bar, beat_type, rhythm, collapse)
+    columns = _staff_columns(
+        steps, beats_per_bar, beat_type, rhythm, collapse, first_bar_implicit
+    )
     bars = _staff_bars(columns, beats_per_bar)
     # Two different sets, deliberately: `bar_marks` is every bar (where the metre
     # falls) and `breaks` is every `measures_per_line` bars (where the line wraps).
@@ -1241,7 +1275,7 @@ def format_tab_staff(
     barline_token, label_at = _marker_columns(bars, markers)
     # A short first bar is a pickup; the helper closes it where its music stops.
     pickup_end = _mark_pickup_barline(
-        columns, bars, barline_token, beats_per_bar, beat_type
+        columns, bars, barline_token, beats_per_bar, beat_type, first_bar_implicit
     )
 
     # The rhythm row and the column grid go through one predicate, so the row can
@@ -1783,6 +1817,7 @@ def format_tab_html(
     notes: Optional[Sequence[str]] = None,
     show_timing: bool = True,
     markers: Sequence[Any] = (),
+    first_bar_implicit: Optional[bool] = None,
 ) -> str:
     """
     Renders a whole progression as a self-contained HTML tab page.
@@ -1821,6 +1856,9 @@ def format_tab_html(
             empty for none. Each carries the **absolute** bar it sits on; the page marks
             the repeat bars and labels the volta brackets, the same structure the ASCII
             staff draws.
+        first_bar_implicit: what the source said about the first bar, or `None` when
+            nothing did. `False` fills a short first bar to its bar line rather than
+            leaving it short as a pickup; see `format_tab_staff`.
 
     Returns:
         A complete HTML document as a string, or "" for no steps. Pure: nothing is
@@ -1834,7 +1872,9 @@ def format_tab_html(
     if not steps:
         return ""
 
-    columns = _staff_columns(steps, beats_per_bar, beat_type, rhythm, collapse)
+    columns = _staff_columns(
+        steps, beats_per_bar, beat_type, rhythm, collapse, first_bar_implicit
+    )
     breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
     # The same predicate and the same rhythm the ASCII staff reads, so the page and
     # the terminal cannot disagree about how long a note is.

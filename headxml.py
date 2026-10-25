@@ -3588,6 +3588,10 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     # major writes a flat on every note of its own scale, because a reader with no
     # signature has nothing else to go on - so the key is a property of the score
     # the writers must be given, not a preference of the terminal header.
+    #
+    # `first_bar_implicit` rides along on the same terms: the importer read the file,
+    # so it knows whether bar 1 is whole, and a writer re-deriving that from the onsets
+    # draws a pickup bar wherever the tune enters late.
     return render_and_write(
         args,
         steps,
@@ -3597,7 +3601,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
             beat_type=head.beat_type,
             fifths=head.key_fifths,
             mode=head.key_mode,
-            markers=head.markers,
+            markers=head.markers, first_bar_implicit=head.first_bar_implicit,
         ),
         notes=notes,
         written_bars=head.written_bars,

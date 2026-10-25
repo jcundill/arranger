@@ -56,10 +56,11 @@ def line_state(
     previous = last_sounding_step(arrangements)
     if previous is None:
         return (_comp_line.read_state([]), None)
+    previous_tops = previous.voicing.midi_notes()
     tops = (
         sounding_tops(arrangements)
         if same_chord(previous, context)
-        else [max(previous.voicing.midi_notes())]
+        else ([max(previous_tops)] if previous_tops else sounding_tops(arrangements))
     )
     register = (
         previous.voicing.avg_fret if previous.voicing.active_frets() else None
