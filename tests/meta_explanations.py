@@ -613,17 +613,20 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # And **-1** for the pickup bar's invented beat. A figure longer than a bar now
         # begins on the form's first complete bar (`grid.Rhythm.at`), and a bar before it
         # takes the tune's own onsets in **both** layers - so the bass no longer walks a
-        # felt beat inside `synthetic_pickup_cut`'s one-quarter anacrusis, which was a
-        # comping step in a bar the form has not started in. The chord layer's own half
-        # of that rule is inert on the corpus, because every committed anacrusis is
-        # without a `<harmony>`; the thumb's half is not, and this is it.
+        # felt beat inside a pickup bar's empty half, which was a comping step in a bar
+        # the form has not started in. This applies to `synthetic_pickup_cut` (marked
+        # `implicit="yes"`) and to `synthetic_pickup_unmarked` (unmarked, but closed by
+        # a double barline - the Blue Moon regression). The chord layer's own half of
+        # that rule is inert on the corpus, because every committed anacrusis is without
+        # a `<harmony>`; the thumb's half is not, and this is it.
         #
-        # The remaining **+45** come from `synthetic_pickup_unmarked.musicxml` (the
+        # The remaining **+44** come from `synthetic_pickup_unmarked.musicxml` (the
         # unmarked cut-time pickup bar, the Blue Moon regression): across the sweep's
-        # eleven configs, forty-five of its steps state a comping shape and name its
-        # voices. Its marked twin `synthetic_pickup_cut` is already in the sweep and
-        # unchanged.
-        self.assertEqual(comping, 1272, "the number of comping lines naming a voice moved")
+        # eleven configs, forty-four of its steps state a comping shape and name its
+        # voices - one fewer than its marked twin because bar 1 no longer carries the
+        # invented beat-2 fill under the held melody. Its marked twin
+        # `synthetic_pickup_cut` is already in the sweep and unchanged.
+        self.assertEqual(comping, 1271, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

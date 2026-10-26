@@ -577,6 +577,13 @@ class Head:
     # however short its music is; `None` when the score says nothing - the
     # renderers infer the pickup from the bar's own content.
     first_bar_implicit: Optional[bool] = None
+    # True when the source closes bar 1 with a double barline - the notation's own
+    # statement that an unmarked short first bar is an anacrusis rather than a whole
+    # bar. `_parse_barline` discards bar styles for play-order purposes, so this is
+    # recorded separately for `first_complete_bar`, which needs to know where the
+    # form begins. Only bar 1 is checked: a double barline elsewhere is a section
+    # change, not a pickup.
+    first_bar_ends_with_double_barline: bool = False
     # The key signature as MusicXML states it: `key_fifths` counts sharps (positive)
     # or flats (negative), so -3 is Eb major or C minor, and `key_mode` is which -
     # "major", "minor", or "" where the score did not say. Kept as the format's own
@@ -1340,6 +1347,14 @@ class _NotesWalk:
             self.raw_markers.setdefault(self.position, []).extend(
                 _parse_barline(barline)
             )
+            # A double barline after bar 1 is the notation's statement that the
+            # first bar is an anacrusis - the music stops mid-measure and the form
+            # begins in the next bar. Only bar 1 is checked: a double barline
+            # elsewhere is a section change, not a pickup.
+            if len(self.measure_numbers) == 1 and self.bar == 1:
+                for style in barline.findall("bar-style"):
+                    if (style.text or "").strip() == "light-light":
+                        self.head.first_bar_ends_with_double_barline = True
 
         self.cursor = 0
         self.group.clear()
@@ -2593,11 +2608,28 @@ def first_complete_bar(head: Head) -> int:
     and the pickup bar takes the tune's own onsets instead - which is what keeps an
     accompaniment from beginning one bar early on a head that opens with a pickup.
 
-    Exported through the importer's module rather than kept private, because it is the
-    one answer to "where does the form begin", and `arrange_xml_head` and the slot
-    builders must agree on it.
+    `first_bar_implicit` states it when the source marks the first bar `implicit="yes"`
+    (or numbers it 0). When the source says nothing (`None`), a **double barline**
+    after bar 1 is the notation's own statement that the bar is an anacrusis: the
+    music stops mid-measure and the form begins in the next bar. That is the
+    Blue Moon case - a real-world pickup bar that MuseScore ships unmarked, closed
+    by a double barline.
+
+    Exported through the importer's module rather than kept private, because it is
+    the one answer to "where does the form begin", and `arrange_xml_head` and the
+    slot builders must agree on it.
     """
-    return head.bars[0] + (1 if head.first_bar_implicit else 0)
+    if head.first_bar_implicit is True:
+        return head.bars[0] + 1
+    if (
+        head.first_bar_implicit is None
+        and head.first_bar_ends_with_double_barline
+    ):
+        # An unmarked short first bar closed by a double barline: the source said
+        # nothing, but its barline says the bar is an anacrusis, so the form begins
+        # in the next bar.
+        return head.bars[0] + 1
+    return head.bars[0]
 
 
 def chord_slots(
