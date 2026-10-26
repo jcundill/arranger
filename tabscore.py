@@ -375,6 +375,11 @@ def _is_hold(
         # (`tests/test_lone_bass.py` counts them). A carried thumb is the opposite -
         # it is still ringing, and that *is* the tie.
         return False
+    if sum(1 for fret in step.voicing.frets if fret >= 0) <= 1:
+        # A single sounding note cannot hold: if it sounds again, the string is
+        # re-articulated. Without this, sustain-mode short melody notes collapse
+        # into one long note (`tests/test_holds.py` counts them).
+        return False
     previous = events[-1][0]
     if previous is None:
         return False

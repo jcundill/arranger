@@ -160,8 +160,11 @@ BUDGETS: Dict[str, Budget] = {
     # complexity budget rather than growing it by a branch.
     "arranger/resolution.py": Budget(7, 111, 12),
     # `slot_state`'s grid branches left with the axis, so the ceiling is what it
-    # measures rather than what it measured.
-    "arranger/slot_plan.py": Budget(6, 78, 5),
+    # measures rather than what it measured. `sustain` added a duration branch plus
+    # a position (stab) override to `_chord_here`, so the module's complexity ceiling
+    # grew from six to eight; the duration test itself was split into the small
+    # `_sustain_attacks`.
+    "arranger/slot_plan.py": Budget(8, 78, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
     # The value types and tab-cell primitives, split out of `tuning`: `Voicing`,
     # `ArrangementStep`, `Palette` and the six-line block renderer. Measured as it
@@ -189,7 +192,13 @@ BUDGETS: Dict[str, Budget] = {
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
-    "arranger/render.py": Budget(11, 64, 2),
+    "arranger/render.py": Budget(12, 64, 2),
+    # `_step_cells` grew one decision point when a carried thumb (`bass_held`) under a
+    # repeated melody was guarded out of the struck set: a held thumb rings and is not
+    # plucked, so it must stay muted rather than be added to `struck` beside the
+    # re-articulated soprano. The branch is deliberate - it is what keeps the one-line
+    # tab, the staff, the score and the GP5 file from disagreeing about a held bass -
+    # and the function is otherwise unchanged, so the module ceiling moves with it.
     # The step-history readers left for `step_history`, so the ceiling is what this
     # module measures rather than what it measured. The parameter ceiling is
     # `comping_step`'s seven: the six facts of a slot plus the metre's count, which the

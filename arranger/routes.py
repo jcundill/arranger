@@ -25,6 +25,7 @@ from .cost import SelectionCriteria
 from .decisions import (
     dropped_for_the_bass,
     is_bass_only,
+    is_repeated_step,
     leaving_room_for_the_bass,
     melody_is_ringing,
     palette_facts,
@@ -125,6 +126,30 @@ def texture_fill_step(
         sounding, written_original = sounding_melody(
             solo_voicing, context.harmony.note_str
         )
+        # A repeated melody re-strikes the soprano while any held voice keeps
+        # ringing: the previous step sang this same pitch under this same harmony,
+        # so this step re-articulates the tune rather than stating a new shape.
+        # Without the flag the renderers collapse the repeated strikes into one,
+        # losing the re-articulation - and any carried thumb is drawn silent where
+        # it should still sound. `is_repeated_step` shares its rule with the
+        # harmonised route, so a repeated melody is a strike whichever route took
+        # the slot.
+        bass_only = is_bass_only(
+            slot.bass_only,
+            chord_attack=context.state.chord_attack,
+            holds=melody_is_ringing(
+                arrangements, Note(sounding).midi_note(),
+                normalised_harmony(context.harmony.name),
+            ),
+        )
+        # `bass_only` and `repeated` name opposite halves of one column
+        # (`_partial_attack` enforces this on the harmonised route), so a
+        # walk-invented hold never repeats even when the melody is still ringing.
+        repeated = is_repeated_step(
+            last_sounding_step(arrangements),
+            solo_voicing,
+            normalised_harmony(context.harmony.name),
+        ) and not bass_only
         fill = ArrangementStep(
             chord=context.harmony.name,
             melody=sounding,
@@ -138,23 +163,13 @@ def texture_fill_step(
             palette=Palette(available=1, inside_window=inside_window),
             original_melody=written_original,
             partial=False,
+            repeated=repeated,
             bar=context.timing.bar,
             beat=context.timing.beat,
             duration=context.timing.duration,
             role=context.state.role,
             metric_weight=context.state.weight,
-            # The tune alone under the thumb, on a beat the walk invented: the note is the
-            # one already sounding, so nothing above the thumb is struck here either. A
-            # position the chord's rhythm *named* is a fresh attack, and takes the answer
-            # `_emit_step` gives it.
-            bass_only=is_bass_only(
-                slot.bass_only,
-                chord_attack=context.state.chord_attack,
-                holds=melody_is_ringing(
-                    arrangements, Note(sounding).midi_note(),
-                    normalised_harmony(context.harmony.name),
-                ),
-            ),
+            bass_only=bass_only,
         )
         attach_bass(fill, slot.bass, arrangements)
         arrangements.append(fill)

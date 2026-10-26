@@ -165,7 +165,8 @@ def arrange_progression(
             non_chord_tone=_k.non_chord_tone, has_thumb=_p.has_thumb,
         ),
         rhythm=SlotRhythmFacts(
-            beats_per_bar=_k.beats_per_bar, grouping=_k.grouping,
+            beats_per_bar=_k.beats_per_bar, beat_type=_k.beat_type,
+            grouping=_k.grouping,
             chord_rhythm=_p.chord_rhythm, chord_fills=_p.chord_fills,
             melody_onsets=_k.melody_onsets, first_bar=_k.first_full_bar,
         ),

@@ -175,6 +175,34 @@ class TestTheList(unittest.TestCase):
         self.assertFalse(rhythm.is_none)
         self.assertFalse(rhythm.at(1).includes(1.0, 4))
 
+    def test_sustain_is_its_own_token(self):
+        """`sustain` names sustained onsets and prints as itself."""
+        rhythm = parse_rhythm("sustain", 4)
+        self.assertTrue(rhythm.at(1).sustain)
+        self.assertFalse(rhythm.is_none)
+        self.assertFalse(rhythm.at(1).melody)
+        self.assertEqual(str(rhythm), "sustain")
+
+    def test_sustain_with_a_position_adds_the_stab(self):
+        """`sustain,1and` sustains long onsets and still stabs on the named position."""
+        rhythm = parse_rhythm("sustain,1and", 4)
+        self.assertTrue(rhythm.at(1).sustain)
+        self.assertEqual(rhythm.at(1).positions, (1.5,))
+        self.assertTrue(rhythm.at(1).includes(1.5, 4))
+        self.assertEqual(str(rhythm), "sustain,1and")
+
+    def test_melody_makes_sustain_inert(self):
+        """`melody,sustain` is plain `melody`: `sustain` is dropped, not additive."""
+        rhythm = parse_rhythm("melody,sustain", 4)
+        self.assertTrue(rhythm.at(1).melody)
+        self.assertFalse(rhythm.at(1).sustain)
+        self.assertEqual(str(rhythm), "melody")
+
+    def test_none_cannot_be_combined_with_sustain(self):
+        with self.assertRaises(ValueError) as caught:
+            parse_rhythm("none,sustain", 4)
+        self.assertIn("none", str(caught.exception))
+
     def test_case_and_whitespace_are_not_part_of_the_request(self):
         self.assertEqual(parse_rhythm(" MELODY , 1and ", 4), parse_rhythm("melody,1and", 4))
 
@@ -254,6 +282,9 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             "lastand": "4and",
             "every-beat": "1,2,3,4",
             "melody,1and": "melody,1and",
+            "melody,sustain": "melody",
+            "sustain": "sustain",
+            "sustain,1and": "sustain,1and",
             "3,1,2and": "1,2and,3",
         }
         for text, canonical in cases.items():
@@ -299,6 +330,9 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             "1,3:none",
             "melody:1and",
             "1:2:2",
+            "sustain",
+            "sustain,1and",
+            "melody,sustain",
         )
         for beats, grouping in metres:
             for text in spellings:

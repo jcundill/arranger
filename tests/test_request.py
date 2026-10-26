@@ -251,6 +251,31 @@ class TestTheRefusals(unittest.TestCase):
             )
         self.assertIn("melody rest", str(caught.exception))
 
+    def test_sustain_is_accepted_without_the_tune(self):
+        """`chord-on=sustain --no-melody` is not refused: written durations still
+        exist, so sustained onsets comp just as `chord-on=melody --no-melody` comps
+        to the written onsets. `resolve_request` honours it rather than raising."""
+
+        # No exception: the request is honoured, not refused.
+        resolve_request(Request(melody=False, chord_on="sustain"), 4)
+        resolve_request(Request(melody=False, chord_on="sustain,1and"), 4)
+
+        # And it arranges: sustained whole notes comp, short notes rest.
+        steps = _arrange(
+            timings=(
+                (1, 1.0, 1.0),
+                (1, 2.0, 0.125),
+                (1, 3.0, 0.125),
+                (1, 4.0, 1.0),
+            ),
+            request=Request(melody=False, chord_on="sustain"),
+        )
+        self.assertEqual(len(steps), 4)
+        self.assertGreater(_sounded(steps[0]), 1)  # sustained whole note comps
+        self.assertEqual(_sounded(steps[1]), 0)   # short note rests
+        self.assertEqual(_sounded(steps[2]), 0)   # short note rests
+        self.assertGreater(_sounded(steps[3]), 1)  # sustained whole note comps
+
     def test_a_chord_content_choice_needs_a_chord_part(self):
         with self.assertRaises(ValueError) as caught:
             resolve_request(Request(chord_on="none", chord_notes="2"), 4)
