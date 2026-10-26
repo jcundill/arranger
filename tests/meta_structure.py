@@ -192,7 +192,13 @@ BUDGETS: Dict[str, Budget] = {
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
-    "arranger/render.py": Budget(11, 64, 2),
+    "arranger/render.py": Budget(12, 64, 2),
+    # `_step_cells` grew one decision point when a carried thumb (`bass_held`) under a
+    # repeated melody was guarded out of the struck set: a held thumb rings and is not
+    # plucked, so it must stay muted rather than be added to `struck` beside the
+    # re-articulated soprano. The branch is deliberate - it is what keeps the one-line
+    # tab, the staff, the score and the GP5 file from disagreeing about a held bass -
+    # and the function is otherwise unchanged, so the module ceiling moves with it.
     # The step-history readers left for `step_history`, so the ceiling is what this
     # module measures rather than what it measured. The parameter ceiling is
     # `comping_step`'s seven: the six facts of a slot plus the metre's count, which the

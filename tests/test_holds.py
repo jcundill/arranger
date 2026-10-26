@@ -194,3 +194,37 @@ class TestSustainShortNotesStrike(unittest.TestCase):
         # Rest events (step is None) are skipped.
         step_events = [(s, strike) for s, strike, _ in events if s is not None]
         self.assertTrue(all(strike for _, strike in step_events), step_events)
+
+
+class TestSustainShortNotesUnderHeldBass(unittest.TestCase):
+    """`sustain` short melody notes over a walking bass re-articulate, not hold.
+
+    When the thumb strikes a bass note and it rings under repeated same-pitch
+    melody notes, each melody note re-strikes the soprano while the held thumb
+    stays silent. The step must be marked `repeated`; without it the staff
+    renderer collapses the repeated strikes into holds and loses the
+    re-articulation - bar 18 of "Blue Moon" with `--chord-on sustain
+    --bass-on 1,2` was exactly this collapse.
+    """
+
+    def test_repeated_melody_over_held_bass_strikes_each_note(self):
+        progression = (("C5", "Cmaj7"), ("C5", "Cmaj7"), ("C5", "Cmaj7"), ("C5", "Cmaj7"))
+        timings = ((1, 1.0, 0.125), (1, 1.25, 0.125), (1, 1.5, 0.125), (1, 1.75, 0.125))
+        steps = VoiceLeadingEngine.arrange_progression(
+            progression,
+            timings=timings,
+            options=ArrangeOptions(request=Request(chord_on="sustain", bass_on="1")),
+        )
+        self.assertEqual(len(steps), 4)
+        # Beat 1.0 strikes the bass; beats 1.25-1.75 hold that same bass.
+        self.assertFalse(steps[0].bass_held)
+        self.assertFalse(steps[0].repeated)
+        for step in steps[1:]:
+            with self.subTest(beat=step.beat):
+                self.assertTrue(step.bass_held, f"{step.beat}: bass should be held")
+                # The melody re-articulates: the step is repeated so the soprano
+                # re-strikes while only the held thumb rings.
+                self.assertTrue(step.repeated, f"{step.beat}: repeated melody must strike")
+        # Render with collapse=True (the default): every column strikes, no holds.
+        staff = format_tab_staff(steps, 4, 4)
+        self.assertNotIn("~", staff, staff)

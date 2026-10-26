@@ -436,6 +436,8 @@ def holds_the_shape(
     previous_step: Optional[ArrangementStep],
     melody_midi: int,
     harmony: Tuple[Optional[str], Optional[str]],
+    *,
+    current: Optional[Voicing] = None,
 ) -> bool:
     """Whether a step sounding `melody_midi` under `harmony` re-states the one before it.
 
@@ -466,6 +468,15 @@ def holds_the_shape(
     reach **none** of the four renderers. The chord is voiced and then thrown away by a
     rule that means "hold what is already ringing", applied when nothing is.
 
+    The one exception is a single note **re-articulated over a held voice**: a carried
+    thumb under a repeated melody. The previous step sounds that note alone, so there
+    are no inner voices to hold, but the melody itself is struck again while only the
+    held voice rings. `current` is the shape this step won with - pre-merge, so a
+    carried bass is not in it yet - and when it voices nothing but that same note on
+    the same string, the step is a re-articulation rather than a new shape. Without
+    `current` - the `_held_candidates` caller, which is still choosing among shapes -
+    the conservative answer stands: nothing is ringing, so nothing is held.
+
     So the test is on what the previous step **sounds**, not on its flag: one active
     fret means there is nothing to hold. `melody_only` is then a special case of it
     and is kept as a named check because it reads as the intent rather than the
@@ -477,11 +488,28 @@ def holds_the_shape(
     """
     if previous_step is None or previous_step.melody_only:
         return False
-    if len([fret for fret in previous_step.voicing.frets if fret >= 0]) < 2:
-        # A melody-alone step: the melody is held by the hand, not by ringing inner
-        # voices, so the next step has to state whatever it voices rather than
-        # suppress it.
-        return False
+    previous_sounding = [
+        fret for fret in previous_step.voicing.frets if fret >= 0
+    ]
+    if len(previous_sounding) < 2:
+        if current is None:
+            # Nothing is ringing under this step, so there is nothing to hold.
+            return False
+        current_strings = {
+            index
+            for index, fret in enumerate(current.frets)
+            if fret >= 0
+        }
+        previous_strings = {
+            index
+            for index, fret in enumerate(previous_step.voicing.frets)
+            if fret >= 0
+        }
+        if current_strings != previous_strings:
+            # This step states a voice the previous one did not, so it must be
+            # struck rather than held - even when that voice is only the melody
+            # moving to a new string.
+            return False
     if max(previous_step.voicing.midi_notes()) != melody_midi:
         return False
     return sounding_harmony(previous_step) == harmony
@@ -526,10 +554,19 @@ def is_repeated_step(
     than a hold, and the chord just voiced would be thrown away. So the flag has to
     mean exactly what the renderers do with it, and steering the melody onto the held
     string in the first place is `hold_the_melody_string`.
+
+    A step that sounds a single note is not automatically exempt: when the previous
+    step sang that same note alone and this step re-articulates it - a carried thumb
+    keeps ringing under a repeated melody - the melody is re-struck and only the held
+    voice rings, so the step **is** repeated. `voicing` is passed in as `current` so
+    `holds_the_shape` can tell a re-articulation of the same note from a step that
+    states a new voice.
     """
     if previous_step is None:
         return False
-    if not holds_the_shape(previous_step, max(voicing.midi_notes()), harmony):
+    if not holds_the_shape(
+        previous_step, max(voicing.midi_notes()), harmony, current=voicing
+    ):
         return False
     return voicing.soprano_string() == previous_step.voicing.soprano_string()
 

@@ -112,8 +112,10 @@ def _step_cells(step: ArrangementStep) -> List[str]:
             return cells_from_frets(frets)
         struck.add(step.voicing.soprano_string())
         # A repeated melody still moves the thumb: the bass is a moving voice, not a
-        # held one, so blanking it here would silently delete the walking line.
-        if step.voicing.bass_midi is not None:
+        # held one, so blanking it here would silently delete the walking line. A
+        # carried thumb (`bass_held`) is ringing rather than plucked, so it stays
+        # muted - this step re-strikes the soprano only.
+        if step.voicing.bass_midi is not None and not step.bass_held:
             struck.add(step.voicing.bass_string)
     # Every string the step does not play is muted: the line states what is plucked.
     cells = [MUTED_CELL] * len(frets)
