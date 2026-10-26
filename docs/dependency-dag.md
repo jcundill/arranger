@@ -84,14 +84,16 @@ flowchart TB
         bass["bass"]
         bass_place["bass_place"]
         bass_rules["bass_rules"]
+        comp_line["comp_line"]
         texture["texture"]
         grouping["grouping"]
         grid["grid"]
         parts["parts"]
-        bass_merge --> bass
+        bass_merge --> bass_place
         bass --> bass_place
         bass_place --> bass_rules
         bass_place --> fingers
+        comp_line --> grip_place
         bass --> grid
         bass_rules --> texture
         texture --> parts
