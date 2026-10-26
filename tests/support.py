@@ -803,6 +803,11 @@ I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "synthetic_triplets.mxl")
 # the pickup is three quarters.
 BLUE_MOON = os.path.join(DATA, "synthetic_pickup_cut.musicxml")
 
+# The same shape with no `implicit="yes"` on measure 1 - what MuseScore 3.2.3 writes
+# for a real pickup bar. An unmarked short first bar is still a pickup: the renderers
+# infer it from the bar's own content rather than from the source's decoration.
+SYNTHETIC_PICKUP_UNMARKED = os.path.join(DATA, "synthetic_pickup_unmarked.musicxml")
+
 # The same shape without the source's bar line: 4/4, bar 1 one beat of the bar. It is
 # the fixture that says the incompleteness is what makes a pickup, not the `<bar-style>`.
 MISTY = os.path.join(DATA, "synthetic_pickup_common.musicxml")

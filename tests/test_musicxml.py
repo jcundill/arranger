@@ -24,6 +24,7 @@ from tests.support import (
     BUT_NOT_FOR_ME,
     I_WAS_DOING_ALL_RIGHT,
     MISTY,
+    SYNTHETIC_PICKUP_UNMARKED,
     make_step,
 )
 
@@ -815,6 +816,24 @@ class TestAnacrusisPickup(unittest.TestCase):
         head, (_events, pickup) = self._pickup(I_WAS_DOING_ALL_RIGHT)
         self.assertFalse(head.first_bar_implicit)
         self.assertEqual(pickup, 0.0)
+
+    def test_an_unmarked_short_first_bar_is_still_a_pickup(self):
+        """An unmarked short first bar (no `implicit="yes"`) is inferred from content.
+
+        Synthetic Pickup Unmarked mirrors Blue Moon: 2/2, bar 1 one quarter note,
+        no `implicit="yes"`. The loader must leave `first_bar_implicit` unset so
+        `score_events` infers the pickup from the bar's own shortfall - three
+        quarters - and `first_complete_bar` moves to bar 2. That is the Blue Moon
+        regression: a real-world pickup bar that MuseScore ships unmarked.
+        """
+        head, (events, pickup) = self._pickup(SYNTHETIC_PICKUP_UNMARKED)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        self.assertIsNone(head.first_bar_implicit, "nothing marked measure 1")
+        self.assertEqual(pickup, 3.0)
+        # The trailing rest is dropped, so the first event is the note alone and
+        # the next is bar 2's whole note - exactly as the marked counterpart.
+        self.assertEqual(events[0][2], 1.0)
+        self.assertEqual(events[1][2], 4.0)
 
 
 @requires_music21

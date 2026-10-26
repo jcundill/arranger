@@ -571,11 +571,12 @@ class Head:
     # fact and `ArrangeOptions` is the request. `_head_request` converts it.
     grouping: Tuple[int, ...] = ()
     grouping_source: str = ""
-    # True when the score marks its first measure `implicit="yes"` (or numbers it 0):
-    # the measure is an anacrusis, so its missing time is a pickup and not comping
-    # space. Carried because a generated accompaniment position in that short bar
-    # would fill it, and the renderers infer the pickup from the bar's content.
-    first_bar_implicit: bool = False
+    # Tri-state for the first measure: `True` when the score marks it
+    # `implicit="yes"` (or numbers it 0) - an anacrusis whose missing time is a
+    # pickup and not comping space; `False` when the source states a whole bar
+    # however short its music is; `None` when the score says nothing - the
+    # renderers infer the pickup from the bar's own content.
+    first_bar_implicit: Optional[bool] = None
     # The key signature as MusicXML states it: `key_fifths` counts sharps (positive)
     # or flats (negative), so -3 is Eb major or C minor, and `key_mode` is which -
     # "major", "minor", or "" where the score did not say. Kept as the format's own
@@ -1324,11 +1325,15 @@ class _NotesWalk:
                 self.skip(f'measures not numbered with an integer ("{number}")')
         if not self.measure_numbers:
             # The source's own statement that bar 1 is an anacrusis. A pickup
-            # numbered 0 says the same thing in the older spelling.
-            self.head.first_bar_implicit = (
+            # numbered 0 says the same thing in the older spelling. Anything
+            # else - including an unmarked short first bar - is left `None` so
+            # the renderers infer the pickup from the bar's own content rather
+            # than treating it as a stated whole bar.
+            if (
                 (measure.get("implicit") or "").strip().lower() == "yes"
                 or self.bar == 0
-            )
+            ):
+                self.head.first_bar_implicit = True
         self.measure_numbers.append(self.bar)
 
         for barline in measure.findall("barline"):

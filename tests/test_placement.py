@@ -626,16 +626,20 @@ class TestTheGripDistribution(unittest.TestCase):
         # pre-existing heads' distribution is unchanged. A moved count here still
         # means a shape moved; the fixture delta is the only expected difference.
         #
-        # **387**, and the nine that are not counted are all `shell`: they are the default
-        # union's comping steps in the tune's rests, which `head FILE` does not invent
+        # **392**: the eleven counted heads contribute 387, and
+        # `synthetic_pickup_unmarked.musicxml` (an unmarked cut-time pickup bar, the
+        # Blue Moon regression) adds its five written-note steps - one `drop2`, two
+        # `drop2_6432`, two `drop3` - matching its marked twin `synthetic_pickup_cut`.
+        # The nine that are not counted are all `shell`: they are the default union's
+        # comping steps in the tune's rests, which `head FILE` does not invent
         # (`docs/history/rhythm-request.md`).
-        self.assertEqual(total, 387)
+        self.assertEqual(total, 392)
         self.assertEqual(
             counts,
             {
-                "drop3": 107,
-                "drop2_6432": 98,
-                "drop2": 102,
+                "drop3": 109,
+                "drop2_6432": 100,
+                "drop2": 103,
                 "shell": 30,
                 "closed": 26,
                 "melody": 8,

@@ -555,25 +555,31 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **135** of the steps it arranges give up a chord tone, and every one of them is
+        # **139** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. The three grouped fixtures (5/4, 7/4, 12/8) account for the
-        # last 36: they are melody-dense and every note carries a chord. A corpus, grip
-        # table or rule that stops reaching the clause would otherwise leave every
-        # assertion here passing on its absence.
+        # last 36: they are melody-dense and every note carries a chord. The remaining
+        # 4 come from `synthetic_pickup_unmarked.musicxml` (the unmarked cut-time pickup
+        # bar, the Blue Moon regression): four of its five swept steps are four-voice
+        # shapes that each give up a tone. A corpus, grip table or rule that stops
+        # reaching the clause would otherwise leave every assertion here passing on its
+        # absence.
         #
         # The sweep's every-beat config is a **requested rhythm** (`chord_on`), and the
         # three grouped heads are where it differs in shape from the deleted
         # `grid="chord:freddie"` it replaced: one places the positions the caller named
         # and the other placed the bar's, so the totals moved with it.
         self.assertEqual(
-            omitted, 135, "the number of steps owing an omitted-tone clause moved"
+            omitted, 139, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1348** of the steps it arranges sound two or more
+        # measured over this sweep, **1378** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 320, all of them from notes the old corpus did not have.
-        # Two of them come from the union's gate reading the *selection* rather than
+        # The remaining 30 come from `synthetic_pickup_unmarked.musicxml` (the unmarked
+        # cut-time pickup bar, the Blue Moon regression): across the sweep's eleven
+        # configs, thirty of its steps are four-voice shapes that state their voices in
+        # full. Two of them come from the union's gate reading the *selection* rather than
         # the spelling: the waltz's first note is harmonised rather than read as a repeat
         # of a comping position, and the walk re-plans one line around a position the
         # union adds. The last one is the tune's register as a ceiling on the comp
@@ -581,7 +587,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # the comping shape moved below the held `F4`, so the melody step after it is no
         # longer the *same* shape re-struck - it states its voices in full rather than
         # reading as `repeated`.
-        self.assertEqual(named, 1348, "the number of steps naming their voices moved")
+        self.assertEqual(named, 1378, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
         # measured over this sweep, **1475** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
@@ -611,7 +617,13 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # comping step in a bar the form has not started in. The chord layer's own half
         # of that rule is inert on the corpus, because every committed anacrusis is
         # without a `<harmony>`; the thumb's half is not, and this is it.
-        self.assertEqual(comping, 1227, "the number of comping lines naming a voice moved")
+        #
+        # The remaining **+45** come from `synthetic_pickup_unmarked.musicxml` (the
+        # unmarked cut-time pickup bar, the Blue Moon regression): across the sweep's
+        # eleven configs, forty-five of its steps state a comping shape and name its
+        # voices. Its marked twin `synthetic_pickup_cut` is already in the sweep and
+        # unchanged.
+        self.assertEqual(comping, 1272, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
