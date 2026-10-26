@@ -346,11 +346,12 @@ def _collapse_holds(
         # of `repeated` - the tune re-articulated is a strike, the chord re-articulated
         # is one too - and the one exemption that has to be recorded rather than
         # compared. `_chord_attacks` is where the rule lives.
+        sounding = sum(1 for fret in step.voicing.frets if fret >= 0)
         strikes = (
             pitches != held
             or step.repeated
             or step.bass_only
-            or not pitches
+            or sounding <= 1
             or step.chord_attack
         )
         collapsed.append((onset, step, strikes))

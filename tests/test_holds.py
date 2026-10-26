@@ -14,6 +14,7 @@ import unittest
 from arranger import ArrangeOptions, Note, VoiceLeadingEngine
 from arranger.grid import parse_rhythm
 from arranger.options import Request
+from tabstaff import format_tab_staff
 
 _PROGRESSION = (
     ("C5", "Cmaj7"),
@@ -148,3 +149,48 @@ class TestSustainRefusals(unittest.TestCase):
             timings=_WHOLE,
             request=Request(melody=False, chord_on="sustain,1and"),
         )
+
+
+class TestSustainShortNotesStrike(unittest.TestCase):
+    """`sustain` short melody notes are re-articulated, not held.
+
+    A single plucked note cannot "hold" - if the same pitch sounds again, the
+    string is restruck. Without this, consecutive same-pitch short notes in
+    `sustain` mode collapse into one long note in the staff renderer.
+    """
+
+    def test_same_pitch_short_notes_each_strike(self):
+        """Four short C5 eighth-notes each strike, not one long hold."""
+        progression = (("C5", "Cmaj7"), ("C5", "Cmaj7"), ("C5", "Cmaj7"), ("C5", "Cmaj7"))
+        timings = ((1, 1.0, 0.125), (1, 2.0, 0.125), (1, 3.0, 0.125), (1, 4.0, 0.125))
+        steps = VoiceLeadingEngine.arrange_progression(
+            progression,
+            timings=timings,
+            options=ArrangeOptions(request=Request(chord_on="sustain")),
+        )
+        self.assertEqual(len(steps), 4)
+        # Each step is a single-string melody note
+        for step in steps:
+            self.assertEqual(sum(1 for f in step.voicing.frets if f >= 0), 1)
+        # Render with collapse=True (the default): every column strikes
+        staff = format_tab_staff(steps, 4, 4)
+        # Four separate strike columns, no `~` holds between them
+        hold_columns = staff.count("~")
+        self.assertEqual(hold_columns, 0, staff)
+
+    def test_same_pitch_short_notes_are_not_held_in_score(self):
+        """`tabscore.score_events` marks each single-note step as a strike, not a hold."""
+        progression = (("C5", "Cmaj7"), ("C5", "Cmaj7"), ("C5", "Cmaj7"), ("C5", "Cmaj7"))
+        timings = ((1, 1.0, 0.125), (1, 2.0, 0.125), (1, 3.0, 0.125), (1, 4.0, 0.125))
+        steps = VoiceLeadingEngine.arrange_progression(
+            progression,
+            timings=timings,
+            options=ArrangeOptions(request=Request(chord_on="sustain")),
+        )
+        from tabscore import score_events
+
+        events, _pickup = score_events(steps, 4, True, 4, None)
+        # Every real step is a strike (is_strike=True), none is a hold.
+        # Rest events (step is None) are skipped.
+        step_events = [(s, strike) for s, strike, _ in events if s is not None]
+        self.assertTrue(all(strike for _, strike in step_events), step_events)
