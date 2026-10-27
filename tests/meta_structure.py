@@ -196,6 +196,10 @@ BUDGETS: Dict[str, Budget] = {
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
+    # The engine half of the facade subdivision: nothing but re-exports, so no
+    # function ever exceeds its ceiling. The budget entry exists so the module is
+    # counted, not because any function could grow past it.
+    "arranger/engine.py": Budget(0, 120, 0),
     "arranger/render.py": Budget(12, 64, 2),
     # `_step_cells` grew one decision point when a carried thumb (`bass_held`) under a
     # repeated melody was guarded out of the struck set: a held thumb rings and is not

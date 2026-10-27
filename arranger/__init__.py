@@ -67,13 +67,14 @@ from . import (
     cost,
     decisions,
     demo,
+    engine,
     fingers,
     grid,
+    grip_comping,
     grip_place,
+    grip_requests,
     grip_tables,
     grip_templates,
-    grip_requests,
-    grip_comping,
     grips,
     grouping,
     harmonised_route,
@@ -95,65 +96,66 @@ from . import (
     texture,
     tuning,
 )
-
-# The public surface: the types a caller builds a request with and reads a result back
-# from, the functions that answer a question about one, and the renderers.
-from .bass import bass_line_for
-from .bass_place import BassNote, bass_cost
-from .bass_rules import bass_allowed, comping_capacity, parse_bass_style, thumb_capacity
-from .chords import (
-    ChordParser,
-    melody_degree_name,
-    normalised_harmony,
-    sounding_harmony,
-)
-from .cost import SelectionCriteria, VoicingScore
 from .demo import main
-from .grid import (
-    BarRhythm,
-    Rhythm,
-    beat_offset,
-    felt_beat,
-    grid_resolutions,
-    parse_rhythm,
-    rhythm_beats,
-)
-from .grip_tables import supported_string_sets
-from .grips import CompingRequest, get_comping_voicings, get_comping_voicings_for
-from .grouping import (
-    ParsedGrouping,
-    TimeSignature,
-    default_grouping,
-    format_grouping,
-    group_starts,
-    grouping_allowed,
-    parse_grouping,
-    resolve_grouping,
-)
-from .options import (
+
+# The public surface: engine names come through `engine`, render names through
+# `render`; `main` (the demo) and `Note` (musthe) are re-exported here directly.
+from .engine import (
+    ArrangementStep,
     ArrangeOptions,
+    BarRhythm,
+    BassNote,
+    ChordParser,
+    CompingRequest,
+    GuitarFretboard,
+    ParsedGrouping,
     Request,
     ResolvedRequest,
+    Rhythm,
+    SelectionCriteria,
+    StepPreparation,
+    TimeSignature,
+    VoiceLeadingEngine,
+    Voicing,
+    VoicingScore,
+    arrange_slots,
+    bass_allowed,
+    bass_cost,
+    bass_line_for,
+    beat_offset,
+    comping_arity,
+    comping_capacity,
+    default_grouping,
+    derived_arity,
+    felt_beat,
+    format_grouping,
     format_request,
-    resolve_request,
-)
-from .parts import (
+    get_comping_voicings,
+    get_comping_voicings_for,
+    grid_resolutions,
+    group_starts,
+    grouping_allowed,
+    melody_degree_name,
+    normalised_harmony,
+    parse_bar_range,
+    parse_bass_style,
+    parse_grouping,
+    parse_rhythm,
     parts_has_melody_only,
     parts_have_bass,
     parts_have_chord,
     parts_have_melody,
-)
-from .render import format_progression
-from .slots import arrange_slots, parse_bar_range, unresolved_steps
-from .step_types import ArrangementStep, Voicing
-from .steps import StepPreparation, VoiceLeadingEngine
-from .texture import (
-    comping_arity,
-    derived_arity,
+    resolve_grouping,
+    resolve_request,
+    rhythm_beats,
+    sounding_harmony,
+    supported_string_sets,
     texture_arity,
     texture_palette,
+    thumb_capacity,
+    unresolved_steps,
 )
-from .tuning import GuitarFretboard
+from .render import format_progression
 
 # Library version. The single source of truth: `pyproject.toml` reads it through
 # [tool.setuptools.dynamic] rather than duplicating the number.

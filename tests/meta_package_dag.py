@@ -75,6 +75,7 @@ ORDER = [
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them
+    "engine",       # the engine half of the facade: re-exports the engine's public API
     "render",       # per-step rendering
     "cli",          # the two front ends' shared argparse block and output dispatch
     "demo",         # the printing front end: the demonstration and the `head` hand-off
