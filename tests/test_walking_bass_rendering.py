@@ -32,7 +32,7 @@ from arranger.annotation import step_annotation
 from arranger.bass_rules import BASS_STRING_INDICES
 from arranger.tuning import ROLE_TARGET
 from tabgp import _sounding_frets
-from tabstaff import _strikes_here
+from tabstaff_grid import _strikes_here
 from tests.support import (
     MINOR_CADENCE,
     bass_name,

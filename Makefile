@@ -15,7 +15,7 @@ RUFF ?= .venv/bin/ruff
 # modules - they cannot be added one at a time and forgotten, because there is
 # nothing to add. Adding a *new top-level module* is still a two-line change here
 # and in the typecheck target below.
-MODULES = arranger tabscore.py tabstaff.py tabxml.py tabgp.py headxml.py headxml_cli.py headxml_model.py headxml_read.py headxml_repeats.py headxml_timeline.py tuning.py grip_chart.py tests
+MODULES = arranger tabscore.py tabstaff.py tabstaff_grid.py tabstaff_ascii.py tabstaff_html.py tabxml.py tabgp.py headxml.py headxml_cli.py headxml_model.py headxml_read.py headxml_repeats.py headxml_timeline.py tuning.py grip_chart.py tests
 
 # The suite is two halves and one command. A test about the **music** is
 # `tests/test_*.py`; a test about the **tree** - the module graph, the budgets, the
@@ -93,7 +93,7 @@ test-one:
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }
-	$(PYRIGHT) --pythonpath $(PYTHON) arranger tabscore.py tabstaff.py tabxml.py tabgp.py headxml.py headxml_cli.py headxml_model.py headxml_read.py headxml_repeats.py headxml_timeline.py tuning.py tests
+	$(PYRIGHT) --pythonpath $(PYTHON) arranger tabscore.py tabstaff.py tabstaff_grid.py tabstaff_ascii.py tabstaff_html.py tabxml.py tabgp.py headxml.py headxml_cli.py headxml_model.py headxml_read.py headxml_repeats.py headxml_timeline.py tuning.py tests
 
 # The rule set is configured in pyproject.toml ([tool.ruff]), and it is
 # deliberately narrow - see the comment there for why UP*/E501/B905 are off.

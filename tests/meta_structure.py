@@ -248,7 +248,13 @@ BUDGETS: Dict[str, Budget] = {
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 14),
     "tabscore.py": Budget(10, 114, 5),
-    "tabstaff.py": Budget(14, 204, 14),
+    # `tabstaff.py` is now a facade over `tabstaff_ascii` and `tabstaff_html`;
+    # the grid placement moved to `tabstaff_grid`. All three share the column
+    # grid by construction, so their ceilings are measured separately.
+    "tabstaff_grid.py": Budget(13, 92, 6),
+    "tabstaff_ascii.py": Budget(14, 204, 13),
+    "tabstaff_html.py": Budget(11, 137, 14),
+    "tabstaff.py": Budget(0, 0, 0),
     "tabxml.py": Budget(12, 176, 13),
 }
 
@@ -283,6 +289,33 @@ ALLOWED_PRIVATE_IMPORTS: Set[str] = {
     "headxml -> headxml_cli._key_label",
     "headxml -> headxml_read._part_is_tab",
     "headxml -> headxml_timeline._merge_chord_slots",
+    # The tabstaff split: `tabstaff_ascii` and `tabstaff_html` share the grid
+    # in `tabstaff_grid`, so both import its private placement functions.
+    "tabstaff_ascii -> tabstaff_grid._carries_melody",
+    "tabstaff_ascii -> tabstaff_grid._draws",
+    "tabstaff_ascii -> tabstaff_grid._first_bar_content_end",
+    "tabstaff_ascii -> tabstaff_grid._is_timed",
+    "tabstaff_ascii -> tabstaff_grid._marker_columns",
+    "tabstaff_ascii -> tabstaff_grid._meter_label",
+    "tabstaff_ascii -> tabstaff_grid._staff_barlines",
+    "tabstaff_ascii -> tabstaff_grid._staff_bars",
+    "tabstaff_ascii -> tabstaff_grid._staff_breaks",
+    "tabstaff_ascii -> tabstaff_grid._staff_columns",
+    "tabstaff_ascii -> tabstaff_grid._staff_lines",
+    "tabstaff_ascii -> tabstaff_grid._staff_rhythm",
+    "tabstaff_ascii -> tabstaff_grid._validate_staff_arguments",
+    "tabstaff_html -> tabstaff_grid._carries_melody",
+    "tabstaff_html -> tabstaff_grid._draws",
+    "tabstaff_html -> tabstaff_grid._is_timed",
+    "tabstaff_html -> tabstaff_grid._melody_label",
+    "tabstaff_html -> tabstaff_grid._meter_label",
+    "tabstaff_html -> tabstaff_grid._moved_thumb",
+    "tabstaff_html -> tabstaff_grid._NAVIGATION_LABELS",
+    "tabstaff_html -> tabstaff_grid._staff_breaks",
+    "tabstaff_html -> tabstaff_grid._staff_columns",
+    "tabstaff_html -> tabstaff_grid._staff_lines",
+    "tabstaff_html -> tabstaff_grid._staff_rhythm",
+    "tabstaff_html -> tabstaff_grid._validate_staff_arguments",
 }
 
 # Reaching a sibling's `_`-prefixed name through a module alias is the same coupling

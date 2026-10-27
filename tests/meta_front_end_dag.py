@@ -41,7 +41,12 @@ FRONT_ENDS_BY_STEM: Set[str] = {Path(name).stem for name in FRONT_ENDS}
 ALLOWED_FRONT_EDGES: Dict[str, Set[str]] = {
     # The public facade: `arranger.__getattr__` resolves the whole rendering surface
     # through this module, so it must hold the names the other two define.
-    "tabstaff": {"tabgp", "tabxml"},
+    "tabstaff": {"tabgp", "tabxml", "tabstaff_ascii", "tabstaff_html"},
+    # The grid lives in `tabstaff_grid`, shared by `tabstaff_ascii` and
+    # `tabstaff_html`. Both renderers import from it, which is the deliberate
+    # coupling that keeps the two grids from drifting apart.
+    "tabstaff_ascii": {"tabstaff_grid"},
+    "tabstaff_html": {"tabstaff_grid"},
     # The placement moved out of `tabxml`, so this is now the shared core rather
     # than a writer-to-writer edge. `tabxml` still re-exports the two names it uses.
     "tabxml": {"tabscore"},

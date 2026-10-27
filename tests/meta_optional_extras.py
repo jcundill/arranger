@@ -40,6 +40,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SHIPPED = (
     "tabscore",
     "tabstaff",
+    "tabstaff_grid",
+    "tabstaff_ascii",
+    "tabstaff_html",
     "tabxml",
     "tabgp",
     "headxml",
