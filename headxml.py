@@ -1652,6 +1652,19 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
     return head
 
 
+# ---------------------------------------------------------------------------
+# Repeats and play order
+# ---------------------------------------------------------------------------
+
+# A written score is not just its bars in document order: repeat barlines,
+# volta endings, segno/coda signs and D.C./D.S. jumps make the play order
+# longer than the file's measure count. These functions read every channel
+# that states navigation - `<barline>`, `<sound>`, `<direction>` - and expand
+# it into the absolute bar sequence the arrangement walks. See
+# docs/renderers.md for the full vocabulary (`|:` / `:|` / `1.` / `2.` /
+# `D.C.` / `D.S.` / `Coda` / `Fine`) and what each writer draws for it.
+
+
 def _parse_barline(barline: ElementTree.Element) -> List[BarInstruction]:
     """One `<barline>` as play-order instructions.
 

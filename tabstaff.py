@@ -54,6 +54,16 @@ from tabxml import format_musicxml, write_musicxml
 
 
 
+# ---------------------------------------------------------------------------
+# Grid placement
+# ---------------------------------------------------------------------------
+
+# Placing every step on an absolute beat, deduping onsets that collide, and
+# filling the gaps between them with rests. `_staff_columns` is the one function
+# both renderers call, so the ASCII staff and the HTML page place a chord in the
+# same column by construction and cannot drift apart.
+
+
 def _rest_grain(
     columns: Sequence[Tuple[float, Optional[ArrangementStep]]],
     beat_type: int,
@@ -522,6 +532,16 @@ def _slot_counts(
     return counts
 
 
+# ---------------------------------------------------------------------------
+# Rhythm row
+# ---------------------------------------------------------------------------
+
+# The note-value label of every column, as (label, kind) parallel to the columns.
+# `kind` is `note`, `hold` or `rest`, which is what makes a rhythm row readable
+# rather than a row of letters: a held shape and a rest both print something in
+# a column with no new attack, and they mean opposite things.
+
+
 def _note_value(quarters: float) -> str:
     """
     One note value as the two-or-three characters a rhythm cell can hold.
@@ -636,6 +656,16 @@ def _staff_rhythm(
             span = min(span, step.duration * 4.0)
         rhythm.append((_note_value(span), "note"))
     return rhythm
+
+
+# ---------------------------------------------------------------------------
+# Bars and breaks
+# ---------------------------------------------------------------------------
+
+# Where each bar opens and closes, the metre label for each system, and where
+# systems break. Bars are counted in the same bar numbers the steps carry, so
+# a marker's bar is the key to find its column, and `_staff_breaks` decides
+# where one line of the staff ends and the next begins.
 
 
 def _meter_label(beats_per_bar: int, beat_type: int) -> str:
@@ -814,6 +844,10 @@ def _staff_breaks(
     }
 
 
+# ---------------------------------------------------------------------------
+# Markers
+# ---------------------------------------------------------------------------
+
 # The short form of each navigation sign, for the label row above the staff. A jump
 # says only D.C. / D.S. here: "D.C. al Fine" is twelve characters, and the staff's
 # column width is shared by every row of a system, so it would widen the whole system.
@@ -880,6 +914,17 @@ def _marker_columns(
                 existing = label_at.get(index)
                 label_at[index] = f"{existing} {label}" if existing else label
     return barline_token, label_at
+
+
+# ---------------------------------------------------------------------------
+# Staff grid and ASCII staff
+# ---------------------------------------------------------------------------
+
+# `_StaffGrid` holds everything one row of the staff needs to draw itself: the
+# laid-out columns, the grid's width rules, the barlines, and the flags that
+# decide which rows exist. `format_tab_staff` lays systems out bar by bar,
+# delegating each row to the grid's methods, so the ASCII staff and the HTML page
+# place every chord in the same column by construction.
 
 
 @dataclass(frozen=True)
