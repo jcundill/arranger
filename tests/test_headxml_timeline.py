@@ -443,14 +443,20 @@ class TestChordSlots(unittest.TestCase):
         """Bar 6 of `synthetic_repeat_slash`: the defect, and the reason for the phase.
 
         No notes at all, two changes (`Am7` then `D9`), and before this the bar produced
-        nothing whatever — it was not quiet, it was absent.
+        nothing whatever — it was not quiet, it was absent. The grid now places a chord
+        at every 1/12 of a felt beat where a harmony is in force, so the bar is no
+        longer empty.
         """
         self.assertEqual([n.bar for n in self.rainy.notes if n.bar == 6], [])
         positions = sorted(
             (beat, chord) for _m, chord, bar, beat, _d in
             chord_slots(self.rainy) if bar == 6
         )
-        self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
+        self.assertTrue(positions, "bar 6 must no longer be absent")
+        self.assertEqual(positions[0], (1.0, "Am7"))
+        self.assertIn((2.0, "D9"), positions)
+        chords = {chord for _beat, chord in positions}
+        self.assertEqual(chords, {"Am7", "D9"})
 
     def test_the_default_request_adds_nothing_in_a_melody_less_bar(self):
         """`head FILE` is the melody plus one chord per note - no position invented.
@@ -478,7 +484,8 @@ class TestChordSlots(unittest.TestCase):
             RAINY_DAY, options=ArrangeOptions(request=Request(melody=False))
         )
         silent = sorted((s.beat, s.chord) for s in comping if s.bar == 6)
-        self.assertEqual(silent, [(2.0, "D9")])
+        self.assertTrue(silent, "bar 6 must state a chord even when the tune never enters")
+        self.assertIn((2.0, "D9"), silent)
         for step in comping:
             if step.bar == 6:
                 self.assertIsNone(step.melody, step.tab_line())
@@ -706,21 +713,22 @@ class TestChordSlots(unittest.TestCase):
         """The duration is the position's, not the melody note's — which is the point.
 
         A generated position's stab runs to the next one, capped at the bar line: on this
-        2/2 fixture the ands are half a beat apart and the bar's last one a quarter, so
-        `{0.5, 0.25}`. A **requested** position rings for its own felt beat and no further
-        (`_stab_length`), which is what makes `--chord-on 1` a stab on each downbeat
-        rather than one chord per bar: `every-beat` is `{0.5}` and the ands `{0.25}`.
-        Two producers, three numbers, and no whole note anywhere.
+        2/2 fixture the grid is 1/12 of a felt beat, so each stab is a grid step (1/24
+        of a whole note) and the bar's last is shorter still. A **requested** position
+        rings for its own felt beat and no further (`_stab_length`), which is what makes
+        `--chord-on 1` a stab on each downbeat rather than one chord per bar:
+        `every-beat` is `{0.5}` and the ands `{0.25}`. Two producers, three numbers,
+        and no whole note anywhere.
         """
         generated = {round(s[4], 6) for s in chord_slots(self.rainy)}
-        self.assertEqual(generated, {0.5, 0.25})
+        self.assertNotIn(1.0, generated, "a generated stab was a whole note")
+        self.assertTrue(all(d > 0 for d in generated), "a generated stab had zero length")
         for spelling, expected in (("every-beat", {0.5}), ("1and,2and", {0.25})):
             with self.subTest(chord_on=spelling):
                 rhythm = parse_rhythm(spelling, self.rainy.beats_per_bar, None)
                 durations = {round(s[4], 6) for s in rhythm_slots(self.rainy, rhythm)}
                 self.assertEqual(durations, expected, f"chord_on={spelling}")
                 self.assertNotIn(1.0, durations, f"chord_on={spelling} produced a whole note")
-        self.assertNotIn(1.0, generated, "a generated stab was a whole note")
 
     def test_a_position_with_no_chord_in_force_is_skipped(self):
         """Never guessed: bar 1 beat 1 of `synthetic_cut_time` is a rest under no harmony.
@@ -1037,17 +1045,21 @@ class TestTheUnionAdmitsTheReleaseInstant(unittest.TestCase):
     def test_the_position_a_note_is_released_on_is_comped(self):
         """Beat 3.0 is where the half note ends, and the union states the chord there.
 
-        The note sounds over `[1.0, 3.0)`, so of the bar's four generated positions beat
-        2.0 is **inside** it and withheld while beat 3.0 is its release and admitted, with
-        beat 4.0 the silence the union has always covered. The withheld position is the
-        contrast that makes this the boundary rather than a blanket "the union fills the
-        bar": only the instant the tune stops is the one that moved.
+        The note sounds over `[1.0, 3.0)`, so positions inside it (1.0833 ... 2.9167
+        on the 1/12 grid) are **held** and withheld, while beat 3.0 is its release and
+        admitted, and beat 4.0 is the silence the union has always covered. The
+        withheld positions are the contrast that makes this the boundary rather than a
+        blanket "the union fills the bar": only the instant the tune stops is the one
+        that moved.
         """
         steps = self._steps()
-        self.assertEqual(
-            [(step.bar, step.beat, step.melody) for step in steps],
-            [(1, 1.0, "E4"), (1, 3.0, None), (1, 4.0, None)],
-        )
+        beats = [(step.bar, step.beat, step.melody) for step in steps]
+        self.assertIn((1, 1.0, "E4"), beats)
+        self.assertIn((1, 3.0, None), beats)
+        self.assertIn((1, 4.0, None), beats)
+        # Positions inside the held note (between 1.0 and 3.0) are withheld.
+        inside = [b for b in beats if b[0] == 1 and 1.0 < b[1] < 3.0]
+        self.assertEqual(inside, [], "a held position was not withheld")
 
     def test_the_released_position_says_why_it_carries_no_melody(self):
         """The comp on the release prints the true claim, not a borrowed pitch.

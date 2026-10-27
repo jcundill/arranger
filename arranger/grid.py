@@ -17,6 +17,13 @@ from .grouping import group_starts
 
 TICKS_PER_BEAT = 24
 
+#: A felt beat divided into this many equal parts: thirds land on index 4 and 8,
+#: quarters on index 3, 6 and 9 - LCM(3,4) = 12 is the smallest grid holding both.
+#: Every grid point is exact on the `TICKS_PER_BEAT` lattice because a felt beat is
+#: always a whole number of raw beats, so `1/12` of one is `group_length/12` raw beats
+#: = `2 * group_length` ticks, always an integer.
+SUBDIVISIONS_PER_FELT_BEAT = 12
+
 
 BEAT_EPSILON = 1e-6
 
@@ -402,4 +409,35 @@ def rhythm_beats(
             continue
         beats.append(starts[index] + (position - index - 1) * lengths[index])
     return tuple(sorted(set(beats)))
+
+
+def snap_to_felt_grid(
+    beat: float,
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+    subdivisions: int = SUBDIVISIONS_PER_FELT_BEAT,
+) -> float:
+    """Snap `beat` to the nearest subdivision of its felt beat.
+
+    The grid is per felt beat: `felt` position `1 + k/subdivisions` maps back into
+    whatever raw-beat group contains it, so mixed groupings (`3+2` in 5/4) keep their
+    alternating spacing. Every grid point lands exactly on the `TICKS_PER_BEAT`
+    lattice, so `_tick_key` stays an exact dedup key.
+    """
+    lengths = tuple(grouping) if grouping else (1,) * beats_per_bar
+    starts = group_starts(beats_per_bar, lengths)
+    felt = felt_beat(beat, beats_per_bar, grouping)
+    felt_int = int(felt)
+    frac = felt - felt_int
+    k = round(frac * subdivisions)
+    index = felt_int - 1
+    if k == subdivisions:
+        # Rounded up to the next group's start.
+        index += 1
+        k = 0
+    if index < 0:
+        return float(starts[0])
+    if index >= len(lengths):
+        return float(starts[-1] + lengths[-1])
+    return starts[index] + (k / subdivisions) * lengths[index]
 

@@ -141,9 +141,10 @@ BUDGETS: Dict[str, Budget] = {
     # Re-measured when the per-finger assignment layer went: the ceiling is the hand
     # budget's own size now (`can_fret`, 22 lines), not `assign_fingers`'s 41.
     "arranger/fingers.py": Budget(2, 22, 1),
-    # The named figures and their parser went, so what is left is the request's
-    # `Rhythm` and the lattice under it: re-measured, not lowered by eye.
-    "arranger/grid.py": Budget(8, 23, 3),
+    # Re-measured when `snap_to_felt_grid` was added: the grid function is 29 lines
+    # and takes 4 parameters (beat, beats_per_bar, grouping, subdivisions), both
+    # deliberate increases for the 1/12 felt-beat grid primitive.
+    "arranger/grid.py": Budget(8, 29, 4),
     # Re-measured when `finger_skip_count` moved to the tests: the ceiling is
     # `comping_string_sets`'s 37 lines.
     "arranger/grip_tables.py": Budget(7, 37, 3),

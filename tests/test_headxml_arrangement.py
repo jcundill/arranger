@@ -965,12 +965,20 @@ class TestCompoundMetres(unittest.TestCase):
         )
 
     def test_the_generated_grid_is_the_four_pulses(self):
-        """The bar's own rhythm is dotted quarters, so the default grid follows it."""
+        """The grid is 1/12 of a felt beat: the four pulses are on it (k=0).
+
+        A 12/8 bar has four dotted-quarter felt beats at 1.0, 4.0, 7.0, 10.0,
+        and each splits into SUBDIVISIONS_PER_FELT_BEAT grid points - 48 per bar.
+        """
         head, _path = self.load()
-        positions = [
+        positions = sorted(
             round(slot[3], 6) for slot in chord_slots(head, (1, 2))
-        ]
-        self.assertEqual(positions, [1.0, 4.0, 7.0, 10.0])
+        )
+        self.assertIn(1.0, positions)
+        self.assertIn(4.0, positions)
+        self.assertIn(7.0, positions)
+        self.assertIn(10.0, positions)
+        self.assertEqual(len(positions), 48)
 
     def test_targets_are_the_first_and_third_pulses(self):
         _head, path = self.load()

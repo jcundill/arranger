@@ -62,7 +62,13 @@ from arranger import (
     rhythm_beats,
 )
 from arranger.chords import midi_to_note_name
-from arranger.grid import RHYTHM_EVERY_BEAT, RHYTHM_MELODY, TICKS_PER_BEAT
+from arranger.grid import (
+    RHYTHM_EVERY_BEAT,
+    RHYTHM_MELODY,
+    SUBDIVISIONS_PER_FELT_BEAT,
+    TICKS_PER_BEAT,
+    snap_to_felt_grid,
+)
 from arranger.grouping import COMMON_TIME, GROUPING_AUTO, TimeSignature
 from arranger.options import (
     CHORD_FILLS_COMP,
@@ -2572,16 +2578,30 @@ def _bar_resolution(
 def _generated_beats(
     head: Head, bar: int, beat_type: int, grouping: Optional[Sequence[int]] = None
 ) -> Tuple[float, ...]:
-    """Every position a bar's own rhythm generates, at that bar's own resolution.
+    """Every position in a bar, at every 1/12 of a felt beat.
 
-    Positioned from beat 1 so the first is the downbeat in any metre, and stepping by the
-    resolution `_bar_resolution` chose. **Every one of these is a candidate, not a decision**:
-    `_merge_chord_slots` drops the ones the melody already occupies and the ones it is still
-    holding, and `chord_slots` drops the ones with no chord in force.
+    The grid is per felt beat: each felt beat splits into
+    `SUBDIVISIONS_PER_FELT_BEAT` equal parts, so thirds (index 4, 8) and quarters
+    (index 3, 6, 9) land exactly. Mixed groupings (`3+2` in 5/4) keep their
+    alternating spacing because each group is divided on its own terms.
+
+    Every grid point is exact on the `TICKS_PER_BEAT` lattice - a felt beat is a
+    whole number of raw beats, so `1/12` of one is `2 * group_length` ticks - and
+    `_tick_key` stays an exact dedup key.
+
+    **Every one of these is a candidate, not a decision**: `_merge_chord_slots`
+    drops the ones the melody already occupies and the ones it is still holding,
+    and `chord_slots` drops the ones with no chord in force.
     """
-    span = head.beats_per_bar * TICKS_PER_BEAT
-    stride = _bar_resolution(head, bar, beat_type, grouping)
-    return tuple(1.0 + tick / TICKS_PER_BEAT for tick in range(0, span, stride))
+    grouping = _chord_grouping(head, grouping)
+    lengths = tuple(grouping)
+    starts = group_starts(head.beats_per_bar, lengths)
+    beats: List[float] = []
+    for index, length in enumerate(lengths):
+        for k in range(SUBDIVISIONS_PER_FELT_BEAT):
+            beat = starts[index] + (k / SUBDIVISIONS_PER_FELT_BEAT) * length
+            beats.append(beat)
+    return tuple(sorted(beats))
 
 
 def _chord_grouping(
@@ -2739,7 +2759,8 @@ def rhythm_slots(
     for bar in range(lo, hi):
         segment = rhythm.at(bar, first_bar)
         for beat in rhythm_beats(segment, head.beats_per_bar, grouping):
-            at.setdefault(_tick_key(bar, beat), (bar, beat))
+            snapped = snap_to_felt_grid(beat, head.beats_per_bar, grouping)
+            at.setdefault(_tick_key(bar, snapped), (bar, snapped))
     for bar, beat in extra_positions:
         if lo <= bar < hi:
             at.setdefault(_tick_key(bar, beat), (bar, beat))
@@ -2936,7 +2957,8 @@ def _felt_starts(
     found: List[float] = []
     for bar in range(first_bar, last_bar + 1):
         for beat in starts:
-            absolute = beat_offset(bar, beat, beats_per_bar)
+            snapped = snap_to_felt_grid(beat, beats_per_bar, grouping)
+            absolute = beat_offset(bar, snapped, beats_per_bar)
             if start + BEAT_EPSILON < absolute < stop - BEAT_EPSILON:
                 found.append(absolute)
     return found
