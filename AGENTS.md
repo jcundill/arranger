@@ -476,91 +476,26 @@ melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down
 
 ### Every choice about a voiced note is explained by the line that prints it
 
-**A step has to account for what it did, and for the shape it did it with.** This is an
-invariant of the artifact rather than a style preference: the one-line tab is what a user
-reads, so a choice it cannot see is a choice the library made silently. It is also the
-constraint on growth — **a new axis, grip, substitution or fallback arrives with its
-explanation**, because the alternative is a knob whose effect is invisible.
-
-The mechanism is that the explanation is **recorded on the step and composed by the
-renderer**, never re-derived at a call site:
-
-- a choice *among shapes* lives on `ArrangementStep.palette` (the most voices the palette
-  offered, the best fuller candidate, the `cost.voicing_cost` element that ranked it lower,
-  `inside_window`) and is phrased by `annotation._shape_clause` / `_window_clause`;
-- a fact that **corrects a column** — the octave a melody was moved to, the chord a
-  substitution actually states, a written slash bass no shape sounds — is a *derived clause*
-  (`_transposition_clause`, `_substitution_clause`, `_slash_bass_clause`), so it reaches every
-  route that can suffer it, a hold included;
-- a **choice the shape embodies** that no field records is derived from the step's own fields
-  too, but is suppressed on a hold like the `palette` clauses, because it accounts for the
-  shape rather than for a column: `_omission_clause` names the chord tone a four-voice shape
-  gives up (`TONE_PRIORITY`'s tail), and `_sounding_clause` names the voices a shape with two
-  or more of them sounds, each with the degree it states. Derived rather than recorded because
-  the whole fact — the
-  routed chord's tones against the pitches sounding — is already on the step, and a field
-  beside it would be a second source for one fact;
-- the **comp line's move** is recorded (`ArrangementStep.top_role`, from `comp_line`'s role
-  constants, which live in `step_types` so this module can read them) and phrased by
-  `_comp_line_clause`: `top D4 - walks up`. `Palette.dropped_for_line` - the shape the ranking
-  preferred before the line narrowed the palette - is **recorded and not printed**, and that is
-  a measurement rather than an omission: the line narrows on almost every comping step, so a
-  sentence for it said the same thing on fourteen of the four-bar example's sixteen steps
-  ([history/comp-line.md](docs/history/comp-line.md) §"The measurement");
-- a **route that chose no shape** states its own (`_comping_clause` names the voices it
-  states, each by note and degree; "the tune is silent here"; "the guitar rests here"; "the
-  shape above is held"; "the most a fill's palette offers" — the last is the difference
-  between *the library ran out* and *the caller asked for fewer*).
-
-`tests/meta_explanations.py` is the standing check: a table of (decision, when this step is
-one of those, what the line must say), swept over every committed head and working from the
-step's **fields** rather than from the wording, so it cannot be satisfied by phrasing.
-**Adding a decision means adding its witness to that table in the same commit**, and a new
-`*_clause` helper fails a companion test until it is registered there — the enumeration is
-read off the module, so a clause cannot be added and forgotten.
-
-Two exemptions are deliberate and are named in that file rather than left implicit, because
-a rule with unnamed exceptions is a rule the next editor deletes: a **hold** does not restate
-the shape count (it was explained where the shape was chosen) though it does restate what
-corrects a column; and the **slash bass** is pinned by its own test, because a witness that
-recomputed whether the bass sounds would be the clause agreeing with itself. A lone note is
-chosen from a palette of single-note shapes (one position per eligible string) by the same
-cost tuple a chord goes through, so its fret **is** a choice and the window clause has a
-measured `Palette.inside_window` to state rather than a defaulted one to guess with.
-
-What the invariant does **not** cover, and should not pretend to: a *phrase* (nothing groups
-steps) and the **fingerings** (`fingers.py` assigns them and no renderer prints them — a barre is
-visible in the tab). A position the guitar *declines* is covered: the four routes that
-would drop one emit a rest step whose `silence` names the reason, and
-`annotation._silence_clause` phrases it, which is why it carries a witness in the table
-above.
+See [docs/engine.md](docs/engine.md) §"Every choice about a voiced note is explained by the line that prints it"
+for the explanation contract: what a step must account for, how `*_clause*` helpers are registered,
+and the `tests/meta_explanations.py` standing check.
 
 
 ### The cost tuple's field order is the rule
 
-`voicing_cost` returns a `VoicingScore` - a `tuple` subclass whose **7 fields are the
-library's central invariant**. The order is asserted once, and positionally, by
-`tests/test_grip_selection.py::TestVoicingCost::test_the_field_order_is_the_rule`; every
-other assertion reads a field by name (`score.span`, not `score[3]`). Moving the code is
-safe; **reordering the fields, or changing what one reports, is a musical decision rather
-than a refactor** — the reasoning, and the table of what such a change costs, are in
-[docs/engine.md](docs/engine.md).
+The 7 fields of `voicing_cost`'s `VoicingScore` are the library's central invariant —
+reordering them, or changing what one reports, is a musical decision rather than a
+refactor. See [docs/engine.md](docs/engine.md) §"The cost tuple" for the field table,
+and `tests/test_grip_selection.py::TestVoicingCost::test_the_field_order_is_the_rule`
+for the positional assertion.
 
-**Adding a field is cheap**: the field on the score, its phrase in
-`cost._CRITERION_LABELS` (keyed by field name), and the value it reads from
-`SelectionCriteria` - because the label tuple, the span index and the partition index are
-all derived from the fields, and `voicing_cost` takes that one value rather than seven
-keywords. The recipe is in [docs/engine.md](docs/engine.md) §"Adding a ranking criterion".
+Adding a field is cheap; deleting one is the musical decision again. A criterion that
+names a grip family is not permitted — a family is not a property of a shape, and two
+families can generate the same tab. A tie falls to generation order: `top_strings`
+first, then `GRIP_PREFERENCE` within one string. Both live cases are in
+[docs/engine.md](docs/engine.md) §"Known limitations".
 
-**Deleting a field is the musical decision again**, and so is any criterion that names a
-grip family: a family is not a property of a shape, and two families can generate the very
-same tab, so at that depth the tuple would be choosing a *name* rather than a sound. A tie
-falls to generation order — `top_strings` first, then `GRIP_PREFERENCE` within one string —
-which is the engine's order rather than a caller's, so "most preferred first" is a property
-of the table. The two live cases that order decides are in [docs/engine.md](docs/engine.md)
-§"Known limitations".
-
-Likewise the hardcoded tab strings in the tests stay: they are the acceptance gate, and a
+The hardcoded tab strings in the tests stay: they are the acceptance gate, and a
 snapshot mechanism would let a regression pass by regenerating itself.
 
 
@@ -595,49 +530,10 @@ snapshot mechanism would let a regression pass by regenerating itself.
 
 ## Adding a new chord quality
 
-1. Add the quality's tones to `TONE_PRIORITY`, most defining first. **That row is the
-   drop-2 rule** — `drop2_template_for` builds each shape from it and `_drop2_palette` is
-   that rule read at every degree — so there is no list of interval numbers to write down.
-   Its first two entries are the quality's `SHELL_DEGREES` pair, and the tail **ranks which
-   tone a four-voice shape gives up** when the chord has more tones than voices — the nearer
-   the end of the row, the sooner it goes, and the ranking is per-quality rather than one
-   global order (`9` gives up its root where `maj7` gives up its natural 5th). An altered 5th
-   is not a 5th: it ranks above the root. A name-given extension (the 9th of a `9`, the 13th
-   of a `13`) is never the tone dropped. The shape itself is the close-position stack under
-   the melody with its second voice lowered an octave, and a triad's fourth voice is the
-   root doubled an octave below the stack.
-2. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`. This is also
-   what `drop3`, `closed`, `shell` and `duo` build themselves from, so it is required
-   for the new grips to reach the quality at all. If the quality should also get a
-   shell, add it to `SHELL_DEGREES` — the drop-2 rule and the derived grips work
-   without one.
-   `tests/test_generated_grips.py` holds the rule to the hand-written 119
-   (`tests/support.py::WITNESS`), so **a new quality needs no table row of its own**; the
-   measurements behind it are in [docs/history/generated-grips.md](docs/history/generated-grips.md).
-   A quality with a priority row
-   and a tone set needs nothing else, and one with a tone set but no row is offered no
-   drop-2 shapes at all rather than a guess.
-3. Add aliases to `ChordParser.QUALITY_ALIASES`.
-4. To make the quality reachable by the `extension` strategy, add it to
-   `NON_CHORD_TONE_EXTENSIONS`.
-5. **If a MusicXML file should be able to spell it**, add the matching
-   `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
-   alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
-   absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
-   quality MusicXML cannot spell stays silent until this step is done. Note the
-   table is keyed on the *library* quality, so a `kind` that only a `<degree>`
-   reaches (a 7b5, say) needs a degree entry rather than a kind entry.
-6. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
-   `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
-   of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
-   a member of `supported_string_sets()`.
-   `tests/test_voicings.py::TestQualityTableInvariants` checks the priority row is a
-   permutation of the tone set, and `tests/test_non_chord_tones.py` covers any new
-   `NON_CHORD_TONE_EXTENSIONS` route.
-   `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
-   is the same assertion for `MUSICXML_KIND_QUALITIES`.
-
-
+See [docs/engine.md](docs/engine.md) §"Adding a new chord quality" for the six-step recipe:
+tone set → `CHORD_TONES_FROM_ROOT`, priority row → `TONE_PRIORITY`, aliases →
+`QUALITY_ALIASES`, extension strategy → `NON_CHORD_TONE_EXTENSIONS`, MusicXML spelling →
+`headxml.py`, plus tests.
 ## Traps
 
 Each of these cost real time, or nearly shipped a defect.
