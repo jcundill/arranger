@@ -82,7 +82,7 @@ from arranger.options import (
 )
 from arranger.resolution import settle_input_fact
 from arranger.slots import arrange_slots
-from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES
+from tuning import NO_CHORD, PITCH_CLASS_NAMES
 
 __all__ = [
     "MUSICXML_KIND_QUALITIES",

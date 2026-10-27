@@ -14,10 +14,9 @@ behaviour to mean the same thing in each.
 
 Split out of `arranger.py` so the renderers can grow without making the voicing
 engine harder to read. The only thing here that reaches into the package is
-`arranger.tuning`, a leaf that imports nothing: the facade resolves *this* module
-through a PEP 562 `__getattr__`, so the two name each other without either needing
-the other to be initialised. [docs/dependency-dag.md](docs/dependency-dag.md) has
-the measurement.
+`arranger.step_types`; `tuning` is imported as a top-level module, so `tabstaff`
+no longer reaches into `arranger` at module scope. [docs/dependency-dag.md]
+(../docs/dependency-dag.md) has the measurement.
 """
 
 from __future__ import annotations
@@ -26,15 +25,15 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.step_types import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep
-from arranger.tuning import STRING_NAMES
 
 # The MusicXML and Guitar Pro renderers are ordinary top-level imports, re-exported
 # from `arranger` so that `from arranger import format_musicxml` - the spelling in
 # the README and the tests - keeps working.
 #
 # They are resolved as ordinary top-level imports because neither re-enters this
-# module: both import `arranger.tuning` - a leaf with no dependencies of its own -
-# and `tabgp` imports `tabxml`, not the reverse. Nothing here imports `tabstaff`.
+# module: both import `tuning` directly (top-level module) rather than
+# `arranger.tuning`, and `tabgp` imports `tabxml`, not the reverse. Nothing here
+# imports `tabstaff`.
 #
 # Nor is the laziness buying anything. `tabxml` needs music21 and `tabgp` needs
 # PyGuitarPro, but each imports its extra *inside* the functions that use it, so
@@ -47,6 +46,7 @@ from arranger.tuning import STRING_NAMES
 # `arranger/__init__.py` re-exports *this* module's names.
 from tabgp import format_gp5, write_gp5
 from tabxml import format_musicxml, write_musicxml
+from tuning import STRING_NAMES
 
 # `STAFF_CELL_WIDTH` and `MUTED_CELL` are `tuning`'s: the staff and the vertical
 # block have to put a fret in the same column by construction, and a second copy

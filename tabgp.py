@@ -60,8 +60,8 @@ import io
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.step_types import ArrangementStep
-from arranger.tuning import NO_CHORD
 from tabscore import score_events, substitute_steps
+from tuning import NO_CHORD
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
 # every later release read. PyGuitarPro writes GP3/GP4/GP5/TGP from the same model,

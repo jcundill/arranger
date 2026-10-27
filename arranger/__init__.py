@@ -162,9 +162,10 @@ from .render import format_progression
 __version__ = "0.14.0"
 
 
-# The whole-progression staff renderers live in `tabstaff`, which imports
-# `arranger.tuning` - and importing a submodule runs this module first. They are
-# exposed here through a module-level __getattr__ rather than a top-level
+# The whole-progression staff renderers live in `tabstaff`, which imports the
+# top-level `tuning` module directly rather than `arranger.tuning`, so it no
+# longer reaches into this package at module scope. They are exposed here
+# through a module-level __getattr__ rather than a top-level
 # `from tabstaff import ...`, so that `import arranger` does not load the four
 # rendering modules (`tabstaff`, `tabxml`, `tabgp`, `tabscore`) for a caller who
 # only wants the engine. PEP 562 resolves each name on first access instead, so

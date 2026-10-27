@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # The four names the distribution ships (see `pyproject.toml`). `grip_chart` is a
 # developer script that generates `common_grips.md`, so it stays out of the wheel;
 # it is still a flat module and is covered by the flatness test below.
-SHIPPED = ("tabscore", "tabstaff", "tabxml", "tabgp", "headxml")
+SHIPPED = ("tabscore", "tabstaff", "tabxml", "tabgp", "headxml", "tuning")
 FLAT_MODULES = SHIPPED + ("grip_chart",)
 
 

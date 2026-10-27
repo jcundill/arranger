@@ -238,6 +238,12 @@ BUDGETS: Dict[str, Budget] = {
     # (a stated whole bar writes its silence as rests instead of becoming a pickup).
     # One parameter on each writer's keyword surface and the placement's branch, rather
     # than a second spelling of a fact the score already stated.
+    # `tuning` moved to a top-level module to break the arranger <-> tabstaff
+    # import cycle. Its shim stays in `arranger/` (in ORDER) and is imported by
+    # every engine module; this budget covers the top-level source of truth.
+    # `note_to_fret` and `fret_to_midi` each have two branches (complexity 4);
+    # `note_name` is the longest function at 11 lines.
+    "tuning.py": Budget(4, 160, 2),
     "headxml.py": Budget(17, 117, 8),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 14),
@@ -347,7 +353,11 @@ FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
 
 def _library_modules() -> List[Path]:
     """Every module the budgets cover: the engine package and the top-level front ends."""
-    return sorted(ENGINE.glob("*.py")) + [ROOT / name for name in FRONT_ENDS]
+    modules = sorted(ENGINE.glob("*.py")) + [ROOT / name for name in FRONT_ENDS]
+    tuning = ROOT / "tuning.py"
+    if tuning.exists():
+        modules.append(tuning)
+    return sorted(modules)
 
 
 def _complexity(node: FunctionNode) -> int:
