@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Tuple
 
 from .bass import Slot
+from .context import project_comping, project_harmonised, project_minimal
 from .decisions import (
     MELODY_ALONE_BASS,
     MELODY_ALONE_NO_CHORD,
@@ -76,10 +77,10 @@ def _emit_no_upper_voices(
     thumb where the line has no note is not a choice, it is a refusal to report.
     """
     if plan.melody_alone == MELODY_ALONE_BASS:
-        bass_alone_step(arrangements, slot, plan.context)
+        bass_alone_step(arrangements, slot, project_minimal(plan.context))
         return True
     rest_step(
-        arrangements, slot, plan.context,
+        arrangements, slot, project_minimal(plan.context),
         sings_here=plan.sings_here, silence=plan.silence,
     )
     return True
@@ -99,8 +100,9 @@ def _emit_texture_fill(
     answer - so a False here hands the slot to the comping entry or to the
     melody-bearing step, which will state the harmony instead.
     """
+    facts = project_minimal(plan.context)
     return texture_fill_step(
-        arrangements, slot, plan.context,
+        arrangements, slot, facts,
         top_strings=plan.context.neck.top_strings,
         previous=previous_shape(arrangements),
     )
@@ -115,8 +117,9 @@ def _emit_no_chord(
     arrangements: List[ArrangementStep], slot: Slot, plan: SlotPlan
 ) -> bool:
     """The tune alone on an `NC` bar, carrying no chord clause."""
+    facts = project_minimal(plan.context)
     no_chord_step(
-        arrangements, slot, plan.context,
+        arrangements, slot, facts,
         top_strings=plan.context.neck.top_strings,
         previous=previous_shape(arrangements),
     )
@@ -141,8 +144,9 @@ def _emit_comping(
     See `comping_step`: a `False` means the position kept no chord, which is not a
     reason to drop the slot.
     """
+    facts = project_comping(plan.context)
     return comping_step(
-        arrangements, slot, plan.context,
+        arrangements, slot, facts,
         chord_type=plan.context.harmony.chord_type,
         melody_onsets=plan.rhythm.melody_onsets,
         parts=plan.context.arrangement.parts,
@@ -166,7 +170,9 @@ def _emit_melody(
     arrangements: List[ArrangementStep], slot: Slot, plan: SlotPlan
 ) -> bool:
     """Prepare, select, demote, emit: the route that pins the tune to the soprano."""
-    harmonised_step(arrangements, slot, plan)
+    harmonised_step(
+        arrangements, slot, project_harmonised(plan.context), plan.slot_grips
+    )
     return True
 
 

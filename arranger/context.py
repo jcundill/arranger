@@ -152,3 +152,103 @@ class SlotContext:
     arrangement: SlotArrangementFacts
     neck: SlotNeckFacts
     bass: SlotBassFacts
+
+
+@dataclass(frozen=True)
+class HarmonisedRouteFacts:
+    """What the melody-bearing route reads about one slot.
+
+    A projection of `SlotContext`: only the fields `harmonised_step` and its
+    helpers actually read, so the route cannot accidentally depend on a fact
+    group it does not use.
+    """
+
+    timing: SlotTiming
+    harmony: SlotHarmony
+    identity: SlotIdentity
+    state: SlotState
+    neck: SlotNeckFacts
+    bass: SlotBassFacts
+    non_chord_tone: str
+    texture: str
+    has_thumb: bool
+    melody_only: bool
+
+
+@dataclass(frozen=True)
+class CompingRouteFacts:
+    """What the comping route reads about one slot.
+
+    A projection of `SlotContext`: only the fields `comping_step` and its
+    helpers actually read, so the route cannot accidentally depend on a fact
+    group it does not use.
+    """
+
+    timing: SlotTiming
+    harmony: SlotHarmony
+    identity: SlotIdentity
+    state: SlotState
+    neck: SlotNeckFacts
+    bass: SlotBassFacts
+    texture: str
+    parts: Tuple[str, ...]
+    has_thumb: bool
+    non_chord_tone: str
+    melody_voiced: bool
+
+
+def project_harmonised(context: SlotContext) -> HarmonisedRouteFacts:
+    """The facts the melody-bearing route needs, projected from a full context."""
+    return HarmonisedRouteFacts(
+        timing=context.timing,
+        harmony=context.harmony,
+        identity=context.identity,
+        state=context.state,
+        neck=context.neck,
+        bass=context.bass,
+        non_chord_tone=context.arrangement.non_chord_tone,
+        texture=context.arrangement.texture,
+        has_thumb=context.arrangement.has_thumb,
+        melody_only=context.arrangement.melody_only,
+    )
+
+
+def project_comping(context: SlotContext) -> CompingRouteFacts:
+    """The facts the comping route needs, projected from a full context."""
+    return CompingRouteFacts(
+        timing=context.timing,
+        harmony=context.harmony,
+        identity=context.identity,
+        state=context.state,
+        neck=context.neck,
+        bass=context.bass,
+        texture=context.arrangement.texture,
+        parts=context.arrangement.parts,
+        has_thumb=context.arrangement.has_thumb,
+        non_chord_tone=context.arrangement.non_chord_tone,
+        melody_voiced=context.arrangement.melody_voiced,
+    )
+
+
+@dataclass(frozen=True)
+class MinimalRouteFacts:
+    """What a thin route (rest, bass alone, texture fill, NC) reads about a slot.
+
+    Only `timing`, `harmony` and `state` — nothing from `arrangement`, `neck`,
+    `bass` or `identity`. A route that only stamps a step's bar, beat, chord and
+    role has no business reading the search window, the slash bass or the parts
+    selection.
+    """
+
+    timing: SlotTiming
+    harmony: SlotHarmony
+    state: SlotState
+
+
+def project_minimal(context: SlotContext) -> MinimalRouteFacts:
+    """The facts a thin route needs, projected from a full context."""
+    return MinimalRouteFacts(
+        timing=context.timing,
+        harmony=context.harmony,
+        state=context.state,
+    )

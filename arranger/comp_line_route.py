@@ -19,13 +19,13 @@ from musthe import Note
 from . import comp_line as _comp_line
 from .bass import Slot
 from .chords import ChordParser, normalised_harmony
-from .context import SlotContext
+from .context import CompingRouteFacts
 from .step_history import last_sounding_step, sounding_tops
 from .step_types import ArrangementStep, Voicing
 
 
 def line_target(
-    context: SlotContext, notes: int, bass_voice: bool
+    facts: CompingRouteFacts, notes: int, bass_voice: bool
 ) -> Optional[Tuple[int, int]]:
     """The home band the comp line narrows the palette to, or None when it does not run.
 
@@ -37,11 +37,11 @@ def line_target(
     """
     if bass_voice or notes <= 1:
         return None
-    return _comp_line.home_band(context.neck.fret_min, context.neck.fret_max)
+    return _comp_line.home_band(facts.neck.fret_min, facts.neck.fret_max)
 
 
 def line_state(
-    arrangements: List[ArrangementStep], context: SlotContext
+    arrangements: List[ArrangementStep], facts: CompingRouteFacts
 ) -> Tuple[_comp_line.LineState, Optional[float]]:
     """Where the comp line stands, and the register the hand is in.
 
@@ -59,7 +59,7 @@ def line_state(
     previous_tops = previous.voicing.midi_notes()
     tops = (
         sounding_tops(arrangements)
-        if same_chord(previous, context)
+        if same_chord(previous, facts)
         else ([max(previous_tops)] if previous_tops else sounding_tops(arrangements))
     )
     register = (
@@ -68,19 +68,19 @@ def line_state(
     return (_comp_line.read_state(tops), register)
 
 
-def same_chord(previous: ArrangementStep, context: SlotContext) -> bool:
+def same_chord(previous: ArrangementStep, facts: CompingRouteFacts) -> bool:
     """Whether the last sounding step stated this slot's chord.
 
     Compared through `normalised_harmony`, so a substituted chord reads as itself and
     two spellings of one chord are not a change.
     """
     return normalised_harmony(previous.chord) == normalised_harmony(
-        context.harmony.name
+        facts.harmony.name
     )
 
 
 def next_chord_tones(
-    context: SlotContext, slot: Slot, beats_per_bar: int
+    facts: CompingRouteFacts, slot: Slot, beats_per_bar: int
 ) -> Optional[Tuple[int, ...]]:
     """The next chord's tones, when this slot is the last position before the change.
 
@@ -90,12 +90,12 @@ def next_chord_tones(
     the slot list is not readable forward from here - and the barline is where the
     chord's rhythm puts a change in every committed head.
     """
-    index = context.identity.index
-    progression = context.identity.progression
+    index = facts.identity.index
+    progression = facts.identity.progression
     if index + 1 >= len(progression):
         return None
     if normalised_harmony(progression[index + 1][1]) == normalised_harmony(
-        context.harmony.name
+        facts.harmony.name
     ):
         return None
     beat, duration = slot.beat, slot.duration
@@ -105,7 +105,7 @@ def next_chord_tones(
 
 
 def fill_target(
-    context: SlotContext, band: Tuple[int, int], register: Optional[float]
+    facts: CompingRouteFacts, band: Tuple[int, int], register: Optional[float]
 ) -> _comp_line.FillTarget:
     """A fill position: the hand's register, the tune's, and the path between them.
 
@@ -115,15 +115,15 @@ def fill_target(
     place on the path comes from `comp_line.fill_run`, which reads the run of
     melody-less positions out of the progression.
     """
-    index = context.identity.index
-    progression = context.identity.progression
+    index = facts.identity.index
+    progression = facts.identity.progression
     run_index, run_count = _comp_line.fill_run(progression, index)
     previous = register if register is not None else _comp_line.band_middle(band)
     target = previous
     note = _comp_line.next_melody(progression, index)
     if note is not None:
         reachable = _comp_line.tune_register(
-            Note(note).midi_note(), context.neck.top_strings
+            Note(note).midi_note(), facts.neck.top_strings
         )
         if reachable is not None:
             target = reachable
@@ -133,7 +133,7 @@ def fill_target(
 
 
 def line_inputs(
-    context: SlotContext,
+    facts: CompingRouteFacts,
     slot: Slot,
     beats_per_bar: int,
     band: Tuple[int, int],
@@ -146,9 +146,9 @@ def line_inputs(
     chord's tones, but only when this slot's own duration reaches the barline - the last
     position before a harmony change.
     """
-    is_fill = context.arrangement.melody_voiced and context.harmony.melody_note is None
-    fill = fill_target(context, band, register) if is_fill else None
-    next_tones = None if is_fill else next_chord_tones(context, slot, beats_per_bar)
+    is_fill = facts.melody_voiced and facts.harmony.melody_note is None
+    fill = fill_target(facts, band, register) if is_fill else None
+    next_tones = None if is_fill else next_chord_tones(facts, slot, beats_per_bar)
     return fill, next_tones
 
 
@@ -185,7 +185,7 @@ def leaving_room_for_the_tune(
 def line_narrowed(
     arrangements: List[ArrangementStep],
     candidates: List[Voicing],
-    context: SlotContext,
+    facts: CompingRouteFacts,
     slot: Slot,
     *,
     beats_per_bar: int,
@@ -207,8 +207,8 @@ def line_narrowed(
     """
     if band is None:
         return (candidates, None)
-    state, register = line_state(arrangements, context)
-    fill, next_tones = line_inputs(context, slot, beats_per_bar, band, register)
+    state, register = line_state(arrangements, facts)
+    fill, next_tones = line_inputs(facts, slot, beats_per_bar, band, register)
     shapes = [_comp_line.LineShape.of(voicing, band) for voicing in candidates]
     tone, role = _comp_line.chosen_top(
         state, shapes, band, next_tones=next_tones, fill=fill
