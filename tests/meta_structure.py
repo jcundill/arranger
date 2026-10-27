@@ -277,6 +277,12 @@ ALLOWED_PRIVATE_IMPORTS: Set[str] = {
     "grips -> grip_templates._interval_set_for_grip",
     "grips -> grip_templates._shell_voicing",
     "grips -> grip_templates._templates_for",
+    # The headxml importer split: the facade re-exports private names that the
+    # committed tests still read off `headxml` (`headxml._key_label`,
+    # `headxml._part_is_tab`, `headxml._merge_chord_slots`).
+    "headxml -> headxml_cli._key_label",
+    "headxml -> headxml_read._part_is_tab",
+    "headxml -> headxml_timeline._merge_chord_slots",
 }
 
 # Reaching a sibling's `_`-prefixed name through a module alias is the same coupling
@@ -575,8 +581,8 @@ ENTRY_POINTS: Tuple[Tuple[str, str], ...] = (
     ("arranger/movement.py", "arrange_progression"),
     ("arranger/steps.py", "arrange_progression"),
     ("arranger/resolution.py", "resolve_knobs"),
-    ("headxml.py", "arrange_xml_head"),
-    ("headxml.py", "_head_request"),
+    ("headxml_timeline.py", "arrange_xml_head"),
+    ("headxml_timeline.py", "_head_request"),
 )
 
 #: The names no entry point may take as a keyword: the axes, and the metre's third fact,

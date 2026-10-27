@@ -1058,7 +1058,7 @@ class TestTheUnionAdmitsTheReleaseInstant(unittest.TestCase):
         self.assertIn((1, 3.0, None), beats)
         self.assertIn((1, 4.0, None), beats)
         # Positions inside the held note (between 1.0 and 3.0) are withheld.
-        inside = [b for b in beats if b[0] == 1 and 1.0 < b[1] < 3.0]
+        inside = [b for b in beats if b[0] == 1 and b[1] is not None and 1.0 < b[1] < 3.0]
         self.assertEqual(inside, [], "a held position was not withheld")
 
     def test_the_released_position_says_why_it_carries_no_melody(self):
