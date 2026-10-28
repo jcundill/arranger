@@ -49,6 +49,9 @@ from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
 FRONT_ENDS = (
     "tabscore.py",
     "tabstaff.py",
+    "tabstaff_grid.py",
+    "tabstaff_ascii.py",
+    "tabstaff_html.py",
     "tabxml.py",
     "tabgp.py",
     "headxml.py",

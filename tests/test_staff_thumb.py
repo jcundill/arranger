@@ -19,12 +19,8 @@ from arranger import Request
 from arranger.render import format_progression
 from headxml import arrange_xml_head
 from tabscore import score_events
-from tabstaff import (
-    _moved_thumb,
-    _staff_columns,
-    format_tab_html,
-    format_tab_staff,
-)
+from tabstaff import format_tab_html, format_tab_staff
+from tabstaff_grid import _moved_thumb, _staff_columns
 from tabxml import format_musicxml
 from tests.support import COMMON_8, make_step
 

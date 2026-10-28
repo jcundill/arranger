@@ -520,7 +520,7 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
 
     def test_both_renderers_agree_on_what_strikes(self):
         """`render` and `tabstaff` must not disagree, or the staff lies about the tab."""
-        from tabstaff import _strikes_here
+        from tabstaff_grid import _strikes_here
         from tests.support import make_step
 
         step = make_step([-1, -1, -1, 10, 12, 10], repeated=True, melody_voiced=False)

@@ -275,7 +275,7 @@ class TestTheRenderersAgree(unittest.TestCase):
         )
 
     def test_the_staff_draws_every_position_as_a_strike(self) -> None:
-        from tabstaff import _staff_columns
+        from tabstaff_grid import _staff_columns
 
         columns = _staff_columns(_four_bars(), 4, 4, True)
         # The last entry is the trailing column the staff draws after the final bar;

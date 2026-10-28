@@ -13,10 +13,12 @@ two edges are that facade rather than accidental coupling. The writers' edge to
 `tabscore` is different: both need the same score placement, and that shared core
 is what keeps `tabgp` and `tabxml` from depending on one another.
 
-The package and the front ends name each other - `arranger.__getattr__` resolves
-`tabstaff`, and `tabstaff` imports `arranger.tuning` - so the last class here
-measures the cycle rather than arguing about it. See
-[docs/dependency-dag.md](../docs/dependency-dag.md) for why it is inert.
+The package and the front ends no longer name each other: `tuning` moved to a
+top-level module, so `tabstaff` imports `tuning` directly and no longer reaches
+into `arranger` at module scope. The cycle that used to exist on paper
+(`arranger.__getattr__` resolves `tabstaff`, `tabstaff` imported `arranger.tuning`,
+importing a submodule ran `__init__` first) is gone. The last class here still
+measures the two runtime facts rather than arguing about them.
 """
 
 from __future__ import annotations
@@ -39,7 +41,12 @@ FRONT_ENDS_BY_STEM: Set[str] = {Path(name).stem for name in FRONT_ENDS}
 ALLOWED_FRONT_EDGES: Dict[str, Set[str]] = {
     # The public facade: `arranger.__getattr__` resolves the whole rendering surface
     # through this module, so it must hold the names the other two define.
-    "tabstaff": {"tabgp", "tabxml"},
+    "tabstaff": {"tabgp", "tabxml", "tabstaff_ascii", "tabstaff_html"},
+    # The grid lives in `tabstaff_grid`, shared by `tabstaff_ascii` and
+    # `tabstaff_html`. Both renderers import from it, which is the deliberate
+    # coupling that keeps the two grids from drifting apart.
+    "tabstaff_ascii": {"tabstaff_grid"},
+    "tabstaff_html": {"tabstaff_grid"},
     # The placement moved out of `tabxml`, so this is now the shared core rather
     # than a writer-to-writer edge. `tabxml` still re-exports the two names it uses.
     "tabxml": {"tabscore"},
@@ -165,13 +172,14 @@ class TestTheRuntimeCycle(unittest.TestCase):
         )
 
     def test_the_rendering_front_ends_import_with_the_facade_absent(self):
-        """The reverse edge is the leaf, so the cycle cannot fire.
+        """The reverse direction is a leaf, so no cycle can fire.
 
         `sys.modules['arranger']` is replaced with a blank package before the
         imports, so the facade never runs and has no `__getattr__` at all. The four
-        renderers still import, each reaching `arranger.tuning` through the blank
-        package's `__path__`, and the blank module is still the one bound
-        afterwards - which is the claim: nothing here needed a public name.
+        renderers still import, each reaching `tuning` directly (top-level module)
+        and `arranger.step_types` through the blank package's `__path__`, and the
+        blank module is still the one bound afterwards - which is the claim:
+        nothing here needed a public name from the facade.
 
         `headxml` is deliberately absent. It names the facade's public surface
         (`from arranger import CHORD_FILLS_COMP`), so it fails against a blank

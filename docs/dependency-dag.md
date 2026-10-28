@@ -178,12 +178,17 @@ it must carry a reason and fails the moment its import disappears.
 ## The top-level front ends
 
 `FRONT_ENDS` in `tests/support.py` is the list this graph and the structure budget
-both read. Every module-scope edge between front ends is recorded in
+both read. `tuning.py` is also a top-level module (added by this change) but is
+not in `FRONT_ENDS`: it is a utility module imported by front ends, not a front end
+itself. Every module-scope edge between front ends is recorded in
 `ALLOWED_FRONT_EDGES` with its reason: `tabstaff` re-exports the two writers so
 `from arranger import format_musicxml` has one spelling, and both writers import
 `tabscore` for the score placement they share, which is what keeps `tabxml` and
-`tabgp` independent of one another. This graph is complete — it is small enough to
-draw every recorded edge.
+`tabgp` independent of one another. `tabstaff`, `tabxml`, `tabgp`, `headxml` and
+`grip_chart` all import `tuning` directly (top-level module) rather than
+`arranger.tuning`, so none of them reaches into the `arranger` package at module
+scope except through `arranger.step_types`. This graph is complete — it is small
+enough to draw every recorded edge.
 
 ```mermaid
 flowchart TB
@@ -193,12 +198,18 @@ flowchart TB
     headxml["headxml"]
     grip_chart["grip_chart"]
     tabscore["tabscore"]
+    tuning["tuning"]
     engine["arranger package<br/>engine and facade"]
 
     tabstaff --> tabxml
     tabstaff --> tabgp
     tabxml --> tabscore
     tabgp --> tabscore
+    tabstaff --> tuning
+    tabxml --> tuning
+    tabgp --> tuning
+    headxml --> tuning
+    grip_chart --> tuning
     tabstaff --> engine
     tabxml --> engine
     tabgp --> engine
@@ -218,34 +229,32 @@ are function-local rather than module-scope and so are not part of this DAG:
 - `cli` imports `tabstaff` inside the function that dispatches the output, for the
   same reason.
 
-### The loop those seams make, and why it is inert
+### The import cycle, eliminated
 
-Drawn from both directions the graph has a loop: `arranger` resolves `tabstaff`
-through `__getattr__`, and every rendering front end imports `arranger.tuning` -
-which means importing a *submodule*, and importing a submodule runs the package's
-`__init__` first. Measured on the tree rather than argued:
+The cycle that used to exist on paper -- `arranger.__getattr__` resolved `tabstaff`,
+and `tabstaff` imported `arranger.tuning`, which ran `arranger/__init__.py` first --
+is gone. `tuning` moved to a top-level module, so `tabstaff` imports `tuning`
+directly and no longer reaches into the `arranger` package at module scope. With
+`arranger/tuning.py` reduced to a re-export shim, nothing in a front end triggers
+the package's `__init__`, and the two runtime measurements from
+`tests/meta_front_end_dag.py::TestTheRuntimeCycle` still hold:
 
 | question | measurement |
 |---|---|
-| does `import arranger` load a front end? | **no** - 0 of the six, which is the lazy seam working rather than an AST claim |
-| can the four renderers import with the facade *absent*? | **yes** - with a blank `arranger` module in `sys.modules`, so `__getattr__` does not exist, `tabscore`, `tabstaff`, `tabxml` and `tabgp` all import and bind the *same* `ArrangementStep`; their reverse edge is the leaf |
-| what would a module-scope `from tabstaff import ...` in the facade cost? | it **works**, and loads `tabstaff`, `tabxml`, `tabgp` and `tabscore` on every `import arranger`. Three-run wall times overlapped (0.7-1.5 s either way), so the cost is the modules and the write paths, not the seconds |
-| what would a module-scope `import headxml` cost? | it **fails**: `ImportError: cannot import name 'CHORD_FILLS_COMP'` - `headxml` names the facade's public surface and meets a facade that has not defined it yet |
+| does `import arranger` load a front end? | **no** - 0 of the six, which is the lazy seam working |
+| can the four renderers import with the facade *absent*? | **yes** - with a blank `arranger` module in `sys.modules`, `tabstaff`, `tabxml` and `tabgp` all import and bind the same `ArrangementStep` |
 
-So the loop is a cycle on paper only, in the direction the code takes it: neither
-side waits for the other, because the front ends need `tuning` and the facade's
-edge is taken *after* the facade is complete. The one ordering that would break is
-a front end imported **during** the facade's own initialisation, and `headxml`
-above is that case made visible. `tests/meta_front_end_dag.py::TestTheRuntimeCycle`
-holds each row of the table.
+`tabscore` and `headxml` are not in the blank-package test: `tabscore` has no
+`arranger.tuning` edge, and `headxml` names the facade's public surface directly
+(so it is imported by `demo.main()` after the facade is complete).
 
-**Eliminating the loop is not worth what it costs.** The only edge that could go is
-the benign one: `tuning` would move to a top-level module, with `arranger/tuning.py`
-left as a shim and a new public module added to `py-modules`, the Makefile's
-`MODULES`, `typecheck` and `FRONT_ENDS`. That leaves `headxml`'s edge - the one
-that actually fails - exactly where it is, so the price would be a new public name
-and a second source for "where the voicing dataclasses live", to redraw a diagram.
+The `arranger/tuning.py` shim remains so that every `from .tuning import ...`
+inside the package keeps working, and `arranger.tuning` still resolves as a
+public path. The single source of truth is `tuning.py` at the top level.
 
 The same lazy discipline holds for the optional extras: `tabxml` imports
+`music21` and `tabgp` imports `PyGuitarPro` at the point of writing, so a caller
+who wants neither can install neither.
+: `tabxml` imports
 `music21` and `tabgp` imports `PyGuitarPro` at the point of writing, so a caller
 who wants neither can install neither.

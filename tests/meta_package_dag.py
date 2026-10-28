@@ -45,6 +45,9 @@ ORDER = [
     "chords",       # chord symbols and the non-chord-tone routing
     "grip_tables",  # the grip tables and the questions asked of them
     "grip_place",   # where a shape is placed on its strings, and the memo
+    "grip_templates", # pure interval, offset and stack computation for grip families
+    "grip_requests",  # chord-symbol parsing and searched-family request builders
+    "grip_comping",   # melody-free comping shape generation
     "grips",        # the grip builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
     "annotation",   # the trailing explanation a step carries, as composed clauses
@@ -72,6 +75,7 @@ ORDER = [
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them
+    "engine",       # the engine half of the facade: re-exports the engine's public API
     "render",       # per-step rendering
     "cli",          # the two front ends' shared argparse block and output dispatch
     "demo",         # the printing front end: the demonstration and the `head` hand-off

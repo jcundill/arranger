@@ -44,7 +44,9 @@ class VoicingScore(NamedTuple):
     missing: float
     #: Fret span, with spans 0 and 1 bucketed together.
     span: float
-    #: Distance in neck position from the previous shape.
+    #: Distance in neck position from the previous shape. With no previous shape
+    #: it is distance from the midpoint of ``fret_min``–``fret_max`` (7.5 on the
+    #: default window) rather than a hardcoded fret.
     position: float
     #: Total pitch movement of the voices, in semitones.
     movement: float
@@ -215,7 +217,7 @@ def voicing_cost(voicing: Voicing, criteria: SelectionCriteria) -> VoicingScore:
                 foreign += 1.0
 
     if criteria.previous is None:
-        position = abs(voicing.avg_fret - 9)
+        position = abs(voicing.avg_fret - ((criteria.fret_min + criteria.fret_max) / 2.0))
         movement = 0.0
     else:
         position = abs(voicing.avg_fret - criteria.previous.avg_fret)

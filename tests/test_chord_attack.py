@@ -124,7 +124,7 @@ class TestTheRenderersAgree(unittest.TestCase):
         return [first, second]
 
     def test_the_staff_marks_the_second_column_a_strike(self):
-        from tabstaff import _staff_columns
+        from tabstaff_grid import _staff_columns
 
         held = _staff_columns(self._pair(False), 4, 4, rhythm=True)
         struck = _staff_columns(self._pair(True), 4, 4, rhythm=True)

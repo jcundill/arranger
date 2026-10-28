@@ -66,9 +66,18 @@ packages = ["arranger"]
 py-modules = [
     "tabscore",
     "tabstaff",
+    "tabstaff_grid",
+    "tabstaff_ascii",
+    "tabstaff_html",
     "tabxml",
     "tabgp",
     "headxml",
+    "headxml_cli",
+    "headxml_model",
+    "headxml_read",
+    "headxml_repeats",
+    "headxml_timeline",
+    "tuning",
 ]
 
 [tool.setuptools.dynamic]
@@ -115,6 +124,17 @@ ignore = ["E501", "B905", "SIM102", "SIM117"]
 # is the same object as its home module, so a stale re-export fails there rather
 # than sitting here unnoticed. Adding a name to `__all__` still updates it.
 "arranger/__init__.py" = ["F401"]
+# `headxml.py` is now a thin re-export facade over its five focused siblings
+# (headxml_model, headxml_read, headxml_repeats, headxml_timeline, headxml_cli),
+# so every import is a re-export and none is used in the module body - exactly
+# the F401 profile of `arranger/__init__.py`. The facade keeps every public name
+# resolvable so existing `from headxml import ...` spellings keep working.
+"headxml.py" = ["F401"]
+# `tabstaff.py` is now a thin re-export facade over `tabstaff_ascii` and
+# `tabstaff_html` (plus the `tabgp` and `tabxml` writers), so every import is a
+# re-export and none is used in the module body. The facade keeps every public
+# name resolvable so existing `from tabstaff import ...` spellings keep working.
+"tabstaff.py" = ["F401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "headxml", "grip_chart", "tests"]

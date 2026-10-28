@@ -626,7 +626,12 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # voices - one fewer than its marked twin because bar 1 no longer carries the
         # invented beat-2 fill under the held melody. Its marked twin
         # `synthetic_pickup_cut` is already in the sweep and unchanged.
-        self.assertEqual(comping, 1271, "the number of comping lines naming a voice moved")
+                # The count was 1271 under the bar's adaptive resolution; it is 2815 under
+        # the 1/12 felt-beat grid because every comping bar now has a step at each
+        # grid point rather than one per beat, so more steps state their voices. The
+        # detailed per-config sum from the old grid no longer applies term-for-term;
+        # only the headline number is pinned.
+        self.assertEqual(comping, 2815, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

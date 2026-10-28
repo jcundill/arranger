@@ -19,7 +19,7 @@ from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass
 from .chords import ChordParser, normalised_harmony, slash_bass_cost
-from .context import SlotContext
+from .context import HarmonisedRouteFacts, MinimalRouteFacts
 from .decisions import (
     dropped_for_the_bass,
     hold_the_melody_string,
@@ -36,7 +36,6 @@ from .decisions import (
 from .grip_tables import GRIP_MAX_SPAN
 from .melody_alone import demoted_to_melody_alone, rescue_melody_alone
 from .routes import rest_step
-from .slot_plan import SlotPlan
 from .step_history import last_sounding_step, previous_shape
 from .step_prepare import StepPreparation, prepare_step
 from .step_types import ArrangementStep, Palette, Voicing
@@ -51,7 +50,7 @@ from .tuning import (
 def _partial_attack(
     arrangements: List[ArrangementStep],
     slot: Slot,
-    context: SlotContext,
+    facts: HarmonisedRouteFacts,
     prepared: StepPreparation,
     repeated: bool,
 ) -> Tuple[bool, bool]:
@@ -67,7 +66,7 @@ def _partial_attack(
     harmony = normalised_harmony(prepared.chord_name, prepared.harmonized_as)
     bass_only = is_bass_only(
         slot.bass_only,
-        chord_attack=context.state.chord_attack,
+        chord_attack=facts.state.chord_attack,
         holds=melody_is_ringing(
             arrangements, Note(prepared.melody).midi_note(), harmony
         ),
@@ -78,7 +77,7 @@ def _partial_attack(
 def _emit_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
-    context: SlotContext,
+    facts: HarmonisedRouteFacts,
     prepared: StepPreparation,
     chosen: Voicing,
     palette: Palette,
@@ -103,7 +102,7 @@ def _emit_step(
     step carrying both would strike the soprano the hold exists to leave alone.
     """
     bass_only, repeated = _partial_attack(
-        arrangements, slot, context, prepared, repeated)
+        arrangements, slot, facts, prepared, repeated)
     arrangements.append(ArrangementStep(
         chord=prepared.chord_name,
         melody=prepared.melody,
@@ -115,17 +114,17 @@ def _emit_step(
         original_melody=prepared.original_melody,
         repeated=repeated,
         partial=len(chosen.active_frets()) < 4,
-        bar=context.timing.bar,
-        beat=context.timing.beat,
-        duration=context.timing.duration,
+        bar=facts.timing.bar,
+        beat=facts.timing.beat,
+        duration=facts.timing.duration,
         role=role,
-        metric_weight=context.state.weight,
+        metric_weight=facts.state.weight,
         bass_only=bass_only,
         # A position the chord's rhythm **named** - the stab `--chord-on melody,1and` puts
         # under a held note - is struck even when the shape is unchanged. A slot the
         # skeleton invented, where the tune merely sustains, is not: that is a hold, and
         # `repeated` already covers the tune's own re-articulations.
-        chord_attack=context.state.chord_attack,
+        chord_attack=facts.state.chord_attack,
     ))
     attach_bass(arrangements[-1], slot.bass, arrangements)
 
@@ -133,7 +132,8 @@ def _emit_step(
 def _prepare_or_rescue(
     arrangements: List[ArrangementStep],
     slot: Slot,
-    plan: SlotPlan,
+    facts: HarmonisedRouteFacts,
+    slot_grips: Tuple[str, ...],
     prev_sounding: Optional[ArrangementStep],
 ) -> Optional[Tuple[StepPreparation, str]]:
     """Prepare the slot's candidates, or answer why the tune cannot sound.
@@ -146,36 +146,35 @@ def _prepare_or_rescue(
     promote the fill, and only then report the step missing.
     """
 
-    context: SlotContext = plan.context
     prepared = prepare_step(
-        context.identity.progression, context.identity.index,
+        facts.identity.progression, facts.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=context.neck.top_strings,
-        non_chord_tone=context.arrangement.non_chord_tone,
-        fret_min=context.neck.fret_min,
-        fret_max=context.neck.fret_max,
-        grips=plan.slot_grips,
+        top_strings=facts.neck.top_strings,
+        non_chord_tone=facts.non_chord_tone,
+        fret_min=facts.neck.fret_min,
+        fret_max=facts.neck.fret_max,
+        grips=slot_grips,
     )
     if prepared is not None:
-        return prepared, context.state.role
-    assert context.harmony.melody_note is not None
+        return prepared, facts.state.role
+    assert facts.harmony.melody_note is not None
     if rescue_melody_alone(
-        arrangements, slot, context,
-        top_strings=context.neck.top_strings,
+        arrangements, slot, facts,
+        top_strings=facts.neck.top_strings,
         previous=previous_shape(arrangements),
     ):
         return None
-    prepared = _promoted_fill(plan, arrangements)
+    prepared = _promoted_fill(facts, slot_grips, arrangements)
     if prepared is not None:
         return prepared, ROLE_TARGET
-    rest_step(
-        arrangements, slot, context,
-        sings_here=False,
+    rest_step(arrangements, slot, MinimalRouteFacts(
+        timing=facts.timing, harmony=facts.harmony, state=facts.state,
+    ), sings_here=False,
         silence=(
             SILENCE_OUT_OF_REACH
             if not _grips.get_melody_only_voicings(
-                context.harmony.melody_note, prefer=context.neck.top_strings
+                facts.harmony.melody_note, prefer=facts.neck.top_strings
             )
             else SILENCE_NO_SHAPE
         ),
@@ -184,27 +183,27 @@ def _prepare_or_rescue(
 
 
 def _promoted_fill(
-    plan: SlotPlan,
+    facts: HarmonisedRouteFacts,
+    slot_grips: Tuple[str, ...],
     arrangements: List[ArrangementStep],
 ) -> Optional[StepPreparation]:
     """Re-prepare a fill that produced nothing as a principal note."""
 
-    context: SlotContext = plan.context
     if not should_promote_fill(
-        context.arrangement.texture, context.state.role, True, plan.slot_grips,
-        has_thumb=context.arrangement.has_thumb,
-        melody_only=context.arrangement.melody_only,
+        facts.texture, facts.state.role, True, slot_grips,
+        has_thumb=facts.has_thumb,
+        melody_only=facts.melody_only,
     ):
         return None
     prev_sounding = last_sounding_step(arrangements)
     return prepare_step(
-        context.identity.progression, context.identity.index,
+        facts.identity.progression, facts.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=context.neck.top_strings,
-        non_chord_tone=context.arrangement.non_chord_tone,
-        fret_min=context.neck.fret_min,
-        fret_max=context.neck.fret_max,
+        top_strings=facts.neck.top_strings,
+        non_chord_tone=facts.non_chord_tone,
+        fret_min=facts.neck.fret_min,
+        fret_max=facts.neck.fret_max,
     )
 
 
@@ -282,7 +281,7 @@ def _held_candidates(
 
 
 def _selection_for(
-    context: SlotContext,
+    facts: HarmonisedRouteFacts,
     prepared: StepPreparation,
     candidates: List[Voicing],
     previous: Optional[Voicing],
@@ -296,19 +295,19 @@ def _selection_for(
     )
     allowed_tones = ChordParser.get_chord_tones(substitute)
     root_pc = _grips.chord_context(prepared.chord_name)[1]
-    assert context.harmony.melody_note is not None
+    assert facts.harmony.melody_note is not None
     return _Selection(
         candidates=candidates,
         criteria=_cost.SelectionCriteria(
             previous=previous,
-            fret_min=context.neck.fret_min,
-            fret_max=context.neck.fret_max,
+            fret_min=facts.neck.fret_min,
+            fret_max=facts.neck.fret_max,
             allowed_tones=allowed_tones,
             root_pc=root_pc,
-            melody_pc=context.harmony.melody_note.midi_note() % 12,
+            melody_pc=facts.harmony.melody_note.midi_note() % 12,
             bass_pc=(
-                None if context.bass.bass_pcs is None
-                else context.bass.bass_pcs.get(context.identity.index)
+                None if facts.bass.bass_pcs is None
+                else facts.bass.bass_pcs.get(facts.identity.index)
             ),
         ),
     )
@@ -347,7 +346,8 @@ def _candidates_for_the_slot(
 def harmonised_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
-    plan: SlotPlan,
+    facts: HarmonisedRouteFacts,
+    slot_grips: Tuple[str, ...],
 ) -> None:
     """The melody-bearing route: pin the tune, and voice the chord under it.
 
@@ -356,10 +356,10 @@ def harmonised_step(
     `voicing_cost` picks among them, and the last resort before silence is the melody alone.
     """
 
-    context: SlotContext = plan.context
-    assert context.harmony.note_str is not None and context.harmony.melody_note is not None
+    assert facts.harmony.note_str is not None and facts.harmony.melody_note is not None
     prev_sounding = last_sounding_step(arrangements)
-    prepared_and_role = _prepare_or_rescue(arrangements, slot, plan, prev_sounding)
+    prepared_and_role = _prepare_or_rescue(
+        arrangements, slot, facts, slot_grips, prev_sounding)
     if prepared_and_role is None:
         return
     prepared, role = prepared_and_role
@@ -370,10 +370,10 @@ def harmonised_step(
     # bass note under is taken out: a narrowing of what the axis offered, ranked by the
     # same tuple, so the harmony makes room for the line instead of dropping its note.
     offered, candidates = _candidates_for_the_slot(
-        prepared, prev_step, harmony, slot, arrangements, context.state.chord_attack)
+        prepared, prev_step, harmony, slot, arrangements, facts.state.chord_attack)
 
     selection = _selection_for(
-        context, prepared, candidates,
+        facts, prepared, candidates,
         prev_sounding.voicing if prev_sounding is not None else None)
     best_voicing = selection.chosen()
     assert best_voicing is not None
@@ -385,8 +385,8 @@ def harmonised_step(
             best_voicing = narrower
             palette = selection.palette(best_voicing, offered)
         elif demoted_to_melody_alone(
-            arrangements, slot, replace(context, state=replace(context.state, role=role)),
-            top_strings=plan.context.neck.top_strings,
+            arrangements, slot, replace(facts, state=replace(facts.state, role=role)),
+            top_strings=facts.neck.top_strings,
             previous=selection.criteria.previous,
             best_voicing=best_voicing,
             palette=palette,
@@ -394,6 +394,6 @@ def harmonised_step(
             return
     repeated = is_repeated_step(prev_step, best_voicing, harmony)
     _emit_step(
-        arrangements, slot, context, prepared, best_voicing, palette,
+        arrangements, slot, facts, prepared, best_voicing, palette,
         role=role, repeated=repeated,
     )

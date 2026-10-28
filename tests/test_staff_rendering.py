@@ -17,7 +17,7 @@ from arranger import (
     format_tab_html,
     format_tab_staff,
 )
-from tabstaff import _NOTE_VALUES, _staff_columns, _staff_rhythm
+from tabstaff_grid import _NOTE_VALUES, _staff_columns, _staff_rhythm
 from tests.support import make_step, make_voicing
 
 
