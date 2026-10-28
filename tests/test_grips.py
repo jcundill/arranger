@@ -1262,27 +1262,34 @@ class TestClosePosition(unittest.TestCase):
         """
         The order *is* the tie-break: no criterion names a family, so the order decides.
 
-        `Cmaj` under a `C4` or `G4` melody on the B string is the live case. Close
-        position and the drop-2 & 4 reading tie on every element of the cost tuple -
-        including bass function, because one states the root underneath and the other the
-        5th, and `BASS_DEGREES_6432` scores those the same - so the position of `closed`
-        in `GRIP_PREFERENCE` is what picks between them. **That order is the engine's
-        now**: it is the internal search space rather than a caller's preference list
-        (`docs/history/parts.md` §4), so there is no second spelling to assert and the claim is
-        one-directional - the shipped order decides, and `closed` holds its place because
-        it is generated before `drop2_6432`.
+        `Cmaj` under a `C4` or `G4` melody on the B string is the live case. With no
+        previous shape the position criterion now reads from the midpoint of the neck
+        window (7.5) rather than a hardcoded fret, so under `C4` `closed` and
+        `drop2_6432` still tie on every element of the cost tuple - including bass
+        function, because one states the root underneath and the other the 5th, and
+        `BASS_DEGREES_6432` scores those the same - and `closed` wins because it is
+        generated before `drop2_6432`. Under `G4` the two no longer tie: `drop2_6432`
+        at average fret 8.75 is nearer the window's middle than `closed` at 9.25, so
+        position decides it instead. `GRIP_PREFERENCE` remains the tie-break for genuine
+        ties: it is the engine's internal search space rather than a caller's preference
+        list (`docs/history/parts.md` §4), so there is no second spelling to assert and
+        the claim is one-directional - the shipped order decides, and `closed` holds its
+        place because it is generated before `drop2_6432`.
         """
         self.assertEqual(GRIP_PREFERENCE.index("closed"), 1)
         self.assertLess(
             GRIP_PREFERENCE.index("closed"), GRIP_PREFERENCE.index("drop2_6432")
         )
-        for melody, closed_tab in (("C4", "x-3-2-0-1-x"), ("G4", "x-10-10-9-8-x")):
+        for melody, chosen_tab in (
+            ("C4", ("closed", "x-3-2-0-1-x")),
+            ("G4", ("drop2_6432", "8-x-10-9-8-x")),
+        ):
             with self.subTest(melody=melody):
                 chosen = VoiceLeadingEngine.arrange_progression(
                     [(melody, "Cmaj")], top_strings=(4,)
                 )[0]
                 self.assertEqual(
-                    (chosen.grip, chosen.voicing.tab_string()), ("closed", closed_tab)
+                    (chosen.grip, chosen.voicing.tab_string()), chosen_tab
                 )
 
 

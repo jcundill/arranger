@@ -633,10 +633,12 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertIsNone(step.harmonized_as)
         self.assertIsNone(step.strategy)
         # The note is placed by the same cost tuple a chord is: with no previous shape the
-        # rule is "start near the middle of the neck", which for F4 is the G string's
-        # fret 10 rather than the high E string's fret 1. Where the tune stands alone the
-        # window and the hand still decide it - see `TestTheLoneNoteIsPlacedLikeAChord`.
-        self.assertEqual(step.tab_line(), "x-x-x-10-x-x")
+        # rule is "start near the middle of the neck", now read as the midpoint of the
+        # window (7.5 on the default 2-13 window) rather than a hardcoded fret. For F4 that
+        # is the B string's fret 6 rather than the G string's fret 10 - both sound F4, and
+        # fret 6 is nearer the window's middle. Where the tune stands alone the window and
+        # the hand still decide it - see `TestTheLoneNoteIsPlacedLikeAChord`.
+        self.assertEqual(step.tab_line(), "x-x-x-x-6-x")
 
     def test_nc_step_grip_mirrors_the_voicing(self):
         """`step.grip` says what `voicing.grip` says, not the "drop2" default.

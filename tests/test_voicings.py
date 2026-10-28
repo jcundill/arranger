@@ -406,12 +406,20 @@ class TestHighFretOctaveDown(unittest.TestCase):
         self.assertIsNone(steps[0].original_melody)
 
     def test_melody_only_step_also_moves_down(self):
-        """A no-chord step high on the neck is played an octave down on the B string too."""
+        """A no-chord step high on the neck is played an octave down.
+
+        With no previous shape the position criterion reads from the midpoint of the neck
+        window (7.5), so under A5 the high E string's fret 5 and the B string's fret 10 are
+        exactly tied on position (both 2.5 from the middle), and the tie falls to
+        generation order: `top_strings` tries the high E string first, so the octave-down
+        A4 lands on the high E string rather than the B string the old hardcoded fret 9
+        used to prefer.
+        """
         step = self.engine.arrange_progression([("A5", "NC")])[0]
         self.assertTrue(step.melody_only)
         self.assertEqual(step.melody, "A4")
         self.assertEqual(step.original_melody, "A5")
-        self.assertEqual(step.voicing.soprano_string(), 4)
+        self.assertEqual(step.voicing.soprano_string(), 5)
 
     def test_melody_only_low_note_is_untouched(self):
         """A note already in a low position on the high E still sounds where it was written."""

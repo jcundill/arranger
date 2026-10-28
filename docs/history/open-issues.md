@@ -32,6 +32,8 @@ The index, for a reader arriving from one of the tree's citations of an item by 
 6. *(closed)* **A position falling on a note's release is read as held** — closed by reading the note
    as sounding over `[onset, end)`: the tune has stopped there, so the union states the chord;
    see below.
+7. *(closed)* **The comp selector's hardcoded rest position (fret 9)** — closed by reading the
+   midpoint of the neck window instead of a constant fret; see below.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
@@ -385,3 +387,43 @@ the wanted pitch below the shape's own lowest note, the `fingers.can_fret` four-
 now its reach, in that order, and the first of the four that comes back empty is the cause. It is
 not rebuilt here: the 22 that remain sit on one texture, and none of them is on the row the report
 was filed under.
+
+
+## 7. The comp selector's hardcoded rest position (fret 9) (closed)
+
+**Closed by reading the midpoint of the neck window instead of a constant fret.**
+
+**The issue.** `voicing_cost` ranks each candidate against the previous shape on its `position`
+criterion (index 4 of the `VoicingScore` tuple), measured as `abs(avg_fret - previous.avg_fret)`.
+When there is no previous shape — the first step of an arrangement — `arranger/cost.py` scored it
+as `abs(voicing.avg_fret - 9)`, pinning the comp's rest position to fret 9 instead of reading the
+neck window (`NECK_FRET_MIN = 2`, `NECK_FRET_MAX = 13`, midpoint 7.5). The criterion's own
+docstring already promised "start near the middle of the neck"; the constant contradicted it.
+
+**The problem it produces.** A comp opened wherever fret 9 happened to land rather than where the
+window, the metre or the chord said it lived. For `Dm7` the two span-0 shapes at fret 10 scored
+`position = 1.0` under the constant and won, so the comp opened at `10-x-10-10-x-x` because a
+constant said "near 9", not because anything chose it. Nothing in the request, the metre or the
+chord decided a comp's register.
+
+**Why it exists.** The rule predates the comp-line plan: `comp_line.opening_no_melody` now decides
+a comping step's first shape by the home band's middle (`band_middle`, eight frets wide, clamped
+to the window), and the collapse's `(span, avg_fret)` key keeps one shape per top tone ranked by
+`(outside the window, outside the band, |avg − band middle|, span)`. Those changes closed the
+collapse half of the item but left `cost.py`'s constant, which still reached any caller with no
+previous shape outside the comping route — the melody-bearing route's head, NC bars, fills —
+where it was still the wrong rule.
+
+**The fix.** `position` with no previous shape is now
+`abs(voicing.avg_fret - ((criteria.fret_min + criteria.fret_max) / 2.0))`, i.e. the distance from
+the midpoint of the criteria's own window — 7.5 on the default 2–13 window — honoring callers
+that override the neck window, exactly as the `outside` criterion already does. The criterion's
+docstring states the midpoint rule explicitly.
+
+**The measurement.** The item's own recipe, `grep -n "avg_fret - 9" arranger/cost.py`, returns
+nothing — no hardcoded fret remains. `tests/test_grip_selection.py::
+TestVoicingCost::test_the_first_chord_starts_near_the_middle_of_the_neck` now asserts the first
+chord starts within four frets of the window midpoint rather than of fret 9. For `Dm7` the chosen
+shape is unchanged (`x-x-10-10-10-10`, fret 10 was already the span-0 winner nearest the old
+constant), so the fix moves nothing under the default window; it matters where a caller narrows
+the window or where a shape near 7.5 would otherwise lose to one near 9.

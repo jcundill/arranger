@@ -607,7 +607,7 @@ class TestTheExplanationWraps(unittest.TestCase):
         wrapped = sum(
             len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
         )
-        self.assertEqual(wrapped, 112, "the number of steps that wrap moved")
+        self.assertEqual(wrapped, 113, "the number of steps that wrap moved")
 
 
 class TestOneLineColumns(unittest.TestCase):

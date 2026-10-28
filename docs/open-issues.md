@@ -1,15 +1,16 @@
 # Open issues
 
-**One is open.** Every other issue this project filed is closed, and the ledger holds the one open item
-below; the record of the first six — each with its measurement and the recipe that re-measures it — is
-[docs/history/open-issues.md](history/open-issues.md), which holds the full text of every item.
+All the issues this project filed are closed; the record of the seven — each with its measurement
+and the recipe that re-measures it — is [docs/history/open-issues.md](history/open-issues.md),
+which holds the full text of every item. When the ledger holds nothing open it is retired into
+[docs/history/](history/) and this path becomes an index of what it recorded.
 
 This path still exists because the tree cites it: the frozen documents in `docs/history/` link to
 `open-issues.md` by relative path, and the engine, the importer and the tests cite an item **by
 number**. A citation of `open-issues item N` resolves through the index below, which is the one
 place the numbers are listed.
 
-## The six, as they closed
+## The seven, as they closed
 
 Each line is the item's own title; the measurement behind it is in the record.
 
@@ -24,21 +25,10 @@ Each line is the item's own title; the measurement behind it is in the record.
    hand's reach being bounded and the palette making room for the note.
 6. **A position falling on a note's release is read as held** — closed by reading the note as
    sounding over `[onset, end)`, so the union states the chord where the tune has just stopped.
-
-## 7. Open — one defect in the comping selector that the comp-line plan did not fix silently
-
-- **`cost.py:218`'s hardcoded 9.** `position = abs(voicing.avg_fret - 9)` when there is no
-  previous voicing pins the comp's rest position to fret 9 instead of reading the neck window.
-  The comp line's own opening (`comp_line.opening_no_melody`) now decides a comping step's
-  first shape by the home band's middle, so the constant only reaches a caller with no
-  previous shape outside the comping route — it is still the wrong rule there.
-  Recipe: `grep -n "avg_fret - 9" arranger/cost.py`.
-
-The item's **other half is closed**: the collapse's `(span, avg_fret)` key now keeps one shape
-per **top tone** ranked by `(outside the window, outside the band, |avg − band middle|, span)`
-(`grips._comping_collapse_key`), which is what let a line reach a low shape at all. The
-measurement that closed it — the palette's reach per tone, and the plateau's 322 zero moves of
-474 falling to 0 — is in [history/comp-line.md](history/comp-line.md) §"The measurement".
+7. **The comp selector's hardcoded rest position (fret 9)** — closed by reading the midpoint of
+   the neck window instead: `position` is now `abs(avg_fret - (fret_min + fret_max) / 2)` with no
+   previous shape, so a comp's first shape starts at the middle of `fret_min`–`fret_max` (7.5 on
+   the default window) rather than at a constant fret; see below.
 
 ## Filing a new one
 

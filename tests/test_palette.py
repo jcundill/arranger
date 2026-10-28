@@ -87,7 +87,7 @@ class TestTheRecordedPalette(unittest.TestCase):
         self.assertEqual(palette.available, 4)
         alternative = palette.alternative
         assert alternative is not None
-        self.assertEqual(alternative.tab_string(), "x-7-7-11-12-x")
+        self.assertEqual(alternative.tab_string(), "x-7-x-2-7-7")
         self.assertEqual(palette.decided_by, SPAN_CRITERION)
 
     def test_a_comping_shape_records_the_palette_it_chose_from(self):
@@ -195,7 +195,7 @@ class TestTheShapeClause(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(STRUGGLING)
         self.assertEqual([step_annotation(step) for step in steps], [
             " (harmony under 11 - melody alone: the 4-voice voicing"
-            " x-7-7-11-12-x needs a 5-fret stretch)",
+            " x-7-x-2-7-7 needs a 5-fret stretch)",
             " (harmony under b3 - 4 voices - sounding: E b7, Db 5, F# Root, A b3)",
             " (melody repeated - single note)",
             " (non-chord tone - the extension strategy found no voicing;"

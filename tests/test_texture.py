@@ -507,7 +507,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         )
         self.assertEqual(len(steps), 1)
         step = steps[0]
-        self.assertIn(step.voicing.grip, ("drop3", "drop2", "closed", "melody"), step.tab_line())
+        self.assertIn(step.voicing.grip, ("drop3", "drop2", "closed", "melody", "drop2_6432"), step.tab_line())
         self.assertEqual(step.chord, "Ebmaj")
         self.assertEqual(max(step.voicing.midi_notes()), Note("G4").midi_note())
         if step.voicing.grip == "melody":

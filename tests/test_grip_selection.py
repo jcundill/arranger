@@ -20,6 +20,7 @@ from arranger.cost import (
 )
 from arranger.grip_tables import GRIP_PREFERENCE
 from arranger.grips import BASS_DEGREES_6432
+from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     QUALITIES,
     every_chord_tone,
@@ -291,7 +292,10 @@ class TestVoicingCost(unittest.TestCase):
         """With nothing to lead from, "stay in position" becomes "start somewhere sane"."""
         steps = VoiceLeadingEngine.arrange_progression([("D5", "Dm7")])
         self.assertEqual(len(steps), 1)
-        self.assertLessEqual(abs(steps[0].voicing.avg_fret - 9), 4.0)
+        middle = (NECK_FRET_MIN + NECK_FRET_MAX) / 2.0
+        self.assertLessEqual(
+            abs(steps[0].voicing.avg_fret - middle), 4.0, steps[0].tab_line()
+        )
 
     def test_span_outranks_neck_position(self):
         """
