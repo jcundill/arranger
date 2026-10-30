@@ -538,6 +538,33 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         self.assertEqual(len(symbols), 1)
         self.assertIn("sus4", ElementTree.tostring(symbols[0], encoding="unicode"))
 
+    def test_an_unparseable_chord_name_is_not_duplicated(self):
+        """
+        The kind text is the quality *after* the root, not the whole name:
+        `Bb7sus4` -> root `Bb`, kind text `7sus4`. Setting it to the full name
+        would write `BbBb7sus4` because music21 still writes the root-step
+        separately.
+        """
+        from arranger import format_musicxml
+
+        step = make_step([-1, 3, 5, 5, 5, -1], chord="Bb7sus4")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        harmony = next(root.iter("harmony"))
+        kind = harmony.find("kind")
+        assert kind is not None
+        self.assertEqual(kind.get("text"), "7sus4")
+        root_el = harmony.find("root")
+        assert root_el is not None
+        root_step = root_el.find("root-step")
+        root_alter = root_el.find("root-alter")
+        assert root_step is not None and root_alter is not None
+        self.assertEqual(root_step.text, "B")
+        self.assertEqual(root_alter.text, "-1")
+        # The rendered harmony contains the name exactly once: root "Bb" +
+        # kind text "7sus4", not "BbBb7sus4".
+        rendered = ElementTree.tostring(harmony, encoding="unicode")
+        self.assertEqual(rendered.count("Bb7sus4"), 0)
+
     def frames(self, part):
         """The fretboard frames (`<frame>` chord diagrams) of a part."""
         return [node for node in part.iter("frame")]

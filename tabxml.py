@@ -823,12 +823,13 @@ def _chord_symbol(step: Optional[ArrangementStep]) -> Any:
     except Exception:
         from arranger.chords import ChordParser
 
-        root, _ = ChordParser.parse_chord_name(name)
+        root, quality = ChordParser.parse_chord_name(name)
         symbol = tablature.ChordWithFretBoard()
         if root:
             symbol.root(root)
         symbol.chordKind = "other"
-        symbol.chordKindStr = name
+        if quality:
+            symbol.chordKindStr = quality
     symbol.writeAsChord = False
     # The pitches are never written - see the docstring - so they are dropped here,
     # on both the parsed and the fallback path, rather than left to distort the
