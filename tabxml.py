@@ -783,8 +783,7 @@ def _apply_pickup_barline(root: ElementTree.Element) -> None:
 
 def _chord_symbol(step: Optional[ArrangementStep]) -> Any:
     """
-    A chord symbol for the score, with a fretboard diagram when the step
-    voices a multi-note shape, or a text-only one when music21 cannot read
+    A chord symbol for the score, or a text-only one when music21 cannot read
     the name.
 
     music21 knows most of the qualities this library voices, but not all of
@@ -806,25 +805,23 @@ def _chord_symbol(step: Optional[ArrangementStep]) -> Any:
     accidentals that remain mean "this note is out of the key" rather than
     "this note is in the key, and the key was not read".
 
-    A step whose voicing sounds two or more strings also gets a
-    `<frame>` - music21's chord diagram - with one `<frame-note>` per
-    sounding string, so a notation reader can see the fingering the same
-    way a GP5 reader sees its chord diagram. Single-note steps get a plain
-    symbol with no frame. MusicXML numbers strings 1-6 with 1 = high E;
-    the library indexes 0 = low E, so `musicxml_string = 6 - library_index`.
+    MusicXML does not carry fretboard chord diagrams in a form MuseScore 3
+    can read - `<frame>` inside `<harmony>` is MusicXML 4.0-only and MuseScore
+    3 rejects the document outright. Chord diagrams live in the GP5 output
+    instead, where the format stores them natively.
     """
-    from music21 import tablature
+    from music21 import harmony
 
     assert step is not None
     name = step.chord
 
     try:
-        symbol = tablature.ChordWithFretBoard(name)
+        symbol = harmony.ChordSymbol(name)
     except Exception:
         from arranger.chords import ChordParser
 
         root, quality = ChordParser.parse_chord_name(name)
-        symbol = tablature.ChordWithFretBoard()
+        symbol = harmony.ChordSymbol()
         if root:
             symbol.root(root)
         symbol.chordKind = "other"
@@ -836,24 +833,7 @@ def _chord_symbol(step: Optional[ArrangementStep]) -> Any:
     # accidental pass. `[]` rather than `None`: music21 treats a missing/None
     # `pitches` as "figure it out again from the figure string".
     symbol.pitches = []
-    symbol.tuning = tablature.GuitarFretBoard().tuning
-
-    # Fretboard diagram: one <frame-note> per sounding string. A step with
-    # fewer than two active strings (a single-note melody, an NC, a rest)
-    # gets no diagram. MusicXML's `<frame>` has no "first fret" concept -
-    # `<frame-frets>` is simply how many frets the diagram shows, starting
-    # from fret 0 - so `displayFrets` must cover the highest fretted note or
-    # the dots land off the bottom of the diagram (and on to the staff).
-    if step is not None:
-        frets = step.voicing.frets
-        active = [f for f in frets if f >= 0]
-        if len(active) >= 2:
-            symbol.displayFrets = max(active) + 2
-            symbol.fretNotes = [
-                tablature.FretNote(string=6 - index, fret=fret)
-                for index, fret in enumerate(frets)
-                if fret >= 0
-            ]
+    return symbol
 
     return symbol
 

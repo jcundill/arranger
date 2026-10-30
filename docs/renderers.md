@@ -678,8 +678,7 @@ has to be post-processed before it is correct.
 | `tabxml.write_musicxml` | the only function in the module that touches the filesystem |
 | `tabscore.score_events` / `tabscore._is_hold` | placement, durations and the pickup; the rhythmic core, shared with `tabgp` |
 | `_build_part` | the staff: measures, notes, ties, chord symbols |
-| `_chord_symbol` | a symbol, or a text-only one for a name music21 rejects; carries a `<frame>`
-  chord diagram when the step voices two or more strings |
+| `_chord_symbol` | a symbol, or a text-only one for a name music21 rejects |
 | `_drop_empty_inversions` | removes the meaningless `<inversion>-1</inversion>` |
 | `_downgrade_kinds` | rewrites a `<kind>` value MusicXML 3.1 does not have |
 
@@ -813,22 +812,6 @@ traceback.
 (`Bb7sus4`). `_chord_symbol` falls back to `<kind text="...">other</kind>` with the
 root still parsed out by `ChordParser`, which is how MusicXML spells a symbol whose
 type the writer does not recognise.
-
-**Fretboard diagrams.** Each `<harmony>` chord symbol for a multi-note voicing
-(two or more sounding strings) also carries a `<frame>` chord diagram, with one
-`<frame-note>` per sounding string spelling its `<string>` and `<fret>`. Single-note
-steps get a plain symbol with no frame; NC steps get neither. MusicXML numbers
-strings 1-6 with 1 = high E, so library index 0 (low E) maps to string 6.
-
-MusicXML's `<frame>` has no "first fret" concept — `<frame-frets>` is simply how
-many frets the diagram shows, starting from fret 0. `displayFrets` is set to the
-highest fretted note plus two, so the dots land on the diagram rather than below it.
-
-**The `<frame>` element is MusicXML 4.0-only.** MuseScore 3 (3.1) does not define it
-inside `<harmony>` and will reject the document. The output is already MusicXML 4.0
-from music21's exporter; `_downgrade_kinds` can make individual `<kind>` values
-3.1-legal but cannot add `<frame>` support to a 3.1 reader. Readers that understand
-MusicXML 4.0 (MuseScore 4 and later) render the diagrams natively.
 
 **The output is valid MusicXML 3.1, not just 4.0.**
 
