@@ -116,7 +116,9 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         This is the regression for the change that dropped the tab staff: music21
         cannot write one a notation program renders correctly (see `tabxml`'s module
         docstring), so a `TAB` clef or a `<staff-lines>6</staff-lines>` in the document
-        means the tab path has crept back in. Fretting is written by `tabgp`.
+        means the tab path has crept back in. Fretting is written by `tabgp`, and by
+        `tabxml`'s `<frame>` chord diagrams inside `<harmony>` - fret and string
+        elements that appear inside a `<frame>` are a diagram, not a tab staff.
         """
         root = self.root()
         self.assertEqual(len(root.findall("part")), 1)
@@ -125,8 +127,22 @@ class TestMusicXMLDocument(MusicXMLTestCase):
             sign = clef_node.find("sign")
             self.assertNotEqual(sign.text if sign is not None else None, "TAB")
         self.assertEqual([node.text for node in root.iter("staff-lines")], [])
-        self.assertEqual([node.text for node in root.iter("fret")], [])
-        self.assertEqual([node.text for node in root.iter("string")], [])
+        # Fret and string elements live inside `<frame>` chord diagrams, not on a
+        # tab staff: every one must be a descendant of a `<frame>`.
+        fret_in_frame = {
+            id(node)
+            for frame in root.iter("frame")
+            for node in frame.iter("fret")
+        }
+        string_in_frame = {
+            id(node)
+            for frame in root.iter("frame")
+            for node in frame.iter("string")
+        }
+        for fret in root.iter("fret"):
+            self.assertIn(id(fret), fret_in_frame)
+        for string in root.iter("string"):
+            self.assertIn(id(string), string_in_frame)
 
     def test_instrument_ids_are_unique_across_the_part_list(self):
         """
@@ -521,6 +537,82 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         symbols = self.symbols(self.part(root))
         self.assertEqual(len(symbols), 1)
         self.assertIn("sus4", ElementTree.tostring(symbols[0], encoding="unicode"))
+
+    def frames(self, part):
+        """The fretboard frames (`<frame>` chord diagrams) of a part."""
+        return [node for node in part.iter("frame")]
+
+    def test_a_multi_note_chord_step_gets_a_fretboard_frame(self):
+        """A step that voices two or more strings also gets a `<frame>` diagram."""
+        from arranger import format_musicxml
+
+        step = make_step([-1, 3, 5, 5, 5, -1], chord="Dm7")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        part = self.part(root)
+        frames = self.frames(part)
+        self.assertEqual(len(frames), 1)
+        # One <frame-note> per sounding string.
+        frame_notes = frames[0].findall("frame-note")
+        self.assertEqual(len(frame_notes), 4)
+
+    def test_a_single_note_step_gets_no_frame(self):
+        """A single-note step gets a `<harmony>` symbol but no `<frame>`."""
+        from arranger import format_musicxml
+
+        step = make_step([-1, -1, -1, 5, -1, -1], chord="Dm7")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        part = self.part(root)
+        symbols = self.symbols(part)
+        self.assertEqual(len(symbols), 1)
+        self.assertEqual(len(self.frames(part)), 0)
+
+    def test_an_nc_step_gets_no_frame(self):
+        """An NC step writes no `<harmony>` at all, so no `<frame>` either."""
+        from arranger import format_musicxml
+
+        step = make_step([-1, -1, -1, 5, -1, -1], chord="NC")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        self.assertEqual(len(list(root.iter("harmony"))), 0)
+        self.assertEqual(len(list(root.iter("frame"))), 0)
+
+    def test_fretboard_frame_strings_and_frets_match_the_voicing(self):
+        """MusicXML string 1 = high E: library index 0 = low E maps to string 6."""
+        from arranger import format_musicxml
+
+        # x-x-0-2-3-1 = Dm7: string 4(D)=fret 0, string 3(G)=fret 2,
+        # string 2(B)=fret 3, string 1(high E)=fret 1
+        step = make_step([-1, -1, 0, 2, 3, 1], chord="Dm7")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        part = self.part(root)
+        frames = self.frames(part)
+        self.assertEqual(len(frames), 1)
+        notes = frames[0].findall("frame-note")
+        expected = {
+            (4, "0"), (3, "2"), (2, "3"), (1, "1"),
+        }
+        found = set()
+        for n in notes:
+            string_node = n.find("string")
+            fret_node = n.find("fret")
+            assert string_node is not None and fret_node is not None
+            found.add((int(string_node.text or "0"), fret_node.text or ""))
+        self.assertEqual(found, expected)
+
+    def test_an_unparseable_chord_still_gets_a_frame(self):
+        """The fallback path (`<kind text="...">other</kind>`) still carries a `<frame>`."""
+        from arranger import format_musicxml
+
+        step = make_step([-1, 3, 5, 5, 5, -1], chord="Bb7sus4")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        part = self.part(root)
+        frames = self.frames(part)
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(len(frames[0].findall("frame-note")), 4)
+
+    def test_show_chords_false_writes_no_frames(self):
+        """`show_chords=False` writes no `<harmony>`, hence no `<frame>` either."""
+        root = self.root(show_chords=False)
+        self.assertEqual(len(list(root.iter("frame"))), 0)
 
 
 @requires_music21
