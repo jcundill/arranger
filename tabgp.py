@@ -60,7 +60,6 @@ import io
 from contextlib import suppress
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from arranger.chords import parse_symbol
 from arranger.step_types import ArrangementStep
 from tabscore import score_events, substitute_steps
 
@@ -585,6 +584,8 @@ def _chord_diagram(
     Returns `None` when the step asks for no chord (`NC`), so callers can skip
     drawing a diagram where there is no harmony to depict.
     """
+    from arranger.chords import parse_symbol
+
     symbol = parse_symbol(step.chord)
     if symbol is None:
         return None

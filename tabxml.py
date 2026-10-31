@@ -387,11 +387,11 @@ def _build_part(
 
     state["measure"] = new_measure()
 
-    def write_symbol(step: Optional[ArrangementStep]) -> None:
+    def write_symbol(name: str) -> None:
         # One symbol per change, at its own offset: a symbol pinned to the bar line
         # names the wrong chord for every chord after the first. A multi-string step
         # also gets a fretboard diagram (`<frame>`), as in the GP5 output.
-        state["measure"].insert(offset - state["start"], _chord_symbol(step))
+        state["measure"].insert(offset - state["start"], _chord_symbol(name))
 
     def write_event(step: Optional[ArrangementStep], length: float) -> None:
         """
@@ -442,7 +442,7 @@ def _build_part(
         if step is not None and show_chords and step.chord != in_force:
             in_force = step.chord
             if in_force and in_force != NO_CHORD:
-                write_symbol(step)
+                write_symbol(in_force)
         write_event(step, length)
 
     measures = list(part.getElementsByClass(stream.Measure))
@@ -781,7 +781,7 @@ def _apply_pickup_barline(root: ElementTree.Element) -> None:
     first_measure.append(barline)
 
 
-def _chord_symbol(step: Optional[ArrangementStep]) -> Any:
+def _chord_symbol(name: str) -> Any:
     """
     A chord symbol for the score, or a text-only one when music21 cannot read
     the name.
@@ -809,11 +809,12 @@ def _chord_symbol(step: Optional[ArrangementStep]) -> Any:
     can read - `<frame>` inside `<harmony>` is MusicXML 4.0-only and MuseScore
     3 rejects the document outright. Chord diagrams live in the GP5 output
     instead, where the format stores them natively.
+
+    `name` is the chord symbol text, not a whole `ArrangementStep`: the caller
+    already knows the name and passes only it, so this function stays coupled to
+    a string rather than to the engine's step type.
     """
     from music21 import harmony
-
-    assert step is not None
-    name = step.chord
 
     try:
         symbol = harmony.ChordSymbol(name)
