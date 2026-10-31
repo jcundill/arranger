@@ -357,7 +357,7 @@ Gmaj9/F# D4  5    x-x-4-4-3-x       (shell - 3rd & 7th, partial -
 ```
 
 Expect **more steps than the melody had** — four here for three notes, because the bass grid is finer than the melody's. A step marked `bass_only=True` is the thumb alone: the previous shape is held, and nothing above the thumb is struck — not the chord, and not the melody. That is what makes a **tied** melody stay one note under a walking line: the tune of "But Not For Me" ties across half-beats, and with `--bass-on 1,2,1and,2and` those half-beats are thumb attacks under a shape nobody re-plucks. A note the tune genuinely **re-articulates** is a different step and says so (`melody repeated - single note`: soprano alone, inner voices held).
-
+html
 **The thumb rings until the next attack.** `(bass: G2, held)` is a note **sounding and not plucked**: it was struck on beat 1 and is still ringing under the melody at 1.5. The one-line tab draws a mute on that string — the tab answers "what is plucked" — while the staff leaves the cell empty and the MusicXML ties the pitch inside the chord, so all four renderers say the same thing about one note. The ring ends at the next attack, the bar line, a rest, or a shape the hand cannot hold — it is plucked again wherever it changes.
 
 One note per felt beat — **two attacks a bar in 2/2, four in 4/4, three in 3/4** — and the positions the rhythm does not name are rests, which is what keeps the part lined up against the tune. `pedal` is a root on a position that is not the bar's first, so the line is not pretending to be a walk.

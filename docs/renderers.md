@@ -35,7 +35,7 @@ duplicated or imported across the boundary.
 | name | role |
 |---|---|
 | `tabstaff.format_tab_staff` | the ASCII staff, for a terminal |
-| `tabstaff.format_tab_html` | a self-contained HTML page for a browser |
+| `tabstaff.format_tab_html` | a self-contained HTML page for a browser; draws fretboard chord diagrams above the staff |
 | `tabstaff.write_tab_html` | the only function in the module that touches the filesystem |
 | `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
 | `_staff_bars` / `_staff_barlines` | the bar number of every column, and the columns that open a bar |
@@ -68,7 +68,51 @@ there is still one spelling for the whole staff-rendering surface.
 **The dependency is one-way: `tabstaff` imports `arranger.tuning`, never the
 reverse.** It takes `STRING_NAMES`, `ArrangementStep` and `MUTED_CELL` from there -
 the leaf the whole package is built on, which imports nothing - and the last of those
-stays put because `Voicing.tab_block()` and `format_progression` use it too.
+
+## Fretboard chord diagrams on the HTML staff
+
+`format_tab_html` renders the whole progression as a single inline SVG score modelled on
+TuxGuitar's `diag.svg`. Systems of measures stack vertically, each measure a white card
+with six staff lines, tab numbers on their string lines, red bar numbers above the staff,
+black barlines at measure edges, and fretboard chord diagrams above the staff at each
+measure's first new chord. A held chord gets no second diagram, and a single-note or NC
+step gets none at all. The SVG is inline — no external dependency — and is self-contained
+like the rest of the page.
+
+The column grid is shared with `tabstaff_ascii` through `tabstaff_grid`, so both
+renderers place a chord in the same column by construction and cannot drift apart.
+
+Each measure card shows:
+
+- **Six staff lines** at y = 67, 77, 87, 97, 107, 117 (high E on top, low E on bottom),
+  stroke `#d6d6d6`, width 0.75.
+- **Tab numbers** in `#404040` at font-size 10, each with a white rect behind it so the
+  glyph centre sits on its string line.
+- **Red bar numbers** (`#ff0000`) above the staff at measure starts; a pickup bar is
+  not numbered and numbering starts at 1 on the first complete bar.
+- **Black barlines** on the staff at y = 67–117, crossing through the six
+  staff lines.
+
+Each chord diagram card is 43×42 pixels, centred above **each new fretted shape** in the measure:
+
+- A diagram is drawn for **every fretboard shape change** within a bar, not just the first.
+- The same chord at a different neck position gets a new diagram; a held shape does not.
+- If a bar needs more room for its diagrams, the measure card widens so the diagrams
+  do not overlap. Width is `beats_per_bar × 27.5` for the beat grid, or wider when
+  diagrams sit on adjacent beats (scaled so adjacent diagram cards have at least
+  `diagram_width + gap` centre spacing, accounting for a diagram at beat 0 being
+  clamped to half a card width from the left edge). Diagrams stay at their relative
+  beat positions within the wider card.
+- **Six strings** at x = 13, 18, 23, 28, 33, 38 (low E left, high E right),
+  **six frets** at y = 6, 12, 18, 24, 30, 36, stroke `#d6d6d6`, width 0.75.
+- **X marks** at the nut on each muted string (-1).
+- **A black first-fret index** at top-left when the shape starts above fret 0.
+- **Filled dots** (radius 2.5) at each fretted string/fret intersection, centred in the
+  fret space.
+- **The chord name** in `#000000` at font-size 10, just below the diagram card.
+
+MusicXML's `<frame>` element (MusicXML 4.0-only, rejected by MuseScore 3) is not used;
+chord diagrams live in the HTML page and in GP5's native `gp.Chord` diagrams instead.
 
 ### The re-export is lazy, and why
 

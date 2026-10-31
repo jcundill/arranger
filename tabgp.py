@@ -57,11 +57,11 @@ imported inside the functions, never at module level, so the library keeps worki
 from __future__ import annotations
 
 import io
+from contextlib import suppress
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.step_types import ArrangementStep
 from tabscore import score_events, substitute_steps
-from tuning import NO_CHORD
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
 # every later release read. PyGuitarPro writes GP3/GP4/GP5/TGP from the same model,
@@ -522,6 +522,216 @@ def _strike_notes(
     return ringing
 
 
+# A chord quality's GP5 chord diagram type, keyed by the canonical quality the
+# chord parser resolves. Qualities this library knows but GP5 has no diagram
+# type for (altered dominants, extended dominants, suspended sevenths, ...)
+# are left unmapped: the diagram still prints with its name and fret vector,
+# just without a classified type.
+_QUALITY_TO_CHORD_TYPE: Dict[str, Any] = {
+    # Triads
+    "maj": "major",
+    "m": "minor",
+    "aug": "augmented",
+    "dim7": "diminished",
+    # Sevenths
+    "7": "seventh",
+    "maj7": "majorSeventh",
+    "m7": "minorSeventh",
+    "mMaj7": "minorMajor",
+    "m6": "minorSixth",
+    "6": "sixth",
+    "6/9": "sixth",
+    # Extended sevenths (classified as the base seventh type; the extension
+    # member carries the 9th/11th/13th).
+    "9": "seventh",
+    "maj9": "majorSeventh",
+    "m9": "minorSeventh",
+    "13": "seventh",
+    "7b13": "seventh",
+    "7#11": "seventh",
+    # Suspended
+    "sus2": "suspendedSecond",
+    "sus4": "suspendedFourth",
+    "7sus4": "seventhSuspendedFourth",
+}
+
+# A chord quality's extension, where GP5 has a member for it. Extended
+# dominants and maj7-family chords with a 9th/11th/13th map here; everything
+# else is none.
+_QUALITY_TO_EXTENSION: Dict[str, Any] = {
+    "maj9": "ninth",
+    "m9": "ninth",
+    "9": "ninth",
+    "6/9": "ninth",
+    "maj7#11": "eleventh",
+    "7#11": "eleventh",
+    "13": "thirteenth",
+    "7b13": "thirteenth",
+}
+
+
+def _chord_diagram(
+    gp: Any,
+    step: ArrangementStep,
+) -> Any:
+    """Builds a GP5 chord diagram (`gp.Chord`) for one step's voicing.
+
+    The diagram carries the chord's name, root, classified type where the
+    quality maps cleanly, and the fret-per-string vector the engine already
+    computed. GP5 numbers strings 1-6 with 1 = high E; this library indexes
+    0 = low E, so the fret vector is flipped.
+
+    Returns `None` when the step asks for no chord (`NC`), so callers can skip
+    drawing a diagram where there is no harmony to depict.
+    """
+    from arranger.chords import parse_symbol
+
+    symbol = parse_symbol(step.chord)
+    if symbol is None:
+        return None
+
+    frets = step.voicing.frets
+    active = [f for f in frets if f >= 0]
+    if not active:
+        return None
+
+    # GP5 strings are 1..6 with 1 = high E; flip the library's 0 = low E order.
+    strings = [-1] * 6
+    for gp_index in range(6):
+        library_index = 5 - gp_index
+        strings[gp_index] = frets[library_index]
+
+    chord = gp.Chord(
+        length=6,
+        name=step.chord,
+        firstFret=min(active),
+        strings=strings,
+        show=True,
+    )
+
+    # Root pitch class, e.g. 'D', 'C#', 'Bb'.
+    chord.root = gp.PitchClass(symbol.root)
+
+    # Classified type where the quality maps cleanly. Look up by name, not by
+    # value - the enum values are integers, and the GP5 writer calls int() on
+    # the member, so a string-valued LenientEnum member would corrupt the file.
+    chord_type_name = _QUALITY_TO_CHORD_TYPE.get(symbol.quality)
+    if chord_type_name is not None:
+        chord_type = getattr(gp.ChordType, chord_type_name, None)
+        if chord_type is not None:
+            chord.type = chord_type
+
+    # Extension where GP5 has a member for it.
+    extension_name = _QUALITY_TO_EXTENSION.get(symbol.quality)
+    if extension_name is not None:
+        chord_extension = getattr(gp.ChordExtension, extension_name, None)
+        if chord_extension is not None:
+            chord.extension = chord_extension
+
+    # Slash bass, when the symbol asks for one.
+    if symbol.bass is not None:
+        with suppress(ValueError):
+            chord.bass = gp.PitchClass(symbol.bass)
+
+    return chord
+
+
+def _chord_label_and_diagram(
+    gp: Any,
+    step: Optional[ArrangementStep],
+    in_force: Optional[str],
+    position_key: Optional[Tuple[Tuple[int, int], ...]],
+    last_position_key: Optional[Tuple[Tuple[int, int], ...]],
+) -> Tuple[
+    Optional[Any],
+    Optional[str],
+    Optional[Tuple[Tuple[int, int], ...]],
+]:
+    """The fingering diagram for one step's beat.
+
+    Returns `(diagram, new_in_force, new_position_key)`. A diagram is only
+    drawn when the left hand's position changes to a new two-or-more-string
+    shape. A single-note position (repeated melody, bass-only beat,
+    melody-only step) never gets a diagram, and an unchanged position - even
+    under a different chord name - does not get a second diagram. The chord
+    name itself lives on the diagram rather than as a separate text line.
+    """
+    diagram = None
+    new_in_force = in_force
+    new_position_key = last_position_key
+
+    if step is not None and step.chord != in_force:
+        new_in_force = step.chord
+
+    if position_key is not None and position_key != last_position_key and step is not None and step.chord:
+        diagram = _chord_diagram(gp, step)
+        new_position_key = position_key
+
+    return diagram, new_in_force, new_position_key
+
+
+def _position_key(
+    step: Optional[ArrangementStep],
+) -> Optional[Tuple[Tuple[int, int], ...]]:
+    """The left hand's position as a sorted (string, fret) tuple, or None.
+
+    A step establishes a new position only when it sounds a fresh multi-note
+    shape: not a bass-only beat (thumb moves, hand stays), not a repeated
+    single-note melody, and not a rest or NC. Fewer than two sounding strings
+    is not a chord diagram.
+    """
+    if step is None or step.bass_only or step.repeated:
+        return None
+    active = [
+        (i, f)
+        for i, f in enumerate(step.voicing.frets)
+        if f >= 0
+    ]
+    if len(active) < 2:
+        return None
+    return tuple(sorted(active))
+
+
+def _write_beat(
+    gp: Any,
+    voice: Any,
+    step: Optional[ArrangementStep],
+    continued: bool,
+    part: int,
+    tie: bool,
+    ringing: Optional[List[int]],
+    last_on_string: Dict[int, int],
+    diagram: Optional[Any],
+    duration: Any,
+) -> Optional[List[int]]:
+    """Writes one beat of a step onto a GP5 voice.
+
+    Returns the updated `ringing` shape. A diagram is attached when the
+    position changed; the beat's status is rest when it carries no notes.
+    The chord name lives on the diagram rather than as a separate text line,
+    so the beat carries no `text`.
+    """
+    beat = gp.Beat(
+        voice,
+        duration=duration,
+    )
+    if diagram is not None:
+        beat.effect.chord = diagram
+    ringing = _strike_notes(
+        gp, beat, step, continued, part, tie, ringing, last_on_string
+    )
+    # **A beat with no notes is a rest, and it must say so.** The status is read
+    # off the beat's own notes rather than off `step is not None`, because a rest
+    # step is a step too: the engine emits one for a position the guitar declines,
+    # and written `normal` it goes out as an ordinary beat with an empty string
+    # flags byte - MuseScore reads it as a rest in the right place, TuxGuitar puts
+    # it at the end of the bar instead of the head. `BeatStatus.rest` sets the
+    # flag explicitly.
+    beat.status = gp.BeatStatus.normal if beat.notes else gp.BeatStatus.rest
+    voice.beats.append(beat)
+    return ringing
+
+
 def _build_song(
     gp: Any,
     measures: List[List[Tuple[Optional[ArrangementStep], float, bool]]],
@@ -574,6 +784,11 @@ def _build_song(
     # which under decision C hold only the melody. Threaded through every measure
     # rather than per measure, because a held shape routinely spans a barline.
     ringing: Optional[List[int]] = None
+
+    # The left hand's position as a sorted (string, fret) tuple, threaded through
+    # every measure. A held position that spans a barline is recognised here, so
+    # the diagram is not redrawn for a held shape even when the bar line passes.
+    last_position_key: Optional[Tuple[Tuple[int, int], ...]] = None
 
     # The fret last written on each **GP string** (1 = high E), over the whole file.
     #
@@ -632,41 +847,27 @@ def _build_song(
             # `last_on_string`.
             for part, (value, tuplet) in enumerate(_duration_split(length)):
                 continued = tie or part > 0
-                # One label per chord *change*, written at the attack that makes it
-                # - the same rule `tabxml._build_part` applies to its `<harmony>`
-                # symbols. A continuation part repeats its event's chord and so
-                # never differs from `in_force`; a name that is empty or `NO_CHORD`
-                # (the blanked `show_chords=False` steps, an unharmonised passage)
-                # is recorded as in force but not written.
-                label = None
-                if step is not None and step.chord != in_force:
-                    in_force = step.chord
-                    if in_force and in_force != NO_CHORD:
-                        label = in_force
+                # The left hand's position: a sorted (string, fret) tuple of
+                # every actively fretted string. None when the hand isn't moving
+                # to a new shape - bass-only beats, repeated single notes, rests,
+                # NC, and single-note voicings all stay None. Threaded through
+                # measures so a held position that spans a barline is recognised.
+                position_key = _position_key(step)
+                # A diagram is only drawn when the position actually changes -
+                # the chord name lives on the diagram rather than as a separate
+                # text line above the staff.
+                diagram, in_force, last_position_key = _chord_label_and_diagram(
+                    gp, step, in_force, position_key, last_position_key
+                )
                 duration = gp.Duration(value)
                 if tuplet is not None:
                     # A triplet is a Duration *plus* a Tuplet, not a Duration of 12.
                     # See `_duration_split`.
                     duration.tuplet = gp.Tuplet(tuplet[0], tuplet[1])
-                beat = gp.Beat(
-                    voice,
-                    duration=duration,
-                    text=label,
+                ringing = _write_beat(
+                    gp, voice, step, continued, part, tie,
+                    ringing, last_on_string, diagram, duration,
                 )
-                ringing = _strike_notes(
-                    gp, beat, step, continued, part, tie, ringing, last_on_string
-                )
-                # **A beat with no notes is a rest, and it must say so.** The status is
-                # read off the beat's own notes rather than off `step is not None`, because
-                # a rest *step* is a step too: the engine emits one for a position the
-                # guitar declines, and written `normal` it goes out as an ordinary beat
-                # with an empty string-flags byte - which MuseScore reads as a rest in the
-                # right place and TuxGuitar puts at the end of the bar instead of the head.
-                # `BeatStatus.rest` sets the flag that says rest explicitly.
-                beat.status = (
-                    gp.BeatStatus.normal if beat.notes else gp.BeatStatus.rest
-                )
-                voice.beats.append(beat)
         # maxVoices is 2 and the writer emits every voice; one would desync the
         # file. See the module docstring.
         track.measures.append(

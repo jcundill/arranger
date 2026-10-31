@@ -329,7 +329,9 @@ class TestRoundTrip(GuitarProTestCase):
         sus4, which is the arrangement's own decision, not the renderer's.
         """
         for step, beat in zip(self.steps, self.beats()):
-            self.assertEqual(beat.text, step.harmonized_as or step.chord)
+            chord = beat.effect.chord
+            self.assertIsNotNone(chord)
+            self.assertEqual(chord.name, step.harmonized_as or step.chord)  # type: ignore
 
     def test_the_melody_is_the_highest_note_in_the_shape(self):
         """The melody is the top note of what was written.
@@ -585,7 +587,8 @@ class TestRhythm(GuitarProTestCase):
         # the whole of bar 2 in one note, which is what a dropped pickup would split in
         # two.
         self.assertEqual(
-            [b.text for m in measures for b in m.voices[0].beats],
+            [b.effect.chord.name if b.effect.chord else None
+             for m in measures for b in m.voices[0].beats],
             [None, "Dm7", "G7"],
         )
         # Both bars are exactly full, which is what GP5 requires.
@@ -716,7 +719,8 @@ class TestRhythm(GuitarProTestCase):
         # The chord is named where it changes, so the continuation part carries no
         # name of its own; `tabxml.write_symbol` writes its symbols the same way.
         self.assertEqual(
-            [b.text for m in measures for b in m.voices[0].beats],
+            [b.effect.chord.name if b.effect.chord else None
+             for m in measures for b in m.voices[0].beats],
             ["Dm7", None, "G7"],
         )
 
@@ -747,7 +751,7 @@ class TestRhythm(GuitarProTestCase):
         beats = [b for m in song.tracks[0].measures for b in m.voices[0].beats]
         # The label follows the chord change, so the continuation - now a tie
         # rather than a second attack - is not labelled a second time either.
-        self.assertEqual([b.text for b in beats], ["Dm7", None, "G7"])
+        self.assertEqual([b.effect.chord.name if b.effect.chord else None for b in beats], ["Dm7", None, "G7"])
         # The attack is an ordinary note; only the continuation is a tie.
         self.assertEqual(
             [n.type for b in beats for n in b.notes],
@@ -839,7 +843,7 @@ class TestRhythm(GuitarProTestCase):
         )
         # One name for the one chord: a continuation part is not a second chord,
         # and the G7 is.
-        self.assertEqual([b.text for b in beats], ["Dm7", None, "G7"])
+        self.assertEqual([b.effect.chord.name if b.effect.chord else None for b in beats], ["Dm7", None, "G7"])
 
     def test_no_split_continuation_in_a_written_head_is_re_struck(self):
         """No beat of "All the Things You Are" re-strikes a note it still holds.
@@ -914,7 +918,6 @@ class TestRhythm(GuitarProTestCase):
         as three beats, which must not show `Bbm7` three times where the score has
         two notes.
         """
-        from arranger.tuning import NO_CHORD
         from headxml import arrange_xml_head
 
         path = os.path.join(
@@ -929,30 +932,42 @@ class TestRhythm(GuitarProTestCase):
             beat_type=head.beat_type,
         )
         labels = [
-            beat.text
+            beat.effect.chord.name if beat.effect.chord else None
             for measure in measures
             for beat in measure.voices[0].beats
         ]
 
         # The changes, walked over the events - written out here rather than
-        # derived from `_build_song`, so a label on a continuation part would show
-        # up as an extra name below.
+        # derived from `_build_song`, so a diagram on a continuation part would show
+        # up as an extra name below. A diagram is drawn once per *position* change,
+        # not once per chord-name change, so the expected list tracks positions.
         events, _pickup = score_events(
             substitute_steps(steps), head.beats_per_bar, True, head.beat_type
         )
         changes = []
-        in_force = None
+        last_position = None
         for step, _strikes, _length in events:
-            if step is not None and step.chord != in_force:
-                in_force = step.chord
-                if in_force and in_force != NO_CHORD:
-                    changes.append(in_force)
+            if step is None or step.repeated or step.bass_only:
+                last_position = None
+                continue
+            active = [
+                (i, f)
+                for i, f in enumerate(step.voicing.frets)
+                if f >= 0
+            ]
+            if len(active) < 2:
+                last_position = None
+                continue
+            position = tuple(sorted(active))
+            if position != last_position:
+                changes.append(step.chord)
+                last_position = position
         self.assertEqual([label for label in labels if label], changes)
 
         # The reported bar: `Dm7` on the dotted half's attack, nothing on its tied
         # continuation, and the `G7` on the quarter that follows under the new chord.
         self.assertEqual(
-            [beat.text for beat in measures[1].voices[0].beats],
+            [beat.effect.chord.name if beat.effect.chord else None for beat in measures[1].voices[0].beats],
             ["Dm7", None, "G7"],
         )
 
@@ -980,7 +995,7 @@ class TestRhythm(GuitarProTestCase):
         self.assertEqual(len(beats), 3)
         self.assertEqual(beats[0].notes, [])
         self.assertAlmostEqual(4.0 / beats[0].duration.value, 1.0, places=6)
-        self.assertEqual([b.text for b in beats[1:]], ["Dm7", "G7"])
+        self.assertEqual([b.effect.chord.name if b.effect.chord else None for b in beats[1:]], ["Dm7", "G7"])
         self.assertAlmostEqual(self.bar_quarters(song.tracks[0].measures[0]), 4.0, places=6)
 
     def test_a_rest_beat_is_marked_as_a_rest_not_as_an_empty_chord(self):
@@ -1245,8 +1260,8 @@ class TestOptions(GuitarProTestCase):
         with_names = self.beats()
         without = self.beats(show_chords=False)
         self.assertEqual(len(with_names), len(without))
-        self.assertTrue(any(b.text for b in with_names))
-        self.assertFalse(any(b.text for b in without))
+        self.assertTrue(any(b.effect.chord is not None for b in with_names))
+        self.assertFalse(any(b.effect.chord is not None for b in without))
         self.assertEqual(
             [self.written_frets(b) for b in with_names],
             [self.written_frets(b) for b in without],
@@ -1262,7 +1277,9 @@ class TestOptions(GuitarProTestCase):
         step = make_step([-1, -1, 10, 10, 10, 10], "Cmaj7", "E4",
                           harmonized_as="Cmaj9")
         beat = self.beats(steps=[step])[0]
-        self.assertEqual(beat.text, "Cmaj9")
+        chord = beat.effect.chord
+        self.assertIsNotNone(chord)
+        self.assertEqual(chord.name, "Cmaj9")  # type: ignore
 
     def test_a_repeated_melody_is_written_as_a_single_note(self):
         """A hold is one struck note, matching the other two renderers.

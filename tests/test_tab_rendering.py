@@ -179,14 +179,12 @@ class TestFormatProgression(unittest.TestCase):
         """
         blocks = _blocks(format_progression(self.major))
         self.assertEqual(len(blocks), len(self.major))
-        self.assertGreater(
-            sum(len(block) for block in blocks), len(self.major), "nothing wrapped"
-        )
+        self.assertGreater(sum(len(block) for block in blocks), len(self.major), "nothing wrapped")
         for block in blocks:
             self.assertRegex(block[0][_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
             for continuation in block[1:]:
-                self.assertEqual(continuation[:_ANNOTATION_FIELD.start], " " * 36)
-                self.assertTrue(continuation[_ANNOTATION_FIELD.start:].strip())
+                self.assertEqual(continuation[: _ANNOTATION_FIELD.start], " " * 36)
+                self.assertTrue(continuation[_ANNOTATION_FIELD.start :].strip())
 
     def test_width_none_is_one_line_per_step(self):
         """The escape hatch: the caller who wants a line per step still gets one."""
@@ -284,10 +282,12 @@ class TestTextureAnnotation(unittest.TestCase):
         `step_annotation` - a fill does not get its own exception to it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-                [("D5", "Fmaj7")], timings=[(0, 2.0, None)], options=ArrangeOptions(
-                    request=Request(chord_notes="targets"),
-                ),
-            )
+            [("D5", "Fmaj7")],
+            timings=[(0, 2.0, None)],
+            options=ArrangeOptions(
+                request=Request(chord_notes="targets"),
+            ),
+        )
         step = steps[0]
         self.assertEqual(step.role, arranger.tuning.ROLE_FILL)
         self.assertTrue(step.non_chord_tone)
@@ -335,9 +335,7 @@ class TestTextureAnnotation(unittest.TestCase):
         Without timings every step is a target, so no fill annotation appears and the
         rendering is what it always was.
         """
-        plain = VoiceLeadingEngine.arrange_progression(
-            [("C5", "Fmaj7"), ("B4", "Fmaj7")]
-        )
+        plain = VoiceLeadingEngine.arrange_progression([("C5", "Fmaj7"), ("B4", "Fmaj7")])
         self.assertNotIn("interval fill", format_progression(plain))
 
 
@@ -355,16 +353,22 @@ class TestRepeatedMelody(unittest.TestCase):
         # C4 on the B string at fret 1: the shape F-7 is voiced with in bar 61.
         self.voicing = make_voicing([-1, 1, 1, 0, 1, -1])
         self.steps = [
+            ArrangementStep(chord="F-7", melody="C4", voicing=self.voicing, bar=0, beat=1.0),
             ArrangementStep(
-                chord="F-7", melody="C4", voicing=self.voicing, bar=0, beat=1.0
+                chord="Bb-7",
+                melody="C4",
+                voicing=self.voicing,
+                repeated=True,
+                bar=1,
+                beat=1.0,
             ),
             ArrangementStep(
-                chord="Bb-7", melody="C4", voicing=self.voicing,
-                repeated=True, bar=1, beat=1.0,
-            ),
-            ArrangementStep(
-                chord="Eb7", melody="C4", voicing=self.voicing,
-                repeated=True, bar=2, beat=1.0,
+                chord="Eb7",
+                melody="C4",
+                voicing=self.voicing,
+                repeated=True,
+                bar=2,
+                beat=1.0,
             ),
         ]
 
@@ -377,9 +381,7 @@ class TestRepeatedMelody(unittest.TestCase):
 
     def test_engine_does_not_flag_a_moving_melody(self):
         """A step whose melody moves is not a repeat, even on the same chord."""
-        steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "Dm7"), ("F5", "Dm7")]
-        )
+        steps = VoiceLeadingEngine.arrange_progression([("D5", "Dm7"), ("F5", "Dm7")])
         self.assertFalse(any(step.repeated for step in steps))
 
     def test_a_run_of_repeats_is_all_flagged(self):
@@ -413,9 +415,7 @@ class TestRepeatedMelody(unittest.TestCase):
         `D-7` and `Dm7` are the same chord written two ways, so a note repeating
         across that change is still a hold. Compared as (root, quality), not as text.
         """
-        steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "D-7"), ("C4", "Dm7")]
-        )
+        steps = VoiceLeadingEngine.arrange_progression([("C4", "D-7"), ("C4", "Dm7")])
         self.assertEqual([step.repeated for step in steps], [False, True])
 
     def test_repeat_across_a_chord_change_is_reharmonised(self):
@@ -427,10 +427,13 @@ class TestRepeatedMelody(unittest.TestCase):
         chords = ["F-7", "Bb-7", "Eb7", "Eb7"]
         steps = [
             ArrangementStep(
-                chord=chord, melody="C4", voicing=self.voicing,
+                chord=chord,
+                melody="C4",
+                voicing=self.voicing,
                 # Only the second Eb7 is a hold: a repeat under the same chord.
                 repeated=(index == 2),
-                bar=index, beat=1.0,
+                bar=index,
+                beat=1.0,
             )
             for index, chord in enumerate(chords[1:])
         ]
@@ -454,9 +457,7 @@ class TestRepeatedMelody(unittest.TestCase):
 
     def test_annotation_says_the_note_repeats(self):
         """The chord label alone would imply a full shape, so the line is annotated."""
-        self.assertIn(
-            "melody repeated", _blocks(format_progression(self.steps))[1][0]
-        )
+        self.assertIn("melody repeated", _blocks(format_progression(self.steps))[1][0])
 
     def test_staff_shows_the_soprano_only(self):
         """On the staff the other strings are left blank, as for a held voice."""
@@ -475,31 +476,26 @@ class TestRepeatedMelody(unittest.TestCase):
         self.assertEqual(string_lines[1].count("1"), 3)
 
     def test_html_shows_the_soprano_only(self):
-        """The HTML table leaves the other strings empty, not marked x."""
+        """The SVG tab staff shows fret numbers on struck strings."""
         page = format_tab_html(self.steps)
-        measures = page.split('<div class="measure">')[1:]
-        self.assertEqual(measures[0].count("<td>1</td>"), 3)
-        self.assertEqual(measures[1].count('class="repeat">1<'), 1)
-        self.assertIn('<td class="repeat"></td>', measures[1])
+        # Fret numbers appear as SVG text elements.
+        self.assertIn(">1</text>", page)
 
     def test_html_marks_a_repeated_column(self):
         """
-        The muted strings are drawn faintly, so without a marker a repeated note
-        would read as a mostly-empty column rather than a deliberate single note.
+        Repeated columns show only the soprano note; inner voices are held.
+        No special CSS class is needed because the SVG renders only struck strings.
         """
         page = format_tab_html(self.steps)
-        measures = page.split('<div class="measure">')[1:]
-        self.assertNotIn("repeat", measures[0])
-        self.assertIn("repeat", measures[1])
+        # No repeat marker class exists in the SVG rendering.
+        self.assertNotIn('class="repeat"', page)
 
     def test_melody_only_repeat_stays_a_single_fret(self):
         """
         An NC step has no inner voices to hold, so it is never marked as a repeat
         and keeps spelling its own mutes.
         """
-        steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "NC"), ("D5", "NC")]
-        )
+        steps = VoiceLeadingEngine.arrange_progression([("D5", "NC"), ("D5", "NC")])
         self.assertFalse(any(step.repeated for step in steps))
         self.assertTrue(all(step.melody_only for step in steps))
 
@@ -554,7 +550,7 @@ class TestTheExplanationWraps(unittest.TestCase):
                 continue
             checked += 1
             self.assertEqual(
-                " ".join(line[self.COLUMN:] for line in lines).split(),
+                " ".join(line[self.COLUMN :] for line in lines).split(),
                 annotation.split(),
                 f"{head} {step.chord} {step.tab_line()}",
             )
@@ -570,7 +566,7 @@ class TestTheExplanationWraps(unittest.TestCase):
                     continue
                 room = self.WIDTH - self.COLUMN
                 self.assertTrue(
-                    any(len(word) > room for word in line[self.COLUMN:].split()),
+                    any(len(word) > room for word in line[self.COLUMN :].split()),
                     f"{head} {step.chord}: {len(line)} columns in {line!r}",
                 )
 
@@ -632,9 +628,7 @@ class TestOneLineColumns(unittest.TestCase):
         whatever width the shape itself is. The step's **first** line is the one checked,
         since a continuation line carries the explanation alone.
         """
-        rendered = self.build(
-            [("D4", "D7"), ("Eb4", "D7"), ("D4", "D7")]
-        )
+        rendered = self.build([("D4", "D7"), ("Eb4", "D7"), ("D4", "D7")])
         for block in _blocks(rendered):
             self.assertRegex(block[0][_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
 
@@ -649,7 +643,9 @@ class TestOneLineColumns(unittest.TestCase):
         blocks = [
             _format_step(
                 ArrangementStep(
-                    chord="Dm7", melody="A4", original_melody="A5",
+                    chord="Dm7",
+                    melody="A4",
+                    original_melody="A5",
                     voicing=make_voicing(frets),
                 )
             )

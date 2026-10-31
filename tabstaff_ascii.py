@@ -101,15 +101,23 @@ def _slot_counts(
             # are capped at the pickup's content end rather than at the bar line, so
             # a one-beat pickup is drawn one beat wide instead of filling the bar.
             bar_end = min(bar_end, pickup_end)
-        # The next sounding column is where this one stops making sound. A held column
-        # has a step of its own and so counts as sounding, which is what makes an
-        # attack and the holds under it add up to the note's real length.
-        following = next(
-            (later for later in range(index + 1, len(columns))
-             if columns[later][1] is not None),
-            None,
-        )
-        span = (columns[following][0] if following is not None else bar_end) - onset
+        # The next column is where this one stops being drawn. A held column has a
+        # step of its own and counts as sounding, so its sound reaches the next
+        # *sounding* column and the attack plus its holds add up to the note's real
+        # length. A rest column has no step and no sound: it occupies only its own
+        # slice - the gap to the next column (one grain). Reaching out to the next
+        # attack would make an empty bar as wide as the silence to the next chord,
+        # sometimes many bars wide.
+        if _step is None:
+            following = columns[index + 1][0] if index + 1 < len(columns) else bar_end
+        else:
+            following = next(
+                (later for later in range(index + 1, len(columns))
+                 if columns[later][1] is not None),
+                None,
+            )
+            following = columns[following][0] if following is not None else bar_end
+        span = following - onset
         span = min(span, bar_end - onset, bar_in_whole)
         whole = span / float(beat_type)  # a beat is `1 / beat_type` of a whole note
         counts.append(max(1, int(round(whole * slots_per_whole))))

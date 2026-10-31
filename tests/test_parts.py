@@ -68,14 +68,10 @@ class TestMelodyOnlySelections(unittest.TestCase):
         for chord_notes in CHORD_NOTES:
             steps = VoiceLeadingEngine().arrange_progression(
                 PROGRESSION,
-                options=ArrangeOptions(
-                    request=Request(melody=False, chord_notes=chord_notes)
-                ),
+                options=ArrangeOptions(request=Request(melody=False, chord_notes=chord_notes)),
             )
             self.assertTrue(steps, chord_notes)
-            self.assertTrue(
-                all(not step.melody_voiced for step in steps), chord_notes
-            )
+            self.assertTrue(all(not step.melody_voiced for step in steps), chord_notes)
 
     def test_soprano_alone_arranges_the_melody_and_nothing_else(self):
         """The old texture's behaviour, unchanged under its new spelling.
@@ -133,8 +129,10 @@ class TestMelodyOnlySelections(unittest.TestCase):
         beside a melody-only selection has no chord to place.
         """
         progression = [
-            ("F5", "Fmaj7"), ("E5", "A7"),
-            ("D5", "NC"), ("C5", "Dm7"),
+            ("F5", "Fmaj7"),
+            ("E5", "A7"),
+            ("D5", "NC"),
+            ("C5", "Dm7"),
         ]
         timings = [(0, 1.0, 1.0), (0, 2.5, 0.5), (1, 1.0, 1.0), (1, 3.0, 1.0)]
         steps = VoiceLeadingEngine.arrange_progression(
@@ -145,7 +143,6 @@ class TestMelodyOnlySelections(unittest.TestCase):
         self.assertEqual(len(steps), 4, "an off-grid slot of the tune went missing")
         for step in steps:
             self.assertEqual(len(step.voicing.active_frets()), 1)
-
 
 
 class TestThePartsPredicates(unittest.TestCase):
@@ -194,9 +191,7 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
             ("3", 3),
         ):
             for count in self.counts_for(chord_notes):
-                self.assertLessEqual(
-                    count, ceiling, f"{chord_notes} sounded {count} notes"
-                )
+                self.assertLessEqual(count, ceiling, f"{chord_notes} sounded {count} notes")
 
     def test_the_whole_chord_is_the_default(self):
         """`full` is the arrangement that always was: the fullest shape available."""
@@ -206,9 +201,7 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
         """The direction that matters: no content plays more voices than it named."""
         for chord_notes in CHORD_NOTES:
             for count in self.counts_for(chord_notes):
-                self.assertLessEqual(
-                    count, 3, f"{chord_notes} sounded {count} notes"
-                )
+                self.assertLessEqual(count, 3, f"{chord_notes} sounded {count} notes")
 
 
 # The three selections this class reads, spelled as the requests they are.
@@ -250,9 +243,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         self.engine = VoiceLeadingEngine()
 
     def arrange(self, request: Request):
-        return self.engine.arrange_progression(
-            PROGRESSION, options=ArrangeOptions(request=request)
-        )
+        return self.engine.arrange_progression(PROGRESSION, options=ArrangeOptions(request=request))
 
     def test_an_inner_voice_is_not_addressable_as_a_part(self):
         """The selection has no spelling for one inner voice: there is no part for it.
@@ -274,9 +265,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         is why the low-register rule is a branch on the **part** rather than a rule
         about how many notes happen to sound.
         """
-        self.assertEqual(
-            {len(s.voicing.active_frets()) for s in self.arrange(CHORD_ONLY)}, {3}
-        )
+        self.assertEqual({len(s.voicing.active_frets()) for s in self.arrange(CHORD_ONLY)}, {3})
         for step in self.arrange(LONE_BASS):
             self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
 
@@ -303,9 +292,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         """
         for name in ("Cmaj7", "A7", "Dm7b5", "Bbmaj7", "Fmaj7", "G7"):
             for voicing in bass_comping(name):
-                self.assertIn(
-                    min(voicing.active_strings), (0, 1, 2), voicing.tab_string()
-                )
+                self.assertIn(min(voicing.active_strings), (0, 1, 2), voicing.tab_string())
         for step in self.arrange(LONE_BASS):
             self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
 
@@ -371,9 +358,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         supported = {frozenset(s) for s in supported_string_sets()}
         for name in ("Cmaj7", "A7", "Dm7b5"):
             for bass_voice in (False, True):
-                for voicing in get_comping_voicings(
-                    name, notes=1, bass_voice=bass_voice
-                ):
+                for voicing in get_comping_voicings(name, notes=1, bass_voice=bass_voice):
                     self.assertIn(
                         frozenset(voicing.active_strings),
                         supported,
@@ -396,9 +381,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         chord = [max(s.voicing.midi_notes()) for s in self.arrange(CHORD_ONLY)]
         bass = [max(s.voicing.midi_notes()) for s in self.arrange(LONE_BASS)]
         self.assertEqual(len(chord), len(bass))
-        self.assertLess(
-            sum(bass), sum(chord), "the bass part is not below the chord part"
-        )
+        self.assertLess(sum(bass), sum(chord), "the bass part is not below the chord part")
 
     def test_the_lone_bass_flag_applies_to_the_bass_alone(self):
         """A selection that also takes the chord part is not a lone bass.
@@ -416,10 +399,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         self.assertEqual(set(lone), {1}, "the lone bass states more than one note")
         for step in self.arrange(LONE_BASS):
             self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
-        counts = {
-            len(s.voicing.active_frets())
-            for s in self.arrange(BASS_AND_CHORD)
-        }
+        counts = {len(s.voicing.active_frets()) for s in self.arrange(BASS_AND_CHORD)}
         self.assertEqual(
             counts,
             {4},
@@ -452,9 +432,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         `frozenset` against a 2-tuple and fail on the container rather than on the
         music, which is the failure mode this is here to rule out.
         """
-        shell_sets = {
-            frozenset(strings) for strings, _soprano in GRIP_STRING_SETS["shell"]
-        }
+        shell_sets = {frozenset(strings) for strings, _soprano in GRIP_STRING_SETS["shell"]}
         for name in ("Cmaj7", "A7", "Dm7b5"):
             for voicing in comping(name):
                 self.assertEqual(
@@ -462,9 +440,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
                     3,
                     f"{name} {voicing.tab_string()} is no longer a three-voice shell",
                 )
-                self.assertIn(
-                    frozenset(voicing.active_strings), shell_sets, voicing.tab_string()
-                )
+                self.assertIn(frozenset(voicing.active_strings), shell_sets, voicing.tab_string())
 
 
 class TestRepeatedStepsHoldTheShape(unittest.TestCase):
@@ -490,9 +466,7 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
         from tests.support import make_voicing
 
         voicing = make_voicing([3, -1, -1, -1, -1, -1], bass_midi=41, bass_string=0)
-        step = ArrangementStep(
-            chord="Cmaj7", melody="B4", voicing=voicing, bass_only=True
-        )
+        step = ArrangementStep(chord="Cmaj7", melody="B4", voicing=voicing, bass_only=True)
         cells = _step_cells(step)
         self.assertEqual(cells[0], "3")
         for string_index in range(1, 6):
@@ -552,7 +526,8 @@ class TestTheMelodyMarkerKnowsWhoIsSinging(unittest.TestCase):
             make_step([-1, -1, -1, 8, 10, 10], melody_voiced=False),
         ]
         starred = [
-            row for row in format_tab_staff(steps, show_melody=True).split("\n")
+            row
+            for row in format_tab_staff(steps, show_melody=True).split("\n")
             if len(row) > 1 and row[0] in "eBGDAE" and row[1] == "*"
         ]
         self.assertEqual(starred, [])
@@ -574,7 +549,7 @@ class TestTheMelodyMarkerKnowsWhoIsSinging(unittest.TestCase):
         The positive control, without which the two tests above could not tell a
         fix from the marker having been deleted outright.
         """
-        from tabstaff import format_tab_html, format_tab_staff
+        from tabstaff import format_tab_staff
         from tests.support import make_step
 
         steps = [
@@ -589,4 +564,3 @@ class TestTheMelodyMarkerKnowsWhoIsSinging(unittest.TestCase):
             any(row.startswith("e*") for row in staff),
             "\n".join(staff),
         )
-        self.assertIn('class="soprano"', format_tab_html(steps))

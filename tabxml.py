@@ -10,7 +10,8 @@ What it writes is a real score rather than a note list:
 - a **notation staff** of the music, in the treble clef a chord-melody part is
   written in and **an octave above** what it sounds (guitar's own transposition,
   declared on the part so playback is not raised with the notation), and
-- the **chord symbols** on each chord change, on
+- the **chord symbols** on each chord change, each carrying a **fretboard
+  diagram** (`<frame>`) when the step voices two or more strings, and
 - the **written rhythm**: each step is a note or chord of the length it occupies, an
   unchanged shape is written as one longer note rather than a re-strike, and an event
   that runs across a bar line is tied rather than stretched, and
@@ -26,9 +27,10 @@ in MuseScore 3. A workaround that does not work costs more than not shipping it.
 
 Fretting belongs to the renderer whose format stores it natively. `tabgp` writes a
 Guitar Pro 5 file, which is a *tab* format: a fret and a string per note survive the
-round trip exactly, with no post-processing at all. So the two renderers divide the
-work by what each format can actually do - notation here, tab there - while the
-placement of every step is still shared, so a head lands on the same beats in both.
+round trip exactly, with no post-processing at all. `tabxml` writes a *notation*
+format: its `<frame>` chord diagrams carry the same fingering (one `<frame-note>` per
+sounding string), so the two renderers show the same left-hand shape. The placement of
+every step is still shared, so a head lands on the same beats in both.
 
 The placement is its own, in `tabscore.score_events`, and deliberately does **not** reuse
 `tabstaff._staff_columns`. That column grid is lossy - two steps on one onset collapse
@@ -386,10 +388,9 @@ def _build_part(
     state["measure"] = new_measure()
 
     def write_symbol(name: str) -> None:
-        # On the change, and *at* the change: only on the change, the way a lead sheet
-        # spells a chord held over several slots, and at its own offset, because a
-        # symbol pinned to the bar line names the wrong chord for every chord after
-        # the first.
+        # One symbol per change, at its own offset: a symbol pinned to the bar line
+        # names the wrong chord for every chord after the first. A multi-string step
+        # also gets a fretboard diagram (`<frame>`), as in the GP5 output.
         state["measure"].insert(offset - state["start"], _chord_symbol(name))
 
     def write_event(step: Optional[ArrangementStep], length: float) -> None:
@@ -782,28 +783,36 @@ def _apply_pickup_barline(root: ElementTree.Element) -> None:
 
 def _chord_symbol(name: str) -> Any:
     """
-    A chord symbol for the score, or a text-only one when music21 cannot read the name.
+    A chord symbol for the score, or a text-only one when music21 cannot read
+    the name.
 
-    music21 knows most of the qualities this library voices, but not all of them:
-    `mMaj7`, `maj9` and `7alt` are among the ones it rejects, and the Weimar
-    Database's own notation produces a few more. A symbol that cannot be parsed is
-    not a reason to lose the chord, so it is written as `<kind text="...">other</kind>`
-    with the root still parsed out by the library - which is how MusicXML spells a
-    chord symbol whose type the writer does not recognise. The chord still reads
-    correctly; it just is not classified.
+    music21 knows most of the qualities this library voices, but not all of
+    them: `mMaj7`, `maj9` and `7alt` are among the ones it rejects, and the
+    Weimar Database's own notation produces a few more. A symbol that cannot
+    be parsed is not a reason to lose the chord, so it is written as
+    `<kind text="...">other</kind>` with the root still parsed out by the
+    library - which is how MusicXML spells a chord symbol whose type the
+    writer does not recognise. The chord still reads correctly; it just is
+    not classified.
 
-    The exception is deliberately broad: this is a formatting fallback for names
-    from an external database, and a new music21 release should degrade the symbol
-    rather than fail the export.
+    The symbol's **pitches are dropped**, which is not cosmetic. music21
+    writes the symbol as `<harmony>` only - `writeAsChord = False` - so its
+    pitches never reach the document, but they remain in the stream and are
+    still counted when music21 decides which notes need an `<accidental>`.
+    Their effect is to mark notes the key signature already accounts for:
+    with a symbol present, an Eb-major head wrote 139 accidentals, and
+    without one the same music wrote 27. Clearing them is what makes the
+    accidentals that remain mean "this note is out of the key" rather than
+    "this note is in the key, and the key was not read".
 
-    The symbol's **pitches are dropped**, which is not cosmetic. music21 writes the
-    symbol as `<harmony>` only - `writeAsChord = False` - so its pitches never reach
-    the document, but they remain in the stream and are still counted when music21
-    decides which notes need an `<accidental>`. Their effect is to mark notes the key
-    signature already accounts for: with a symbol present, an Eb-major head wrote 139
-    accidentals, and without one the same music wrote 27. Clearing them is what makes
-    the accidentals that remain mean "this note is out of the key" rather than "this
-    note is in the key, and the key was not read".
+    MusicXML does not carry fretboard chord diagrams in a form MuseScore 3
+    can read - `<frame>` inside `<harmony>` is MusicXML 4.0-only and MuseScore
+    3 rejects the document outright. Chord diagrams live in the GP5 output
+    instead, where the format stores them natively.
+
+    `name` is the chord symbol text, not a whole `ArrangementStep`: the caller
+    already knows the name and passes only it, so this function stays coupled to
+    a string rather than to the engine's step type.
     """
     from music21 import harmony
 
@@ -812,18 +821,21 @@ def _chord_symbol(name: str) -> Any:
     except Exception:
         from arranger.chords import ChordParser
 
-        root, _ = ChordParser.parse_chord_name(name)
+        root, quality = ChordParser.parse_chord_name(name)
         symbol = harmony.ChordSymbol()
         if root:
             symbol.root(root)
         symbol.chordKind = "other"
-        symbol.chordKindStr = name
+        if quality:
+            symbol.chordKindStr = quality
     symbol.writeAsChord = False
     # The pitches are never written - see the docstring - so they are dropped here,
     # on both the parsed and the fallback path, rather than left to distort the
     # accidental pass. `[]` rather than `None`: music21 treats a missing/None
     # `pitches` as "figure it out again from the figure string".
     symbol.pitches = []
+    return symbol
+
     return symbol
 
 

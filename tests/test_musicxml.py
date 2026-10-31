@@ -116,7 +116,9 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         This is the regression for the change that dropped the tab staff: music21
         cannot write one a notation program renders correctly (see `tabxml`'s module
         docstring), so a `TAB` clef or a `<staff-lines>6</staff-lines>` in the document
-        means the tab path has crept back in. Fretting is written by `tabgp`.
+        means the tab path has crept back in. Fretting is written by `tabgp`, and by
+        `tabxml`'s `<frame>` chord diagrams inside `<harmony>` - fret and string
+        elements that appear inside a `<frame>` are a diagram, not a tab staff.
         """
         root = self.root()
         self.assertEqual(len(root.findall("part")), 1)
@@ -125,8 +127,22 @@ class TestMusicXMLDocument(MusicXMLTestCase):
             sign = clef_node.find("sign")
             self.assertNotEqual(sign.text if sign is not None else None, "TAB")
         self.assertEqual([node.text for node in root.iter("staff-lines")], [])
-        self.assertEqual([node.text for node in root.iter("fret")], [])
-        self.assertEqual([node.text for node in root.iter("string")], [])
+        # Fret and string elements live inside `<frame>` chord diagrams, not on a
+        # tab staff: every one must be a descendant of a `<frame>`.
+        fret_in_frame = {
+            id(node)
+            for frame in root.iter("frame")
+            for node in frame.iter("fret")
+        }
+        string_in_frame = {
+            id(node)
+            for frame in root.iter("frame")
+            for node in frame.iter("string")
+        }
+        for fret in root.iter("fret"):
+            self.assertIn(id(fret), fret_in_frame)
+        for string in root.iter("string"):
+            self.assertIn(id(string), string_in_frame)
 
     def test_instrument_ids_are_unique_across_the_part_list(self):
         """
@@ -521,6 +537,33 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         symbols = self.symbols(self.part(root))
         self.assertEqual(len(symbols), 1)
         self.assertIn("sus4", ElementTree.tostring(symbols[0], encoding="unicode"))
+
+    def test_an_unparseable_chord_name_is_not_duplicated(self):
+        """
+        The kind text is the quality *after* the root, not the whole name:
+        `Bb7sus4` -> root `Bb`, kind text `7sus4`. Setting it to the full name
+        would write `BbBb7sus4` because music21 still writes the root-step
+        separately.
+        """
+        from arranger import format_musicxml
+
+        step = make_step([-1, 3, 5, 5, 5, -1], chord="Bb7sus4")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        harmony = next(root.iter("harmony"))
+        kind = harmony.find("kind")
+        assert kind is not None
+        self.assertEqual(kind.get("text"), "7sus4")
+        root_el = harmony.find("root")
+        assert root_el is not None
+        root_step = root_el.find("root-step")
+        root_alter = root_el.find("root-alter")
+        assert root_step is not None and root_alter is not None
+        self.assertEqual(root_step.text, "B")
+        self.assertEqual(root_alter.text, "-1")
+        # The rendered harmony contains the name exactly once: root "Bb" +
+        # kind text "7sus4", not "BbBb7sus4".
+        rendered = ElementTree.tostring(harmony, encoding="unicode")
+        self.assertEqual(rendered.count("Bb7sus4"), 0)
 
 
 @requires_music21

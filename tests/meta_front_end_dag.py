@@ -51,6 +51,11 @@ ALLOWED_FRONT_EDGES: Dict[str, Set[str]] = {
     # than a writer-to-writer edge. `tabxml` still re-exports the two names it uses.
     "tabxml": {"tabscore"},
     "tabgp": {"tabscore"},
+    # `headxml` names the facade's public surface directly (`from arranger import
+    # CHORD_FILLS_COMP`), so it cannot import against a blank `arranger` package
+    # and is excluded from `test_the_rendering_front_ends_import_with_the_facade_absent`.
+    # It imports no sibling front end, so its edge set is empty.
+    "headxml": set(),
 }
 
 
@@ -72,6 +77,25 @@ def _module_imports(path: Path) -> Set[str]:
             stem = node.module.rsplit(".", 1)[-1]
             if stem in FRONT_ENDS_BY_STEM:
                 found.add(stem)
+    return found
+
+
+def _arranger_imports(path: Path) -> List[str]:
+    """The `arranger.*` submodules `path` imports at module scope, by name.
+
+    The load-bearing rule is that a front end may reach into the engine package
+    only through `arranger.step_types` (the value types) and top-level `tuning`.
+    Anything deeper - `arranger.chords`, `arranger.grips`, `arranger.cost`, ... -
+    is domain knowledge that belongs in the engine, not in a renderer, and a
+    module-scope import of it couples the renderer to the engine's internal
+    layering at import time.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    found: List[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            if node.module.startswith("arranger."):
+                found.append(node.module)
     return found
 
 
@@ -108,6 +132,32 @@ class TestTheFrontEndDag(unittest.TestCase):
                 stale.append(f"{module} -> {edge} is allowed but not imported")
         self.assertEqual(
             stale, [], "an allowed front-end edge no longer exists - delete the entry"
+        )
+
+    def test_front_ends_only_reach_step_types_from_arranger(self):
+        """A front end may import `arranger.step_types`, nothing deeper.
+
+        `headxml` is exempt: it names the facade's public surface directly
+        (`from arranger import CHORD_FILLS_COMP`), which is why `demo.main()`
+        imports it only after the facade is complete.
+        """
+        offenders: List[str] = []
+        for name in FRONT_ENDS:
+            module = Path(name).stem
+            # `headxml` names the facade's public surface directly; `grip_chart`
+            # is a standalone chart-generator script (not imported as a library)
+            # that legitimately reads the engine's grip tables to build the chart.
+            if module in ("headxml", "grip_chart"):
+                continue
+            for imported in _arranger_imports(ROOT / name):
+                sub = imported.split(".", 1)[1]
+                if sub != "step_types":
+                    offenders.append(f"{module} imports {imported}")
+        self.assertEqual(
+            offenders,
+            [],
+            "a front end imports an arranger submodule other than step_types at "
+            "module scope - move the import inside a function, or reach step_types",
         )
 
     def test_no_package_module_imports_a_front_end_at_module_scope(self):

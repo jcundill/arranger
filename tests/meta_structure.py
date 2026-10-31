@@ -304,17 +304,10 @@ ALLOWED_PRIVATE_IMPORTS: Set[str] = {
     "tabstaff_ascii -> tabstaff_grid._staff_lines",
     "tabstaff_ascii -> tabstaff_grid._staff_rhythm",
     "tabstaff_ascii -> tabstaff_grid._validate_staff_arguments",
-    "tabstaff_html -> tabstaff_grid._carries_melody",
-    "tabstaff_html -> tabstaff_grid._draws",
-    "tabstaff_html -> tabstaff_grid._is_timed",
-    "tabstaff_html -> tabstaff_grid._melody_label",
-    "tabstaff_html -> tabstaff_grid._meter_label",
-    "tabstaff_html -> tabstaff_grid._moved_thumb",
-    "tabstaff_html -> tabstaff_grid._NAVIGATION_LABELS",
+    "tabstaff_html -> tabstaff_grid._first_bar_content_end",
     "tabstaff_html -> tabstaff_grid._staff_breaks",
     "tabstaff_html -> tabstaff_grid._staff_columns",
     "tabstaff_html -> tabstaff_grid._staff_lines",
-    "tabstaff_html -> tabstaff_grid._staff_rhythm",
     "tabstaff_html -> tabstaff_grid._validate_staff_arguments",
 }
 
@@ -372,7 +365,7 @@ TEST_SEAMS: Set[str] = {
     # Tab rendering reads the step formatter directly.
     "test_tab_rendering -> arranger.render._format_step",
     # Repeat/volta rendering reads the as-written formatting.
-    "test_headxml_repeats -> arranger.cli._as_written",    # The texture axis's own tables, read directly by its tests.
+    "test_headxml_repeats -> arranger.cli._as_written",  # The texture axis's own tables, read directly by its tests.
     "test_texture -> arranger.texture._FILL_THINNING",
     "test_texture -> arranger.texture._THIN_ENTRIES",
     # The request's spellings, and the one list holding the two of them.
@@ -383,7 +376,6 @@ TEST_SEAMS: Set[str] = {
     "test_request -> arranger.cli._REQUEST_DESTS",
     # The CLI's help formatter, exercised on its own.
     "test_cli -> arranger.cli._CommonHelp",
-
 }
 
 
@@ -560,9 +552,7 @@ class TestTheMeter(unittest.TestCase):
     def test_parameters_do_not_ask_for_self(self):
         """`self` is not a word the caller supplies, so it is not a parameter."""
         tree = ast.parse(
-            "class A:\n"
-            "    def method(self, a, b=1, *args, c, **kwargs):\n"
-            "        return a\n"
+            "class A:\n    def method(self, a, b=1, *args, c, **kwargs):\n        return a\n"
         )
         klass = next(n for n in tree.body if isinstance(n, ast.ClassDef))
         method = next(n for n in klass.body if isinstance(n, ast.FunctionDef))
@@ -625,7 +615,6 @@ ENTRY_POINTS: Tuple[Tuple[str, str], ...] = (
 RETIRED_AXIS_KEYWORDS = frozenset({"texture", "bass", "parts", "harmony", "grid", "grouping"})
 
 
-
 class TestTheAxesAreNotEntryPointKeywords(unittest.TestCase):
     """An axis is the implementation, so no entry point takes one as a keyword.
 
@@ -655,9 +644,7 @@ class TestTheAxesAreNotEntryPointKeywords(unittest.TestCase):
                 )
                 found.extend(
                     f"{relative}: {function} takes {name}="
-                    for name in sorted(
-                        set(_parameter_names(node)) & RETIRED_AXIS_KEYWORDS
-                    )
+                    for name in sorted(set(_parameter_names(node)) & RETIRED_AXIS_KEYWORDS)
                 )
         self.assertEqual(
             found,
@@ -713,8 +700,7 @@ class TestTheEncapsulationRule(unittest.TestCase):
         self.assertEqual(
             sorted(ALLOWED_PRIVATE_ATTRIBUTES - found),
             [],
-            "the allowlist names an attribute that is no longer reached - delete "
-            "the entry",
+            "the allowlist names an attribute that is no longer reached - delete the entry",
         )
 
 
@@ -801,10 +787,7 @@ class TestTheSplit(unittest.TestCase):
         strays = sorted(
             name
             for name in found
-            if not (
-                fnmatch.fnmatch(name, FEATURE_PATTERN)
-                or fnmatch.fnmatch(name, META_PATTERN)
-            )
+            if not (fnmatch.fnmatch(name, FEATURE_PATTERN) or fnmatch.fnmatch(name, META_PATTERN))
         )
         self.assertEqual(
             strays,
@@ -842,9 +825,7 @@ AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
 #: The wiring `resolution.resolve_policies` calls: the one axis still answered
 #: there rather than derived from the request. `resolve_bass` measures the thumb
 #: against the route the selection names, so it reads `parts` and the content.
-POLICY_WIRING: Tuple[str, ...] = (
-    "resolve_bass",
-)
+POLICY_WIRING: Tuple[str, ...] = ("resolve_bass",)
 
 
 def _top_level_function(path: Path, name: str) -> FunctionNode:
@@ -905,9 +886,7 @@ class TestTheAxisResolvers(unittest.TestCase):
         happens to be right says nothing about where the answer came from, while a
         policy resolved per slot is a band that changes halfway through a tune.
         """
-        lines = _call_lines(
-            _top_level_function(ENGINE / "resolution.py", "resolve_policies")
-        )
+        lines = _call_lines(_top_level_function(ENGINE / "resolution.py", "resolve_policies"))
         missing = [name for name in POLICY_WIRING if name not in lines]
         self.assertEqual(
             missing,
