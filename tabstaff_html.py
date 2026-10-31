@@ -73,6 +73,7 @@ _CLASS_VOLTA = "volta"
 # the measure from a volta, so a bar carrying both shows both rather than one covering
 # the other.
 _CLASS_NAV = "nav"
+_CLASS_DIAGRAM = "diagram"
 
 _HTML_STYLESHEET = """
 :root { color-scheme: light dark; --ink: #1b1b1b; --rule: #b8b8b8;
@@ -142,6 +143,22 @@ td.repeat { background: var(--strike); border-radius: 2px; }
 td.bass { background: var(--strike); border-radius: 2px; }
 .notes { margin: 2.5rem 0 0; font-size: .78rem; color: var(--faint); }
 .notes li { margin: .2rem 0; }
+/* A fretboard chord diagram: six strings (low E left, high E right), four frets,
+   dots at fretted positions, `o` above open strings and `x` above muted ones.
+   The container is a fixed-size inline-block so it fits inside a table cell
+   without disturbing the column grid. */
+.fretboard { position: relative; display: inline-block; width: 4.2rem; height: 3.6rem; }
+.fretboard-string { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--rule); }
+.fretboard-fret { position: absolute; left: 0; right: 0; height: 2px; background: var(--ink); }
+.fretboard-nut { height: 3px; background: var(--ink); }
+.fretboard-dot { position: absolute; width: 0.7rem; height: 0.7rem; background: var(--ink);
+                 border-radius: 50%; transform: translate(-50%, -50%); }
+.fretboard-open, .fretboard-muted { position: absolute; top: -0.45rem; font-size: 0.68rem;
+                                    transform: translateX(-50%); }
+.fretboard-open { color: var(--faint); }
+.fretboard-muted { color: var(--mute); }
+.fretboard-first { position: absolute; left: -1.45rem; top: 0.15rem; font-size: 0.6rem;
+                   color: var(--faint); }
 @media print { body { padding: 0; } .system { overflow: visible; } }
 """
 
@@ -255,6 +272,95 @@ def _html_chord_row(
         cells.append(_html_cell(_escape(step.chord)))
         previous = step.chord
     return _html_row(_CLASS_CHORD, cells), previous
+
+
+def _html_fretboard_diagram(step: ArrangementStep) -> str:
+    """One fretboard chord diagram for a step's voicing.
+
+    Six strings (low E left, high E right), four frets, dots at fretted
+    positions, `o` above open strings and `x` above muted ones. A `firstFret`
+    label appears when the diagram starts above fret 0. Returns an empty
+    string for a step with fewer than two sounding strings (a single note,
+    an NC, a rest).
+    """
+    frets = step.voicing.frets
+    active = [f for f in frets if f >= 0]
+    if len(active) < 2:
+        return ""
+    first_fret = min(active)
+    markers: List[str] = []
+    dots: List[str] = []
+    for library_index in range(6):
+        fret = frets[library_index]
+        left = f"{library_index * 20:.0f}%"
+        if fret < 0:
+            markers.append(
+                f'<span class="fretboard-muted" style="left: {left}">x</span>'
+            )
+        elif fret == 0:
+            markers.append(
+                f'<span class="fretboard-open" style="left: {left}">o</span>'
+            )
+        else:
+            top = f"{(fret - first_fret) * 25:.0f}%"
+            dots.append(
+                f'<span class="fretboard-dot" style="left: {left}; top: {top}"></span>'
+            )
+    strings = "".join(
+        f'<span class="fretboard-string" style="left: {i * 20:.0f}%"></span>'
+        for i in range(6)
+    )
+    frets_html = '<span class="fretboard-fret fretboard-nut"></span>'
+    if first_fret > 0:
+        frets_html = "".join(
+            f'<span class="fretboard-fret" style="top: {i * 25:.0f}%"></span>'
+            for i in range(4)
+        )
+    else:
+        frets_html = (
+            '<span class="fretboard-fret fretboard-nut"></span>'
+            + "".join(
+                f'<span class="fretboard-fret" style="top: {(i + 1) * 25:.0f}%"></span>'
+                for i in range(3)
+            )
+        )
+    first_label = (
+        f'<span class="fretboard-first">{first_fret}fr</span>'
+        if first_fret > 0
+        else ""
+    )
+    return (
+        '<span class="fretboard">'
+        + first_label
+        + strings
+        + frets_html
+        + "".join(markers)
+        + "".join(dots)
+        + "</span>"
+    )
+
+
+def _html_diagram_row(
+    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
+    measure: List[int],
+    previous: Optional[str],
+) -> Tuple[str, Optional[str]]:
+    """One row of fretboard diagrams for a measure, plus the chord in force.
+
+    A diagram is drawn only where the chord changes and the step is struck,
+    matching the chord row's dedupe rule: a held chord gets no new diagram.
+    """
+    cells: List[str] = [_html_cell(tag="th")]
+    for index in measure:
+        _, step, strikes = columns[index]
+        # A diagram is drawn only where the chord changes and only on a
+        # struck chord; every other column is left empty.
+        if step is None or not strikes or step.chord == previous:
+            cells.append(_html_cell())
+            continue
+        cells.append(_html_cell(_html_fretboard_diagram(step)))
+        previous = step.chord
+    return _html_row(_CLASS_DIAGRAM, cells), previous
 
 
 def _html_melody_row(
@@ -505,14 +611,12 @@ def format_tab_html(
         steps, beats_per_bar, beat_type, rhythm, collapse, first_bar_implicit
     )
     breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
-    # The same predicate and the same rhythm the ASCII staff reads, so the page and
-    # the terminal cannot disagree about how long a note is.
+    # Same predicate and rhythm as the ASCII staff, so both agree on note length.
     values = _staff_rhythm(
         columns, beats_per_bar, beat_type, _is_timed(steps, rhythm)
     )
     meter = _meter_label(beats_per_bar, beat_type)
-    # Which strings carry the melody somewhere in the progression, so those rows
-    # can be marked once for the whole page rather than per chord.
+    # Melody strings, marked once for the whole page rather than per chord.
     sopranos = {index for index in range(6) if _carries_melody(steps, index)}
 
     parts = _html_head(title, subtitle, steps, meter, show_timing)
@@ -523,9 +627,9 @@ def format_tab_html(
     markers_by_bar: Dict[int, List[Any]] = {}
     for marker in markers:
         markers_by_bar.setdefault(marker.bar, []).append(marker)
-    # The chord in force, carried across systems so a chord held over a system
-    # break is not named a second time.
+    # Chord in force, carried across systems so a held chord is named once.
     in_force: Optional[str] = None
+    in_force_diagram: Optional[str] = None
     # Only the first measure of the page carries the metre; a signature holds until
     # it changes. See `_html_timing_rows`.
     first_measure = True
@@ -548,6 +652,8 @@ def format_tab_html(
                     _html_timing_rows(columns, measure, values, meter, first_measure)
                 )
                 first_measure = False
+            diagram_row, in_force_diagram = _html_diagram_row(columns, measure, in_force_diagram)
+            parts.append(diagram_row)
             chord_row, in_force = _html_chord_row(columns, measure, in_force)
             parts.append(chord_row)
             if show_melody:

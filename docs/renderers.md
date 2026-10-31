@@ -35,7 +35,7 @@ duplicated or imported across the boundary.
 | name | role |
 |---|---|
 | `tabstaff.format_tab_staff` | the ASCII staff, for a terminal |
-| `tabstaff.format_tab_html` | a self-contained HTML page for a browser |
+| `tabstaff.format_tab_html` | a self-contained HTML page for a browser; draws fretboard chord diagrams above the staff |
 | `tabstaff.write_tab_html` | the only function in the module that touches the filesystem |
 | `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
 | `_staff_bars` / `_staff_barlines` | the bar number of every column, and the columns that open a bar |
@@ -68,6 +68,29 @@ there is still one spelling for the whole staff-rendering surface.
 **The dependency is one-way: `tabstaff` imports `arranger.tuning`, never the
 reverse.** It takes `STRING_NAMES`, `ArrangementStep` and `MUTED_CELL` from there -
 the leaf the whole package is built on, which imports nothing - and the last of those
+
+## Fretboard chord diagrams on the HTML staff
+
+`format_tab_html` draws a fretboard chord diagram above the staff wherever the chord
+changes and the step is struck, matching the chord-name row's dedupe rule: a held chord
+gets no second diagram, and a single-note or NC step gets none at all. The diagram is
+pure HTML/CSS — no SVG, no external dependency — and is self-contained like the rest of
+the page.
+
+Each diagram shows:
+
+- **Six strings**, low E on the left and high E on the right, matching guitar tab
+  convention.
+- **Four frets**, with the nut (thicker line) at fret 0 when the shape starts there.
+- **Dots** at each fretted string/fret intersection.
+- **`o` above open strings** (fret 0) and **`x` above muted strings** (-1).
+- A **`firstFret` label** (e.g. `7fr`) on the left when the diagram starts above fret 0,
+  so a high-position shape still reads correctly.
+
+The diagram is drawn in a fixed-size inline-block so it fits inside a table cell without
+disturbing the column grid that keeps chord names, fret numbers and barlines aligned.
+MusicXML's `<frame>` element (MusicXML 4.0-only, rejected by MuseScore 3) is not used;
+chord diagrams live in the HTML page and in GP5's native `gp.Chord` diagrams instead.
 stays put because `Voicing.tab_block()` and `format_progression` use it too.
 
 ### The re-export is lazy, and why

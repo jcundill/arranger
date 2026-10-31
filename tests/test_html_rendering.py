@@ -342,3 +342,72 @@ class TestHtmlTab(unittest.TestCase):
         self.assertIn('class="nav"', page)
         self.assertIn(">Segno<", page)
         self.assertIn(">D.S.<", page)
+
+
+class TestFretboardDiagram(unittest.TestCase):
+    """Fretboard chord diagrams on the HTML staff."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def _page(self, steps, **kwargs):
+        return format_tab_html(steps, **kwargs)
+
+    def test_diagram_on_chord_change(self):
+        """A multi-note chord step gets a fretboard diagram where it first strikes."""
+        step = make_step([-1, -1, 0, 2, 3, 1], chord="Dm7")
+        page = self._page([step])
+        self.assertIn("class=\"fretboard\"", page)
+        self.assertIn("class=\"diagram\"", page)
+
+    def test_no_diagram_on_held_chord(self):
+        """An unchanged shape held across columns gets no second diagram."""
+        step = make_step([-1, -1, 0, 2, 3, 1], chord="Dm7")
+        # Two steps with the same chord: the second is a hold, no new diagram.
+        held = make_step([-1, -1, 0, 2, 3, 1], chord="Dm7", repeated=True)
+        page = self._page([step, held])
+        self.assertEqual(page.count("class=\"fretboard\""), 1)
+
+    def test_no_diagram_on_single_note(self):
+        """A single-note step gets no diagram (needs two or more strings)."""
+        step = make_step([-1, -1, -1, 5, -1, -1], chord="Dm7")
+        page = self._page([step])
+        self.assertNotIn("class=\"fretboard\"", page)
+
+    def test_no_diagram_on_nc(self):
+        """An NC step gets no diagram."""
+        step = make_step([-1, -1, -1, -1, -1, -1], chord="NC", melody=None)
+        page = self._page([step])
+        self.assertNotIn("class=\"fretboard\"", page)
+
+    def test_diagram_shows_open_and_muted_markers(self):
+        """Open strings get `o`, muted strings get `x` above the nut."""
+        step = make_step([-1, -1, 0, 2, 3, 1], chord="Dm7")  # x-x-0-2-3-1
+        page = self._page([step])
+        self.assertIn('class="fretboard-muted"', page)
+        self.assertIn('class="fretboard-open"', page)
+        self.assertIn(">x<", page)
+        self.assertIn(">o<", page)
+
+    def test_diagram_shows_first_fret_label(self):
+        """A diagram starting above fret 0 gets a `firstFret` side label."""
+        step = make_step([-1, -1, -1, -1, 7, 8], chord="G7")  # x-x-x-x-7-8
+        page = self._page([step])
+        self.assertIn("7fr", page)
+
+    def test_diagram_dots_on_fret_lines(self):
+        """Dots sit on the fret line matching their fret, not between lines."""
+        step = make_step([-1, -1, -1, -1, 7, 8], chord="G7")  # x-x-x-x-7-8
+        page = self._page([step])
+        # Fret 7 is on the first fret line (top: 0%), fret 8 on the second (top: 25%)
+        self.assertIn('top: 0%', page)
+        self.assertIn('top: 25%', page)
+
+    def test_diagram_row_is_above_chord_row(self):
+        """The diagram row precedes the chord row in each measure's table."""
+        step = make_step([-1, -1, 0, 2, 3, 1], chord="Dm7")
+        page = self._page([step])
+        diagram_pos = page.find('class="diagram"')
+        chord_pos = page.find('class="chord"')
+        self.assertGreater(diagram_pos, 0)
+        self.assertGreater(chord_pos, diagram_pos)
