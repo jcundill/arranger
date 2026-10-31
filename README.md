@@ -8,7 +8,7 @@ Takes `(melody note, chord name)` pairs, builds voicings in several grip familie
 - **Melody pinned to soprano**, on high E, B or G string — low melody still harmonised in position.
 - **Playable or absent.** Frets 0–18, span ≤5 (4 for duos), real string set, ≤4 fingers, no fifth fret from a held shape. Neck window is *preference, not filter* — losing a chord of the tune beats a fret out of position.
 - **Non-chord melody notes**: extension, Barry Harris 6/dim7 substitution, or chord held under a passing tone ([non-chord melody notes](#non-chord-melody-notes)).
-- **Four axes, two rhythms**: how thick the chord part is (`texture`), who plays the bottom (`bass`), which parts the guitar takes (`parts`), and how a compound metre is felt (`grouping`) — plus *when* the chord attacks and *when* the thumb attacks (`--chord-on` / `--bass-on`, each a `Rhythm`). None has a keyword of its own: they are derived from the [six questions](#the-request-and-the-axes-under-it) the request asks, so `--chord-notes targets` is `Request(chord_notes="targets")` and nothing more.
+- **Defining the arrangement**: who plays the tune (`--no-melody`), when the chord attacks (`--chord-on`), what the chord states (`--chord-notes`), what it does in a melody rest (`--chord-fills`), when the bass plays (`--bass-on`), what each bass note states (`--bass-notes`) — each one documented in [the flags](#flags).
 - **Heads from real sources** — MusicXML score, read as harmony *timeline*.
 - **Dependency-light**: Python 3.11+ and [musthe](https://pypi.org/project/musthe/) only. MusicXML head *reading* needs no extra; MusicXML export and Guitar Pro export each behind own optional extra.
 
