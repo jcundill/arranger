@@ -71,27 +71,48 @@ the leaf the whole package is built on, which imports nothing - and the last of 
 
 ## Fretboard chord diagrams on the HTML staff
 
-`format_tab_html` draws a fretboard chord diagram above the staff wherever the chord
-changes and the step is struck, matching the chord-name row's dedupe rule: a held chord
-gets no second diagram, and a single-note or NC step gets none at all. The diagram is
-pure HTML/CSS — no SVG, no external dependency — and is self-contained like the rest of
-the page.
+`format_tab_html` renders the whole progression as a single inline SVG score modelled on
+TuxGuitar's `diag.svg`. Systems of measures stack vertically, each measure a white card
+with six staff lines, tab numbers on their string lines, red bar numbers above the staff,
+black barlines at measure edges, and fretboard chord diagrams above the staff at each
+measure's first new chord. A held chord gets no second diagram, and a single-note or NC
+step gets none at all. The SVG is inline — no external dependency — and is self-contained
+like the rest of the page.
 
-Each diagram shows:
+The column grid is shared with `tabstaff_ascii` through `tabstaff_grid`, so both
+renderers place a chord in the same column by construction and cannot drift apart.
 
-- **Six strings**, low E on the left and high E on the right, matching guitar tab
-  convention.
-- **Four frets**, with the nut (thicker line) at fret 0 when the shape starts there.
-- **Dots** at each fretted string/fret intersection.
-- **`o` above open strings** (fret 0) and **`x` above muted strings** (-1).
-- A **`firstFret` label** (e.g. `7fr`) on the left when the diagram starts above fret 0,
-  so a high-position shape still reads correctly.
+Each measure card shows:
 
-The diagram is drawn in a fixed-size inline-block so it fits inside a table cell without
-disturbing the column grid that keeps chord names, fret numbers and barlines aligned.
+- **Six staff lines** at y = 67, 77, 87, 97, 107, 117 (high E on top, low E on bottom),
+  stroke `#d6d6d6`, width 0.75.
+- **Tab numbers** in `#404040` at font-size 10, each with a white rect behind it so the
+  glyph centre sits on its string line.
+- **Red bar numbers** (`#ff0000`) above the staff at measure starts; a pickup bar is
+  not numbered and numbering starts at 1 on the first complete bar.
+- **Black barlines** on the staff at y = 67–117, crossing through the six
+  staff lines.
+
+Each chord diagram card is 43×42 pixels, centred above **each new fretted shape** in the measure:
+
+- A diagram is drawn for **every fretboard shape change** within a bar, not just the first.
+- The same chord at a different neck position gets a new diagram; a held shape does not.
+- If a bar needs more room for its diagrams, the measure card widens so the diagrams
+  do not overlap. Width is `beats_per_bar × 27.5` for the beat grid, or wider when
+  diagrams sit on adjacent beats (scaled so adjacent diagram cards have at least
+  `diagram_width + gap` centre spacing, accounting for a diagram at beat 0 being
+  clamped to half a card width from the left edge). Diagrams stay at their relative
+  beat positions within the wider card.
+- **Six strings** at x = 13, 18, 23, 28, 33, 38 (low E left, high E right),
+  **six frets** at y = 6, 12, 18, 24, 30, 36, stroke `#d6d6d6`, width 0.75.
+- **X marks** at the nut on each muted string (-1).
+- **A black first-fret index** at top-left when the shape starts above fret 0.
+- **Filled dots** (radius 2.5) at each fretted string/fret intersection, centred in the
+  fret space.
+- **The chord name** in `#000000` at font-size 10, just below the diagram card.
+
 MusicXML's `<frame>` element (MusicXML 4.0-only, rejected by MuseScore 3) is not used;
 chord diagrams live in the HTML page and in GP5's native `gp.Chord` diagrams instead.
-stays put because `Voicing.tab_block()` and `format_progression` use it too.
 
 ### The re-export is lazy, and why
 

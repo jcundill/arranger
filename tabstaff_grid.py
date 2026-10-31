@@ -196,6 +196,9 @@ def _fill_rests(
         current = onset + (
             step.duration * beat_type if step is not None and step.duration else grain
         )
+        # Cap `current` at bar end so a held note doesn't skip bars.
+        bar_end = float((int(onset // beats_per_bar) + 1) * beats_per_bar)
+        current = min(current, bar_end)
 
     # **Pad the last bar out to its own length.** The grid fills the holes *between*
     # onsets but stopped at the final one, so a head whose last note ends early left

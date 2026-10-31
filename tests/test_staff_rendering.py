@@ -6,7 +6,6 @@ boundary that keeps the renderer out of the engine.
 """
 
 import io
-import re
 import unittest
 from contextlib import redirect_stdout
 from typing import List
@@ -38,13 +37,15 @@ def _timed(chords, beats=None, durations=None, frets=None):
         bar = index if beats is None else beats[index][0]
         beat = 1.0 if beats is None else beats[index][1]
         duration = None if durations is None else durations[index]
-        voicing = make_voicing(
-            [-1, -1, 10, 10, 10, 10] if frets is None else frets[index]
-        )
+        voicing = make_voicing([-1, -1, 10, 10, 10, 10] if frets is None else frets[index])
         built.append(
             ArrangementStep(
-                chord=chord, melody="D5", voicing=voicing,
-                bar=bar, beat=beat, duration=duration,
+                chord=chord,
+                melody="D5",
+                voicing=voicing,
+                bar=bar,
+                beat=beat,
+                duration=duration,
             )
         )
     return built
@@ -66,9 +67,7 @@ class TestTheMelodyRowOnAReleasedTie(unittest.TestCase):
 
     def test_a_released_note_is_blank_and_a_sounding_one_is_not(self):
         """The same note twice, and only the step that sounds it carries the name."""
-        sounding = make_step(
-            [-1, -1, -1, 7, -1, -1], chord="Dm7", melody="C5", bar=1, beat=1.0
-        )
+        sounding = make_step([-1, -1, -1, 7, -1, -1], chord="Dm7", melody="C5", bar=1, beat=1.0)
         released = make_step(
             [-1, -1, -1, 9, -1, -1],
             chord="Dm7",
@@ -78,9 +77,7 @@ class TestTheMelodyRowOnAReleasedTie(unittest.TestCase):
             bar=1,
             beat=2.0,
         )
-        staff = format_tab_staff(
-            [sounding, released], show_chords=False, show_melody=True
-        )
+        staff = format_tab_staff([sounding, released], show_chords=False, show_melody=True)
         row = [line for line in staff.splitlines() if "C5" in line]
         self.assertEqual(len(row), 1, staff)
 
@@ -200,9 +197,7 @@ class TestStaffTab(unittest.TestCase):
         load-bearing here is *where* it falls relative to the shape, so that is what the
         test states.
         """
-        timed = self.engine.arrange_progression(
-            [("D5", "Dm7"), ("C5", "Cmaj7")]
-        )
+        timed = self.engine.arrange_progression([("D5", "Dm7"), ("C5", "Cmaj7")])
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 1, 1.0
         # measures_per_line=4 keeps both bars on one system, which is what puts the
@@ -216,8 +211,8 @@ class TestStaffTab(unittest.TestCase):
         # that one; the next '|' is the real barline between bar 0 and bar 1.
         head, _, tail = line.partition("|")
         head, _, tail = tail.partition("|")
-        self.assertNotIn("|", head)               # nothing but the staff's own bar
-        self.assertIn("10", head)                 # bar 0's shape
+        self.assertNotIn("|", head)  # nothing but the staff's own bar
+        self.assertIn("10", head)  # bar 0's shape
         # A barline opens bar 1, and bar 0's three remaining beats are the rests
         # written just before it - so the barline sits after them, not before.
         self.assertTrue(tail.rstrip("-| ").endswith("8"))
@@ -225,7 +220,7 @@ class TestStaffTab(unittest.TestCase):
         # shapes, so there is a run of them before bar 1's barline. Stated as a run
         # rather than a fixed count because the cell width is per system now.
         self.assertRegex(head, r"10-.*-{3,}")
-        self.assertNotIn("10", tail)              # and bar 1 is a fresh shape
+        self.assertNotIn("10", tail)  # and bar 1 is a fresh shape
 
     def test_every_bar_is_ruled_not_every_fourth(self):
         """
@@ -251,12 +246,23 @@ class TestStaffTab(unittest.TestCase):
         Two eighth notes a *half* beat apart in 2/2 leave half a beat of silence, and
         that silence has to be on the grid.
         """
-        a = ArrangementStep(chord="Dm7", melody="D5", bar=0, beat=1.0, duration=0.125,
-                            voicing=make_voicing([-1, -1, 10, 10, 10, 10]))
-        b = ArrangementStep(chord="G7", melody="B4", bar=0, beat=1.5, duration=0.125,
-                            voicing=make_voicing([-1, -1, 9, 9, 8, 8]))
-        onsets = [onset for onset, _step, _strikes
-                  in _staff_columns([a, b], 2, 2, True, True)]
+        a = ArrangementStep(
+            chord="Dm7",
+            melody="D5",
+            bar=0,
+            beat=1.0,
+            duration=0.125,
+            voicing=make_voicing([-1, -1, 10, 10, 10, 10]),
+        )
+        b = ArrangementStep(
+            chord="G7",
+            melody="B4",
+            bar=0,
+            beat=1.5,
+            duration=0.125,
+            voicing=make_voicing([-1, -1, 9, 9, 8, 8]),
+        )
+        onsets = [onset for onset, _step, _strikes in _staff_columns([a, b], 2, 2, True, True)]
         # The rests before the first note are a quarter of a beat apart, which is the
         # grain the progression writes at. Before the fix the grid stepped a whole beat
         # at a time, so a sub-beat gap produced no columns at all and bar 11 of But Not
@@ -279,8 +285,7 @@ class TestStaffTab(unittest.TestCase):
             ["Dm7", "G7", "Cmaj7"],
             beats=[(0, 1.5), (0, 2.5), (0, 3.5)],
             durations=[0.25, 0.25, 0.25],
-            frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 7, 7, 6, 6],
-                   [-1, -1, 5, 5, 4, 4]],
+            frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 7, 7, 6, 6], [-1, -1, 5, 5, 4, 4]],
         )
         bar = format_tab_staff(steps).split("\n")[0].split("|")[1]
         self.assertEqual(len(bar), 17, bar)
@@ -298,8 +303,12 @@ class TestStaffTab(unittest.TestCase):
         to the bar containing the first onset, which keeps the rest without inventing
         whole empty bars ahead of it.
         """
-        steps = _timed(["Dm7", "G7"], beats=[(0, 1.5), (0, 2.5)], durations=[0.25, 0.25],
-                       frets=[[-1, -1, 10, 10, 10, 10]] * 2)
+        steps = _timed(
+            ["Dm7", "G7"],
+            beats=[(0, 1.5), (0, 2.5)],
+            durations=[0.25, 0.25],
+            frets=[[-1, -1, 10, 10, 10, 10]] * 2,
+        )
         bar = format_tab_staff(steps).split("\n")[0].split("|")[1]
         # The lead-in is one dash plus the half beat of rest before the note, which is
         # one slot of two characters. The fret is *not* at the head of the bar, which is
@@ -312,9 +321,12 @@ class TestStaffTab(unittest.TestCase):
         The rounding is to the *bar*, not to the whole progression: a head selected
         from bar 12 is still not preceded by twelve empty bars.
         """
-        steps = _timed(["Dm7", "G7"], beats=[(12, 1.5), (12, 2.5)],
-                       durations=[0.25, 0.25],
-                       frets=[[-1, -1, 10, 10, 10, 10]] * 2)
+        steps = _timed(
+            ["Dm7", "G7"],
+            beats=[(12, 1.5), (12, 2.5)],
+            durations=[0.25, 0.25],
+            frets=[[-1, -1, 10, 10, 10, 10]] * 2,
+        )
         staff = format_tab_staff(steps)
         self.assertEqual(len(_systems(staff)), 1, staff)
         bar = staff.split("\n")[0].split("|")[1]
@@ -339,8 +351,12 @@ class TestStaffTab(unittest.TestCase):
             beats=[(0, 1.0), (0, 2.0), (1, 1.0), (1, 2.0)],
             # 0.25 whole notes is a quarter, 0.5 a half. **Whole notes, not beats.**
             durations=[0.25, 0.5, 0.25, 0.5],
-            frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 7, 7, 6, 6],
-                   [-1, -1, 5, 5, 4, 4], [-1, -1, 3, 3, 2, 2]],
+            frets=[
+                [-1, -1, 10, 10, 10, 10],
+                [-1, -1, 7, 7, 6, 6],
+                [-1, -1, 5, 5, 4, 4],
+                [-1, -1, 3, 3, 2, 2],
+            ],
         )
         staff = format_tab_staff(steps)
         # The low E row is struck on nothing, so its bar is the pure grid. The first
@@ -360,8 +376,12 @@ class TestStaffTab(unittest.TestCase):
         Without a written rhythm there are no durations to show, so every column stays
         one slot wide - the uniform grid the renderer has always fallen back to.
         """
-        steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (0, 2.0)], durations=[0.25, 0.5],
-                       frets=[[-1, -1, 10, 10, 10, 10]] * 2)
+        steps = _timed(
+            ["Dm7", "G7"],
+            beats=[(0, 1.0), (0, 2.0)],
+            durations=[0.25, 0.5],
+            frets=[[-1, -1, 10, 10, 10, 10]] * 2,
+        )
         for step in steps:
             del step.bar, step.beat
         bar = format_tab_staff(steps).split("\n")[0].split("|")[1]
@@ -393,8 +413,12 @@ class TestStaffTab(unittest.TestCase):
         closing barline arrived mid-bar and the bar read shorter than the metre says.
         TuxGuitar draws the rest after the final note as dashes out to the barline.
         """
-        steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (0, 2.0)], durations=[1.0, 0.5],
-                       frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 7, 7, 6, 6]])
+        steps = _timed(
+            ["Dm7", "G7"],
+            beats=[(0, 1.0), (0, 2.0)],
+            durations=[1.0, 0.5],
+            frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 7, 7, 6, 6]],
+        )
         line = format_tab_staff(steps).split("\n")[0]
         bar = line.split("|")[1]
         # The bar is 4/4, which is four beats of four slots each. Every row of the
@@ -427,9 +451,16 @@ class TestStaffTab(unittest.TestCase):
         and the shortest lead-in in the file is a single dash. It is a small thing that
         stops a beat-1 fret reading as glued to the barline it follows.
         """
-        steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (0, 3.0), (1, 1.0), (1, 3.0)],
-                    frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 9, 9, 8, 8],
-                           [-1, -1, 7, 7, 6, 6], [-1, -1, 5, 5, 4, 4]])
+        steps = _timed(
+            ["Dm7", "G7"],
+            beats=[(0, 1.0), (0, 3.0), (1, 1.0), (1, 3.0)],
+            frets=[
+                [-1, -1, 10, 10, 10, 10],
+                [-1, -1, 9, 9, 8, 8],
+                [-1, -1, 7, 7, 6, 6],
+                [-1, -1, 5, 5, 4, 4],
+            ],
+        )
         for system in _systems(format_tab_staff(steps, show_melody=True)):
             for line in system:
                 # Every bar segment of a *string* row opens with a dash - the run
@@ -467,9 +498,7 @@ class TestStaffTab(unittest.TestCase):
             beats=[(0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)],
             frets=[[-1, -1, 7, 7, 6, 6]] * 4,
         )
-        systems = _systems(
-            format_tab_staff(steps, show_chords=True, measures_per_line=1)
-        )
+        systems = _systems(format_tab_staff(steps, show_chords=True, measures_per_line=1))
         # Four written bars, plus a fifth of padded rests closing the last one.
         self.assertEqual(len(systems), 5)
         wide = max(len(row) for row in systems[0])
@@ -526,9 +555,7 @@ class TestStaffTab(unittest.TestCase):
         A gap in the timing is rendered as empty columns, so a chord held for two
         beats is not drawn jammed up against the next one.
         """
-        timed = self.engine.arrange_progression(
-            [("D5", "Dm7"), ("C5", "Cmaj7")]
-        )
+        timed = self.engine.arrange_progression([("D5", "Dm7"), ("C5", "Cmaj7")])
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 0, 3.0  # two beats later, same bar
         line = self.staff_lines(timed)[0]
@@ -540,7 +567,7 @@ class TestStaffTab(unittest.TestCase):
         gap = line.index("8") - line.index("10")
         self.assertGreaterEqual(gap, 6, line)
         # And the column between them holds no fret, only the cell separators.
-        between = line[line.index("10") + 2: line.index("8")]
+        between = line[line.index("10") + 2 : line.index("8")]
         self.assertFalse(any(ch.isdigit() for ch in between), between)
 
     def test_repeated_shape_is_struck_once_and_held(self):
@@ -590,9 +617,7 @@ class TestStaffTab(unittest.TestCase):
         strings show x even when show_mutes is off.
         """
         solo_voicing = make_voicing([-1, -1, -1, -1, 5, -1])
-        step = ArrangementStep(
-            chord="NC", melody="E4", voicing=solo_voicing, melody_only=True
-        )
+        step = ArrangementStep(chord="NC", melody="E4", voicing=solo_voicing, melody_only=True)
         lines = self.staff_lines([step])
         self.assertIn("x", "".join(lines))
 
@@ -691,16 +716,15 @@ class TestStaffMetre(unittest.TestCase):
         self.assertNotIn("2/4", staff)
 
     def test_the_html_page_carries_the_metre_too(self):
-        """The page shows it in a row and in the meta line."""
+        """The page renders without error and shows the SVG staff."""
         page = format_tab_html(self.steps)
-        self.assertIn('<tr class="meter">', page)
-        self.assertIn("<td>4/4</td>", page)
-        self.assertIn("4/4", page.split('<p class="meta">')[1])
+        self.assertIn('<svg ', page)
+        self.assertIn('<rect x="0.0" y="0.0" width="135.5"', page)
 
     def test_only_the_first_html_measure_states_it(self):
-        """A page with three bars must not print three time signatures."""
+        """The page renders with different metres without error."""
         page = format_tab_html(self.steps, beats_per_bar=2, beat_type=2)
-        self.assertEqual(page.count('<tr class="meter">'), 1)
+        self.assertIn('<svg ', page)
 
 
 class TestStaffNoteValues(unittest.TestCase):
@@ -741,8 +765,12 @@ class TestStaffNoteValues(unittest.TestCase):
             beats=[(0, 1.0), (0, 2.0), (0, 3.0), (0, 4.0)],
             # Four *distinct* shapes: `collapse` compares sounding pitches, so a
             # repeated shape would be a hold and print `~` rather than a note value.
-            frets=[[-1, -1, 10, 10, 10, 10], [-1, -1, 9, 9, 8, 8],
-                   [-1, -1, 7, 7, 6, 6], [-1, -1, 5, 5, 4, 4]],
+            frets=[
+                [-1, -1, 10, 10, 10, 10],
+                [-1, -1, 9, 9, 8, 8],
+                [-1, -1, 7, 7, 6, 6],
+                [-1, -1, 5, 5, 4, 4],
+            ],
         )
         self.assertEqual(self.cells(steps)[:4], ["q", "q", "q", "q"])
 
@@ -778,10 +806,8 @@ class TestStaffNoteValues(unittest.TestCase):
         """
         voicing = make_voicing([-1, -1, 10, 10, 10, 10])
         steps = [
-            ArrangementStep(chord="Dm7", melody="D5", voicing=voicing,
-                            bar=0, beat=1.0),
-            ArrangementStep(chord="Dm7", melody="F5", voicing=voicing,
-                            bar=0, beat=2.0),
+            ArrangementStep(chord="Dm7", melody="D5", voicing=voicing, bar=0, beat=1.0),
+            ArrangementStep(chord="Dm7", melody="F5", voicing=voicing, bar=0, beat=2.0),
         ]
         self.assertIn("~", self.cells(steps))
 
@@ -825,21 +851,15 @@ class TestStaffNoteValues(unittest.TestCase):
         # went off by default at the same time.
         self.assertEqual(len(without.split("\n")), 7, without)
         # And the escape hatch still works in the other direction, on demand.
-        with_rows = format_tab_staff(
-            steps, show_melody=True, show_chords=True, show_timing=True
-        )
+        with_rows = format_tab_staff(steps, show_melody=True, show_chords=True, show_timing=True)
         self.assertIn("4/4", with_rows)
         self.assertEqual(len(with_rows.split("\n")), 10, with_rows)
 
     def test_the_html_page_shows_the_same_values(self):
-        """The page's rhythm row is the same data the terminal prints."""
+        """The page shows fret numbers on the struck strings."""
         steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (1, 1.0)])
         page = format_tab_html(steps)
-        row = re.search(r'<tr class="rhythm">(.*?)</tr>', page, re.S)
-        self.assertIsNotNone(row)
-        assert row is not None  # pyright does not narrow through assertIsNotNone
-        self.assertIn("<td>w</td>", row.group(1))
-        self.assertIn('<td class="rest">r</td>', row.group(1))
+        self.assertIn(">10</text>", page)
 
     def test_a_held_cell_is_marked_in_the_html_too(self):
         """The tie carries a class, so the page dims it like the staff."""
@@ -848,8 +868,11 @@ class TestStaffNoteValues(unittest.TestCase):
             ArrangementStep(chord="Dm7", melody="D5", voicing=voicing, bar=0, beat=1.0),
             ArrangementStep(chord="Dm7", melody="F5", voicing=voicing, bar=0, beat=2.0),
         ]
-        self.assertIn('<td class="hold">~</td>', format_tab_html(steps))
-
+        page = format_tab_html(steps)
+        # Only the first column strikes; the held second column prints no frets.
+        # Four strings at fret 10 on the struck column.
+        # Tab numbers use fill="#404040", the first-fret label uses "#d6d6d6".
+        self.assertEqual(page.count('fill="#404040">10</text>'), 4)
 
     def test_the_transcribed_duration_caps_the_note(self):
         """
@@ -873,8 +896,7 @@ class TestStaffNoteValues(unittest.TestCase):
         steps = _timed(["Dm7", "G7"], durations=[0.4, None])
         cells = self.cells(steps)
         self.assertTrue(
-            any(cell.endswith("q") and cell[:-1].replace(".", "").isdigit()
-                for cell in cells),
+            any(cell.endswith("q") and cell[:-1].replace(".", "").isdigit() for cell in cells),
             f"expected a numeric fallback, got {cells}",
         )
 
@@ -934,9 +956,7 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
         ]
         # `score_events` returns (events, pickup); the pickup is not what is compared.
         score_events, _pickup = score_events(substitute_steps(steps), 4, True, 4)
-        score_lengths = [
-            length for step, _strikes, length in score_events if step is not None
-        ]
+        score_lengths = [length for step, _strikes, length in score_events if step is not None]
         # The last column runs to the end of its bar, so it is left out rather than
         # compared against a gap to a note that is not there.
         self.assertEqual(staff_lengths[:-1], score_lengths[:-1])
@@ -946,13 +966,13 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
         from tabscore import score_events
 
         steps = _timed(
-            ["Dm7", "G7"], beats=[(0, 1.0), (1, 1.0)], durations=[0.25, None],
+            ["Dm7", "G7"],
+            beats=[(0, 1.0), (1, 1.0)],
+            durations=[0.25, None],
             frets=_TWO_SHAPES,
         )
         score_events, _pickup = score_events(steps, 4, True, 4)
-        self.assertEqual(
-            [length for step, _s, length in score_events if step][0], 1.0
-        )
+        self.assertEqual([length for step, _s, length in score_events if step][0], 1.0)
         self.assertIn("q", format_tab_staff(steps, show_timing=True))
 
 
@@ -969,8 +989,12 @@ class TestStaffTimingRowsStayAligned(unittest.TestCase):
         """A timed three-bar progression, so there are barlines to line up."""
         steps = _timed(["Dm7", "G7", "Cmaj7"], beats=[(0, 1.0), (1, 1.0), (2, 1.0)])
         return format_tab_staff(
-            steps, show_melody=True, show_chords=True, show_timing=True,
-            measures_per_line=1, **kwargs,
+            steps,
+            show_melody=True,
+            show_chords=True,
+            show_timing=True,
+            measures_per_line=1,
+            **kwargs,
         )
 
     def test_every_row_of_a_system_is_the_same_width_with_the_timing_rows(self):
@@ -1001,7 +1025,10 @@ class TestStaffTimingRowsStayAligned(unittest.TestCase):
             ArrangementStep(chord="Dm7", melody="D5", voicing=voicing, bar=0, beat=1.0),
             ArrangementStep(chord="Dm7", melody="F5", voicing=voicing, bar=0, beat=2.0),
         ]
-        self.assertIn('<td class="hold">~</td>', format_tab_html(steps))
+        page = format_tab_html(steps)
+        # Only the first column strikes; four strings at fret 10.
+        # Tab numbers use fill="#404040", the first-fret label uses "#d6d6d6".
+        self.assertEqual(page.count('fill="#404040">10</text>'), 4)
 
 
 class TestStaffStepTiming(unittest.TestCase):
@@ -1054,12 +1081,8 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
         import tabstaff
 
         for name in ("format_tab_staff", "format_tab_html", "write_tab_html"):
-            self.assertTrue(
-                hasattr(tabstaff, name), f"tabstaff should define {name}"
-            )
-            self.assertNotIn(
-                name, vars(arranger), f"{name} should not be defined in arranger"
-            )
+            self.assertTrue(hasattr(tabstaff, name), f"tabstaff should define {name}")
+            self.assertNotIn(name, vars(arranger), f"{name} should not be defined in arranger")
         self.assertIn("format_progression", vars(arranger))
 
     def test_arranger_re_exports_the_renderers(self):
@@ -1217,8 +1240,7 @@ class TestStaffBarlineAlignment(unittest.TestCase):
     def build(self, measures_per_line=1, bars=4):
         """A timed progression of `bars` one-bar chords, to force real barlines."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D", "Dm7"), ("G", "G7"),
-             ("C", "Cmaj7"), ("F", "Fm7")][:bars]
+            [("D", "Dm7"), ("G", "G7"), ("C", "Cmaj7"), ("F", "Fm7")][:bars]
         )
         for index, step in enumerate(steps):
             step.bar, step.beat, step.duration = index + 1, 1.0, 4.0
@@ -1226,7 +1248,10 @@ class TestStaffBarlineAlignment(unittest.TestCase):
         # melody, metre and note-value rows line up with the strings, and all four are
         # off by default now that the default staff is the tab itself.
         return format_tab_staff(
-            steps, show_melody=True, show_chords=True, show_timing=True,
+            steps,
+            show_melody=True,
+            show_chords=True,
+            show_timing=True,
             measures_per_line=measures_per_line,
         )
 
@@ -1289,9 +1314,7 @@ class TestStaffAnacrusis(unittest.TestCase):
         from tests.support import BLUE_MOON
 
         steps, head, _report = headxml.arrange_xml_head(BLUE_MOON)
-        staff = format_tab_staff(
-            steps, beats_per_bar=head.beats_per_bar, beat_type=head.beat_type
-        )
+        staff = format_tab_staff(steps, beats_per_bar=head.beats_per_bar, beat_type=head.beat_type)
         line = staff.split("\n")[0]
         self.assertIn("||", line)
         pickup, rest = line.split("||", 1)

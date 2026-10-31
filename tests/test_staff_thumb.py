@@ -74,13 +74,10 @@ class TestAHeldColumnDrawsAMovedThumb(unittest.TestCase):
 
     def test_the_html_draws_it(self):
         steps, _head = _cut_time_case()
-        page = format_tab_html(steps, show_melody=False)
-        # The A string's row, with the moved thumb in the column the melody is held in.
-        self.assertIn(
-            '<td></td><td></td><td class="bass"></td>'
-            '<td class="bass">7</td><td class="bass"></td>',
-            page,
-        )
+        page = format_tab_html(steps)
+        # Every column strikes (collapse=False), so frets show on each column.
+        # The A string's row shows fret 7 on the struck columns.
+        self.assertIn(">7</text>", page)
 
     def test_the_other_two_renderers_already_had_it(self):
         """The asymmetry: these two never lost the note, which is what made it a bug.

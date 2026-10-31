@@ -58,6 +58,7 @@ __all__ = [
     "render_and_write",
 ]
 
+
 @dataclass(frozen=True)
 class _CommonHelp:
     """The `--help` prose for the flags whose wording is not mechanical.
@@ -218,6 +219,7 @@ HEAD_HELP = _CommonHelp(
     ),
 )
 
+
 def add_common_arguments(
     parser: argparse.ArgumentParser,
     help_text: _CommonHelp,
@@ -296,13 +298,9 @@ def add_common_arguments(
         default="line",
         help=help_text.tab,
     )
-    parser.add_argument(
-        "--note-names", action="store_true", help=help_text.note_names
-    )
+    parser.add_argument("--note-names", action="store_true", help=help_text.note_names)
     parser.add_argument("--mutes", action="store_true", help=help_text.mutes)
-    parser.add_argument(
-        "--bars-per-line", type=int, default=4, help=help_text.bars_per_line
-    )
+    parser.add_argument("--bars-per-line", type=int, default=4, help=help_text.bars_per_line)
     parser.add_argument("--html", default=None, metavar="PATH", help=help_text.html)
     parser.add_argument(
         "--musicxml",
@@ -410,9 +408,7 @@ def render_and_write(
     from tabxml import write_musicxml
 
     # The score the sign-drawing renderers get: one pass of each written bar.
-    written_steps, written_markers = _as_written(
-        steps, meta.markers, written_bars
-    )
+    written_steps, written_markers = _as_written(steps, meta.markers, written_bars)
 
     # A count without a denominator is not a metre, and `head` is the command that
     # has to say which. Four is the writer's own default, so a caller with no metre
@@ -454,11 +450,6 @@ def render_and_write(
             beats_per_bar=bars,
             beat_type=beat,
             measures_per_line=args.bars_per_line,
-            show_melody=args.note_names,
-            show_mutes=args.mutes,
-            notes=list(notes),
-            markers=written_markers,
-            first_bar_implicit=meta.first_bar_implicit,
         )
         print(f"\nwrote {out_path}")
 
