@@ -114,8 +114,8 @@ that fact lives on the texture axis, `MELODY_ONLY_TEXTURES = ("melody", "melody_
   `melody_only_texture=` parameter on `should_promote_fill` (re-keyed); the stale exports.
   An unknown-texture error is the precedent the corpus removal set for removed flags.
 - Tests: the ~dozen tests pinning the two textures across `tests/test_texture.py`,
-  `tests/test_comping.py`, `tests/test_walking_bass.py`, `tests/test_cli.py` and
-  `tests/test_grip_chart.py` are rewritten as voices-selection tests (trap 5: invert or
+  `tests/test_comping.py`, `tests/test_walking_bass.py`, `tests/test_cli.py`
+  are rewritten as voices-selection tests (trap 5: invert or
   re-spell, never just delete). New equivalence tests assert `voices=(soprano,)` matches
   the old `texture="melody"` output and `voices=(soprano, bass)` the old `"melody_bass"`,
   against a capture taken **fresh from HEAD before the change** (trap 8) with a throwaway

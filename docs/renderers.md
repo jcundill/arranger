@@ -134,7 +134,7 @@ The reason is cost, plus one hard failure. Measured on the tree:
 
 So "the dependency is one-way" is the rule for the four rendering modules, and "no
 package module imports a front end at module scope" is the rule for the two that
-name the facade (`headxml`, `grip_chart`). `demo.main()`'s and `cli`'s imports are
+name the facade (`headxml`). `demo.main()`'s and `cli`'s imports are
 function-local for both reasons at once, and the two directions still do not
 deadlock: the front ends need only `tuning`, so neither side waits for the other.
 [docs/dependency-dag.md](dependency-dag.md) has the full table, and

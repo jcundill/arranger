@@ -184,8 +184,8 @@ itself. Every module-scope edge between front ends is recorded in
 `ALLOWED_FRONT_EDGES` with its reason: `tabstaff` re-exports the two writers so
 `from arranger import format_musicxml` has one spelling, and both writers import
 `tabscore` for the score placement they share, which is what keeps `tabxml` and
-`tabgp` independent of one another. `tabstaff`, `tabxml`, `tabgp`, `headxml` and
-`grip_chart` all import `tuning` directly (top-level module) rather than
+`tabgp` independent of one another. `tabstaff`, `tabxml`, `tabgp`, `headxml`
+all import `tuning` directly (top-level module) rather than
 `arranger.tuning`, so none of them reaches into the `arranger` package at module
 scope except through `arranger.step_types`. This graph is complete — it is small
 enough to draw every recorded edge.
@@ -196,7 +196,6 @@ flowchart TB
     tabxml["tabxml"]
     tabgp["tabgp"]
     headxml["headxml"]
-    grip_chart["grip_chart"]
     tabscore["tabscore"]
     tuning["tuning"]
     engine["arranger package<br/>engine and facade"]
@@ -209,13 +208,11 @@ flowchart TB
     tabxml --> tuning
     tabgp --> tuning
     headxml --> tuning
-    grip_chart --> tuning
     tabstaff --> engine
     tabxml --> engine
     tabgp --> engine
     tabscore --> engine
     headxml --> engine
-    grip_chart --> engine
 ```
 
 The rendering surface's lazy seams are **deliberately not drawn**, because they

@@ -399,7 +399,7 @@ this stage produced:
 So neither half of the loop can wait for the other, and the seam's real job is not
 to break a deadlock: it keeps four rendering modules - and the write paths among
 them - out of every `import arranger`. The hard failure belongs to the two front ends
-that name the facade's *public surface* (`headxml`, `grip_chart`), which cannot be
+that name the facade's *public surface* (`headxml`), which cannot be
 imported until the facade has finished; `demo.main()`'s and `cli`'s function-local
 imports are what keep them clear of that.
 

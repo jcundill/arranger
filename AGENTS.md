@@ -218,7 +218,6 @@ arranger/
 ├── tabxml.py            # MusicXML export (optional extra: music21)
 ├── tabgp.py             # Guitar Pro 5 export (optional extra: PyGuitarPro)
 ├── headxml.py           # MusicXML import: a melody + chord symbols
-├── grip_chart.py        # generates common_grips.md from the engine's tables
 ├── tests/               # unittest: `test_*.py` is the music, `meta_*.py` the tree
 │   └── data/            # committed MusicXML fixtures (music21, MuseScore, ours)
 ├── docs/                # the documents the routing table above points at
@@ -773,9 +772,6 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/history/open-issues.md](docs/history/open-issues.md) | the record of the closed issues, each with the measurement that closed it, stated **once** and re-measurable by hand from the recipe beside it |
 | [docs/history/](docs/history/) | the completed plans and the retired documents, each carrying a header saying where its live rule went |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
-
-`common_grips.md` is generated from the engine's own tables by `grip_chart.py` and
-checked by `make chart-audit` — never edit it by hand.
 
 
 ```bash

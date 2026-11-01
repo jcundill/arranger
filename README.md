@@ -286,7 +286,6 @@ Development commands:
 make check      # lint + typecheck + test — the CI gate
 make test       # the full suite: test_*.py (music) then meta_*.py (tree)
 make demo       # the built-in demonstration arrangements
-make chart-audit  # check common_grips.md against the engine's own tables
 make build      # build a wheel into dist/
 ```
 

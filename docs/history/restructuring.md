@@ -48,9 +48,9 @@ the two god modules (`textures`, `movement`) by axis and route.
    `ArrangementStep`, `ChordParser`, `format_progression`, …).
 9. `tests/test_structure.py`: budgets only shrink, and every library module has
    one. A new module states its ceiling; it does not inherit one.
-10. The five front ends (`tabstaff`, `tabxml`, `tabgp`, `headxml`, `grip_chart`)
+10. The four front ends (`tabstaff`, `tabxml`, `tabgp`, `headxml`)
     stay **flat modules** with those names, and `py-modules` ships exactly the
-    four renderer/importer names. `grip_chart` is a repository tool.
+    four renderer/importer names.
 11. `tabgp` imports `guitarpro` **inside a function** and nowhere else. This is
     the LGPL-3.0 boundary, not a style choice: a package `__init__` or a
     module-scope import would make PyGuitarPro a runtime dependency of the
@@ -194,7 +194,7 @@ changed; the names said what the import graph already depended on.
 
 `ALLOWED_PRIVATE_IMPORTS` is empty, and the test still fails in both directions.
 Validation: 1107 tests OK (skipped=2), ruff 0, pyright 0/0, `make demo`
-byte-identical, `make chart-audit` clean.
+byte-identical.
 
 ## Phase 9 — Decompose the high-complexity functions (in progress)
 
@@ -393,8 +393,6 @@ Three things to carry into the rest of the work:
   19 / 66 / 5. A split that lowers the total but leaves every ceiling where it was is
   still a success - the ceilings describe the worst function, not the file.
 
-The demo is byte-identical and `make chart-audit` still agrees with the tables.
-
 
 The seam was verified by an AST closure before any text moved, and it holds: the
 closure of `supported_string_sets`, `grip_pluck_count`, `thumb_safe_grips`,
@@ -425,7 +423,7 @@ Two findings from that measurement:
 The split itself is the next session's first task and wants a full context: it
 moves ~450 lines and updates every importer of the table names
 (`__init__`, `texture`, `bass`, `cost`, `decisions`, `harmony`, `render`,
-`movement`, `steps`, `options`, `grip_chart`, `fingers`, twelve test files). Do
+`movement`, `steps`, `options`, `fingers`, twelve test files). Do
 it as one commit that changes `test_package_dag.ORDER` and the AGENTS module map
 in the same edit. `build/`, `dist/`, `*.egg-info/` and `wjazzd.db` were deleted
 from the working copy, so a grep no longer finds stale copies of these modules
@@ -438,8 +436,7 @@ memo, `place_template`) below `grips`, which keeps the template rules, the four
 family generators and the public surface. Verified before starting:
 `_place_template` takes a template as an argument and never calls
 `_templates_for`, so placement does not depend on generation. `bass` imports
-`comping_string_sets` from the new table module; `grip_chart` keeps importing
-`grips.drop2_template_for`.
+`comping_string_sets` from the new table module.
 
 ## Phase 13 — Split `bass` and `movement` (landed)
 
@@ -588,7 +585,6 @@ at `docs/engine.md`.
 - `make check` (lint → typecheck → test): the test count moves only when a phase
   adds a test, and the budget table only shrinks.
 - `make demo`: printed tabs byte-identical through Phases 8-13.
-- `make chart-audit`: `common_grips.md` must not move.
 - Any moved count is the signal (per AGENTS.md).
 - Commit each logical change separately; never push.
 
@@ -607,7 +603,7 @@ Round 1:
 Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
-  `make demo` byte-identical, `make chart-audit` clean.
+  `make demo` byte-identical.
 - Phase 9: DONE (seventeen commits) — 9.1–9.6 the engine and both tab
   renderers, 9.7 the three importers. No module's ceiling is an outlier any more.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
@@ -635,5 +631,4 @@ Round 2:
 - Phase 15: DONE - the routing table gained the `SlotContext` row, the eight
   retired documents are named, and the measured state moved to 1108. This
   document is retired below.
-- Final gate: 1108 tests OK (skipped=2), ruff 0, pyright 0/0, `make demo` and
-  `make chart-audit` unchanged throughout.
+- Final gate: 1108 tests OK (skipped=2), ruff 0, pyright 0/0, `make demo` unchanged throughout.

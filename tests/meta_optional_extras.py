@@ -34,7 +34,7 @@ from typing import List, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The names the distribution ships (see `pyproject.toml`). `grip_chart` used to
+# The names the distribution ships (see `pyproject.toml`).
 # be a developer script here; it has been removed, so only the shipped names
 # remain flat modules.
 SHIPPED = (
