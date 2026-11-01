@@ -125,7 +125,7 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
             request=Request(chord_on="1", bass_on="every-beat"),
         )
         sung = [step for step in steps if step.melody_voiced]
-        self.assertTrue(sung, [step.tab_line() for step in steps])
+        self.assertTrue(sung, [step.voicing.tab_string() for step in steps])
         for step in sung:
             self.assertTrue(step.voicing.upper_midi_notes())
         self.assertEqual(_lone_bass(steps), [])

@@ -167,8 +167,8 @@ class TestTheFourBarExample(unittest.TestCase):
         steps = _four_bars()
         self.assertEqual(len(steps), 16)
         for step in steps:
-            self.assertTrue(step.voicing.active_frets(), step.tab_line())
-            self.assertLessEqual(step.voicing.fret_span(), 5, step.tab_line())
+            self.assertTrue(step.voicing.active_frets(), step.voicing.tab_string())
+            self.assertLessEqual(step.voicing.fret_span(), 5, step.voicing.tab_string())
 
     def test_the_roles_are_the_rule_that_produced_each_move(self) -> None:
         roles = [step.top_role for step in _four_bars()]
@@ -190,7 +190,7 @@ class TestTheFourBarExample(unittest.TestCase):
         band = comp_line.home_band(2, 13)
         for step in _four_bars():
             for fret in step.voicing.active_frets():
-                self.assertTrue(band[0] <= fret <= band[1], step.tab_line())
+                self.assertTrue(band[0] <= fret <= band[1], step.voicing.tab_string())
 
 
 class TestTheFill(unittest.TestCase):

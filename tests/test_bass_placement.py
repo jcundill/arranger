@@ -28,6 +28,7 @@ from arranger import (
     supported_string_sets,
 )
 from arranger.annotation import step_annotation
+from arranger.bass_merge import attach_bass
 
 # The precedence rule `bass._melody_in_force` implements. Imported from where it
 # lives rather than through the package facade, because these are private to
@@ -44,6 +45,7 @@ from arranger.bass_rules import (
 from arranger.fingers import MAX_HAND_SPAN, hand_span
 from arranger.grip_tables import GRIP_MAX_SPAN
 from arranger.parts import PART_NAMES
+from arranger.step_prepare import prepare_step
 from arranger.texture import texture_palette
 from arranger.tuning import PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET, STANDARD_TUNING
 from tabgp import _sounding_frets
@@ -416,7 +418,7 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
             self.assertIsNotNone(
                 step.melody,
                 f"bar {step.bar} beat {step.beat}: a fill with no melody is not the tune "
-                f"alone: {step.tab_line()}",
+                f"alone: {step.voicing.tab_string()}",
             )
 
     def test_every_target_states_its_chord_in_every_renderer(self):
@@ -712,7 +714,7 @@ class TestBassPlacement(unittest.TestCase):
         )
         self.assertTrue(any(step.bass is not None for step in steps))
         for step in steps:
-            self.assertEqual(step.bass, step.voicing.bass_midi, step.tab_line())
+            self.assertEqual(step.bass, step.voicing.bass_midi, step.voicing.tab_string())
         with self.assertRaises(AttributeError):
             steps[0].bass = 41  # type: ignore[assignment]
 
@@ -761,7 +763,7 @@ class TestTheRefusal(unittest.TestCase):
         the field. Running `attach_bass` also proves the step *survives*, which is
         the other half of the trade: the upper voicing is kept.
         """
-        VoiceLeadingEngine.attach_bass(
+        attach_bass(
             step,
             BassNote(bar=1, beat=1.0, pitch_class=pc(name), role=BASS_ROLE_ANCHOR),
             arrangements if arrangements is not None else [step],
@@ -798,7 +800,7 @@ class TestTheRefusal(unittest.TestCase):
         ]
         for step, name, arrangements in cases:
             refused = self._refusal(step, name, arrangements)
-            self.assertEqual(refused, name, step.tab_line())
+            self.assertEqual(refused, name, step.voicing.tab_string())
             # `width=None` asks for the one-line form, which is what this asserts on: the
             # clause is longer than a line of the wrapped layout, and the question here is
             # what it *says*, not how it is laid out (`test_tab_rendering` holds that).
@@ -858,7 +860,7 @@ class TestTheInvariant(unittest.TestCase):
             checked += 1
             self.assertIn(
                 upper_set, supported_string_sets(),
-                f"{step.tab_line()} upper voices are not a supported set",
+                f"{step.voicing.tab_string()} upper voices are not a supported set",
             )
             self.assertIn(bass_string, BASS_STRING_INDICES)
             self.assertNotIn(bass_string, upper_set)
@@ -914,7 +916,7 @@ class TestTheInvariant(unittest.TestCase):
                         self.assertLessEqual(
                             plucks,
                             4,
-                            f"{content}/{bass_notes}: {step.tab_line()} plucks {plucks} strings",
+                            f"{content}/{bass_notes}: {step.voicing.tab_string()} plucks {plucks} strings",
                         )
                         if step.voicing.bass_string is not None:
                             checked += 1
@@ -987,7 +989,7 @@ class TestTheInvariant(unittest.TestCase):
                             len(frets),
                             4,
                             f"{content}/{bass_notes}: bar {step.bar} beat {step.beat} "
-                            f"{step.tab_line()} asks the left hand for {len(frets)} "
+                            f"{step.voicing.tab_string()} asks the left hand for {len(frets)} "
                             f"frets {sorted(frets)}",
                         )
                         if not (step.bass_only or step.repeated or step.melody_only):
@@ -1007,7 +1009,7 @@ class TestTheInvariant(unittest.TestCase):
         """
         triple = [("F5", "Fmaj7")]
         palette = texture_palette(ROLE_TARGET, "chord2", PART_NAMES)
-        walking = VoiceLeadingEngine.prepare_step(triple, 0, grips=palette)
+        walking = prepare_step(triple, 0, grips=palette)
         assert walking is not None
         self.assertTrue(walking.candidates)
         for candidate in walking.candidates:
@@ -1306,7 +1308,7 @@ class TestTheHarmonyLeavesRoomForTheBass(unittest.TestCase):
             palette = step.palette
             self.assertTrue(
                 palette is None or palette.dropped_for_bass is None,
-                f"a step with no bass line gave up a shape for one: {step.tab_line()}",
+                f"a step with no bass line gave up a shape for one: {step.voicing.tab_string()}",
             )
 
     def test_the_comping_route_leaves_room_too(self):
@@ -1324,7 +1326,7 @@ class TestTheHarmonyLeavesRoomForTheBass(unittest.TestCase):
         ]
         self.assertTrue(moved, "the comping route never made room, so this proves nothing")
         self.assertEqual(
-            [step.tab_line() for step in steps if step.bass_refused], [],
+            [step.voicing.tab_string() for step in steps if step.bass_refused], [],
             "a requested note was dropped on the comping route",
         )
         for step in steps:

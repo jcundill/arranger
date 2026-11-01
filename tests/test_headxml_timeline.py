@@ -488,8 +488,8 @@ class TestChordSlots(unittest.TestCase):
         self.assertIn((2.0, "D9"), silent)
         for step in comping:
             if step.bar == 6:
-                self.assertIsNone(step.melody, step.tab_line())
-                self.assertFalse(step.melody_voiced, step.tab_line())
+                self.assertIsNone(step.melody, step.voicing.tab_string())
+                self.assertFalse(step.melody_voiced, step.voicing.tab_string())
 
     def test_a_bar_the_melody_does_enter_is_untouched_by_the_engine_union(self):
         """The old bar-level claim, now a fact about the **comping selection**.
@@ -542,7 +542,7 @@ class TestChordSlots(unittest.TestCase):
                         melody_state(head, bar, beat),
                         "silent",
                         f"bar {bar} beat {beat} was added under a "
-                        f"sounding note: {step.tab_line()}",
+                        f"sounding note: {step.voicing.tab_string()}",
                     )
         self.assertGreater(checked, 0, "no position was added anywhere")
 
@@ -940,9 +940,9 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         ]
         self.assertEqual(len(silent), 1, "bar 6 beat 2 must place its chord")
         for step in silent:
-            self.assertIsNone(step.melody, step.tab_line())
-            self.assertNotIn("C4", step.tab_line())
-            self.assertNotIn("None", step.tab_line())
+            self.assertIsNone(step.melody, step.voicing.tab_string())
+            self.assertNotIn("C4", step.voicing.tab_string())
+            self.assertNotIn("None", step.voicing.tab_string())
         # The position the tune is still holding is the contrast: it keeps the note
         # in force rather than inventing one or dropping it.
         held = [
@@ -969,7 +969,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
             self.assertEqual(
                 step.melody,
                 melody_at(head, step.bar, step.beat),
-                f"bar {step.bar} beat {step.beat}: {step.tab_line()}",
+                f"bar {step.bar} beat {step.beat}: {step.voicing.tab_string()}",
             )
 
     def test_the_renderers_print_the_absence_blank(self):

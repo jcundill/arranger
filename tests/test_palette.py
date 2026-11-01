@@ -44,12 +44,12 @@ class TestTheRecordedPalette(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(COMPLETE)
         self.assertEqual(len(steps), 3)
         for step in steps:
-            self.assertEqual(len(step.voicing.upper_midi_notes()), 4, step.tab_line())
+            self.assertEqual(len(step.voicing.upper_midi_notes()), 4, step.voicing.tab_string())
             palette = step.palette
-            assert palette is not None, step.tab_line()
-            self.assertEqual(palette.available, 4, step.tab_line())
-            self.assertIsNone(palette.alternative, step.tab_line())
-            self.assertIsNone(palette.decided_by, step.tab_line())
+            assert palette is not None, step.voicing.tab_string()
+            self.assertEqual(palette.available, 4, step.voicing.tab_string())
+            self.assertIsNone(palette.alternative, step.voicing.tab_string())
+            self.assertIsNone(palette.decided_by, step.voicing.tab_string())
 
     def test_a_thin_palette_records_no_alternative(self):
         """A foreign melody note with no substitution: two voices, and that is all."""
@@ -106,10 +106,10 @@ class TestTheRecordedPalette(unittest.TestCase):
         self.assertEqual(len(steps), 3)
         for step in steps:
             self.assertFalse(step.melody_voiced)
-            self.assertIsNotNone(step.palette, step.tab_line())
+            self.assertIsNotNone(step.palette, step.voicing.tab_string())
             assert step.palette is not None
             self.assertEqual(step.palette.available, 3)
-            self.assertIsNone(step.palette.dropped_for_bass, step.tab_line())
+            self.assertIsNone(step.palette.dropped_for_bass, step.voicing.tab_string())
             # The count is the comping clause's, not the palette's.
             self.assertNotIn("voices", step_annotation(step).split("sounding")[0])
 
@@ -127,9 +127,9 @@ class TestTheRecordedPalette(unittest.TestCase):
         self.assertEqual(len(steps), 3)
         for step in steps:
             palette = step.palette
-            assert palette is not None, step.tab_line()
-            self.assertEqual(palette.available, 1, step.tab_line())
-            self.assertEqual(len(step.voicing.upper_midi_notes()), 1, step.tab_line())
+            assert palette is not None, step.voicing.tab_string()
+            self.assertEqual(palette.available, 1, step.voicing.tab_string())
+            self.assertEqual(len(step.voicing.upper_midi_notes()), 1, step.voicing.tab_string())
 
     def test_a_fuller_shape_never_loses_on_voice_count(self):
         """The general claim, over the sweep heads rather than one worked case.
@@ -509,7 +509,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         the name, so this is one answer rather than two.
         """
         read = VoiceLeadingEngine.arrange_progression([("D5", "Dm(maj7)")])
-        self.assertEqual(read[0].tab_line(), "x-x-11-10-10-10")
+        self.assertEqual(read[0].voicing.tab_string(), "x-x-11-10-10-10")
         self.assertNotIn("could not be read", step_annotation(read[0]))
 
         unvoiced = VoiceLeadingEngine.arrange_progression([("C5", "Czz")])

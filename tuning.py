@@ -41,7 +41,7 @@ PITCH_CLASS_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb",
 
 # The Weimar Jazz Database's "no chord" marker: a bar that carries melody but no
 # harmony. Such a step is voiced as melody alone - no harmonisation, no
-# reharmonisation, no clause (see VoiceLeadingEngine.get_melody_only_voicing).
+# reharmonisation, no clause (see `grips.get_melody_only_voicings`).
 NO_CHORD = "NC"
 # Soprano (melody) string indices a Drop-2 voicing may be pinned to, and the four
 # contiguous strings each one uses. Index 0 = low E ... index 5 = high E.

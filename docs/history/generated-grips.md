@@ -285,7 +285,7 @@ three levers for that, each measured separately:
 
 **Step 3 — landed, and the order it was meant to decide dissolved.** The tables had exactly
 one open question: `DROP2_INTERVAL_SETS` paired *positionally* with `DEGREE_OFFSETS_FROM_ROOT`,
-that pairing is an order, and `grip_chart.py` draws its rows in it. Measured before deciding
+that pairing is an order, and the chart generator draws its rows in it. Measured before deciding
 it: **no order tried reproduces the 29 rows** — the rule's own order 0 of 29, ascending from
 the root 13, seventh-family-first 15, and the best of them, "the ascending order rotated" 22,
 is an accident of how the table was written rather than a rule. And *reordering* changes
@@ -304,7 +304,6 @@ same rule read at every chord tone.
 | gone: `DROP2_INTERVAL_SETS`, `DEGREE_OFFSETS_FROM_ROOT`, `DROP2_TEMPLATES`, `_priority_drop2_templates` | the 119 numbers are `tests/support.py::WITNESS`, keyed by the degree their top voice states |
 | gone: `_drop2_for_untabled_degree`, `_guide_tone_drop2`, `_duplicates_pitch`, `_REACH`, `_BLOCK_SPACING` | the rule answers for **every** chord tone of all 29 qualities (125 degrees): none empty, none impure, none missing a guide tone. The runtime fallback they formed never fired, so the invariant is a gate in `tests/test_generated_grips.py` instead of a branch |
 | gone from the facade | `VoiceLeadingEngine.DROP2_INTERVAL_SETS` and `.DEGREE_OFFSETS_FROM_ROOT` — the API change this step is |
-| `grip_chart` | reads `_drop2_template_for` and the quality's own tones; its rows read low-degree-first and depend on no engine-side order at all |
 
 Measured on this tree: **0 of 1,103 steps** move and `make demo` is byte-identical. The
 palette gains six shapes — the 9th of a `13`, the #9 and #11 of a `7alt`, and the natural 5th
@@ -320,8 +319,7 @@ replacement tests the degree, which is the same arithmetic written once.
 **What it still costs is one decision and no derivation.** Measured over the 29 degree rows:
 every row's *content* is the **prefix** of that quality's `TONE_PRIORITY` row, cut to the
 length of its template list — 29 of 29, so the row says nothing the rule does not, except the
-order it says it in. Not one row is in the rule's order, and that order is what `grip_chart.py`
-draws `common_grips.md` in. So retiring the table means **choosing an order**, or keeping the
+order it says it in. Not one row is in the rule's order. So retiring the table means **choosing an order**, or keeping the
 row as an order-witness with its content asserted against the rule — which is the shape
 `WITNESS` already has, and is what
 `tests/test_generated_grips.py::test_a_witness_degree_list_is_a_prefix_of_the_rule` now holds.

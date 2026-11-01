@@ -68,9 +68,6 @@ from tabscore import score_events, substitute_steps
 # so this is the top of the available range rather than a choice between formats.
 GP_VERSION = (5, 1, 0)
 
-# The signature guitarpro writes, and what a valid GP5 file begins with.
-GP_SIGNATURE = b"\x18FICHIER GUITAR PRO v5.10\x00"
-
 # guitarpro numbers the strings 1..6 with 1 = high E; this library indexes 0 = low
 # E, so the conversion is `6 - index`.
 
@@ -173,21 +170,6 @@ def _duration_split(
     # signature, which is the error this function exists to avoid.
     # `test_a_length_the_format_cannot_exact_is_written_short_never_long` is the guard.
     return parts
-
-
-def _duration_value(length: float) -> int:
-    """
-    The single guitarpro `Duration` nearest a length, or the shortest legal one.
-
-    Kept for a caller that genuinely wants one value - a test, or a beat the format
-    can hold exactly. **Do not use it to lay out a bar**: it rounds, and rounding a
-    dotted half to a whole note is what made a bar longer than its signature. Use
-    `_duration_split`, which cannot.
-    """
-    if length <= 0:
-        return _MIN_DURATION
-    value = int(round(4.0 / length))
-    return max(_MAX_DURATION, min(value, _MIN_DURATION))
 
 
 def _sounding_frets(step: ArrangementStep) -> List[Tuple[int, int]]:
@@ -1155,10 +1137,6 @@ _GP_STRING_OFFSET = 6
 # an eighth, but a transcribed beat grid can divide further, and a beat written
 # with no duration occupies no time at all, which would delete it silently.
 _MIN_DURATION = 16
-
-# The longest, a whole note. Guitarpro has no dotted note, so a length that is not
-# a clean power of two cannot be written as one beat - see `_duration_split`.
-_MAX_DURATION = 1
 
 # Every note value a guitarpro measure can hold, longest first: a whole note down
 # to a sixteenth. A triplet is one of these plus a `Tuplet`, never a value of its

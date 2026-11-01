@@ -80,7 +80,7 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     the case an `elif` chain would silently drop.
 
     The step still carries a full drop-2 `voicing`: the engine voice-leads from
-    it and a caller wanting the literal shape still has `step.tab_line()`.
+    it and a caller wanting the literal shape still has `step.voicing.tab_string()`.
 
     **`melody_voiced=False` removes the soprano from the `repeated` rule.** A repeat is
     a soprano-only re-strike, which presumes there *is* a soprano carrying the tune; under

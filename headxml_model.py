@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from arranger.chords import midi_to_note_name
-from tuning import NO_CHORD
 
 # ---------------------------------------------------------------------------
 # Records
@@ -49,10 +48,6 @@ class HeadNote:
     quality: Optional[str] = None
     bass: Optional[str] = None
     lyrics: Tuple[str, ...] = ()
-
-    @property
-    def is_no_chord(self) -> bool:
-        return self.chord == NO_CHORD
 
     @property
     def key(self) -> Tuple[int, float]:

@@ -66,13 +66,13 @@ class TestGripGeneration(unittest.TestCase):
                 tones = set(ChordParser.get_chord_tones(chord_name))
                 for v in candidates:
                     where = f"{chord_name} {melody} {v.grip} {v.tab_string()}"
-                    self.assertTrue(set(v.pitch_classes()) <= tones, where)
+                    self.assertTrue({m % 12 for m in v.midi_notes()} <= tones, where)
                     self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip], where)
                     self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
                     self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), where)
                     self.assertEqual(len(set(v.midi_notes())), len(v.midi_notes()), where)
-                    self.assertEqual(v.soprano_string(), max(v.active_strings), where)
-                    self.assertIn(frozenset(v.active_strings), supported_string_sets(), where)
+                    self.assertEqual(v.soprano_string(), max([i for i, f in enumerate(v.frets) if f >= 0]), where)
+                    self.assertIn(frozenset([i for i, f in enumerate(v.frets) if f >= 0]), supported_string_sets(), where)
                     seen.add(v.grip)
 
         # Every family the selector prefers has to be reachable, or a preference entry
@@ -131,7 +131,7 @@ class TestShellVoicings(unittest.TestCase):
             self.assertTrue(shells, chord_name)
             for v in shells:
                 self.assertEqual(len(v.active_frets()), 3, v.tab_string())
-                self.assertTrue(wanted <= set(v.pitch_classes()), v.tab_string())
+                self.assertTrue(wanted <= {m % 12 for m in v.midi_notes()}, v.tab_string())
 
     def test_a_shell_is_never_four_notes(self):
         """The point of a shell is that it stops short of the complete chord."""
@@ -198,7 +198,7 @@ class TestDuoSecondVoice(unittest.TestCase):
                 self.assertTrue(duos, f"{chord_name} {melody} should admit a duo")
                 for v in duos:
                     self.assertEqual(len(v.active_frets()), 2, v.tab_string())
-                    self.assertTrue(set(v.pitch_classes()) <= tones, v.tab_string())
+                    self.assertTrue({m % 12 for m in v.midi_notes()} <= tones, v.tab_string())
 
     def test_the_second_voice_is_this_quality_s_own_guide_tone(self):
         """The pair is the melody plus a guide tone, never two arbitrary chord tones."""
@@ -294,7 +294,7 @@ class TestDuoSecondVoice(unittest.TestCase):
             # `active_strings` reads low-to-high where GRIP_STRING_SETS stores it
             # high-to-low, so compare against the table's own spelling sorted.
             self.assertEqual(
-                tuple(sorted(v.active_strings)),
+                tuple(sorted([i for i, f in enumerate(v.frets) if f >= 0])),
                 (1, 3),
                 f"{v.tab_string()} voiced a 9th on an adjacent pair",
             )
@@ -338,7 +338,7 @@ class TestDuoSecondVoice(unittest.TestCase):
         for v in self.engine.get_all_grip_voicings(
             Note("C5"), chord_name="Cmaj7", grips=("duo",)
         ):
-            pcs = set(v.pitch_classes())
+            pcs = {m % 12 for m in v.midi_notes()}
             self.assertIn(0, pcs, v.tab_string())   # the root, which is the melody
             self.assertIn(4, pcs, f"{v.tab_string()} is missing the 3rd")
 
@@ -356,7 +356,7 @@ class TestFiveThreeTwoShell(unittest.TestCase):
                 Note(melody), chord_name=chord_name, top_string=4,
                 grips=("shell",),
             )
-            if v.active_strings == [1, 3, 4]
+            if [i for i, f in enumerate(v.frets) if f >= 0] == [1, 3, 4]
         ]
 
     def test_it_produces_the_textbook_shape(self):
@@ -371,10 +371,10 @@ class TestFiveThreeTwoShell(unittest.TestCase):
         self.assertTrue(found, "F7 should have a 5-3-2 shell under Eb4")
         v = found[0]
         self.assertEqual(v.tab_string(), "x-3-x-2-4-x")
-        self.assertEqual(v.active_strings, [1, 3, 4])
+        self.assertEqual([i for i, f in enumerate(v.frets) if f >= 0], [1, 3, 4])
         # The D string is left alone, which is what makes this a 5-3-2 and not a 5-4-3.
         self.assertEqual(v.frets[2], -1)
-        self.assertEqual(sorted(v.pitch_classes()), [0, 3, 9])
+        self.assertEqual(sorted(m % 12 for m in v.midi_notes()), [0, 3, 9])
         self.assertEqual(max(v.midi_notes()), Note("Eb4").midi_note())
         self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip])
 
@@ -389,7 +389,7 @@ class TestFiveThreeTwoShell(unittest.TestCase):
         shells = self.engine.get_grip_voicings(
             Note("Eb4"), chord_name="F7", top_string=4, grips=("shell",)
         )
-        by_set = {tuple(v.active_strings): v for v in shells}
+        by_set = {tuple([i for i, f in enumerate(v.frets) if f >= 0]): v for v in shells}
         self.assertIn((1, 3, 4), by_set)
         chosen = by_set[(1, 3, 4)]
         self.assertEqual(chosen.soprano_string(), 4)
@@ -409,7 +409,7 @@ class TestFiveThreeTwoShell(unittest.TestCase):
         )
         self.assertTrue(shells)
         self.assertTrue(
-            any(v.active_strings == [1, 3, 4] for v in shells), "no 5-3-2 offered"
+            any([i for i, f in enumerate(v.frets) if f >= 0] == [1, 3, 4] for v in shells), "no 5-3-2 offered"
         )
         for v in shells:
             self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
@@ -436,7 +436,7 @@ class TestSixFourThreeShell(unittest.TestCase):
                 Note(melody), chord_name=chord_name, top_string=3,
                 grips=("shell",),
             )
-            if v.active_strings == [0, 2, 3]
+            if [i for i, f in enumerate(v.frets) if f >= 0] == [0, 2, 3]
         ]
 
     def test_it_produces_the_textbook_shape(self):
@@ -450,10 +450,10 @@ class TestSixFourThreeShell(unittest.TestCase):
         self.assertTrue(found, "Gm7 should have a 6-4-3 shell")
         v = found[0]
         self.assertEqual(v.tab_string(), "3-x-3-3-x-x")
-        self.assertEqual(v.active_strings, [0, 2, 3])
+        self.assertEqual([i for i, f in enumerate(v.frets) if f >= 0], [0, 2, 3])
         # The A string is left alone, which is what makes this a 6-4-3 and not a 6-5-4.
         self.assertEqual(v.frets[1], -1)
-        self.assertEqual(sorted(v.pitch_classes()), [5, 7, 10])
+        self.assertEqual(sorted(m % 12 for m in v.midi_notes()), [5, 7, 10])
         self.assertEqual(max(v.midi_notes()), Note("Bb3").midi_note())
 
     def test_a_g_string_shell_can_sound_either_shape(self):
@@ -462,7 +462,7 @@ class TestSixFourThreeShell(unittest.TestCase):
             Note("C4"), chord_name="Cmaj7", top_string=3, grips=("shell",)
         )
         self.assertTrue(shells)
-        self.assertTrue(any(v.active_strings == [0, 2, 3] for v in shells), "no 6-4-3")
+        self.assertTrue(any([i for i, f in enumerate(v.frets) if f >= 0] == [0, 2, 3] for v in shells), "no 6-4-3")
         for v in shells:
             self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
 
@@ -500,7 +500,7 @@ class TestFiveThreeTwoHighEShell(unittest.TestCase):
                 Note(melody), chord_name=chord_name, top_string=top_string,
                 grips=("shell",),
             )
-            if v.active_strings == [2, 3, 5]
+            if [i for i, f in enumerate(v.frets) if f >= 0] == [2, 3, 5]
         ]
 
     def test_it_produces_the_textbook_shape(self):
@@ -513,11 +513,11 @@ class TestFiveThreeTwoHighEShell(unittest.TestCase):
         self.assertTrue(found, "Fmaj7 should have a (5,3,2) shell under C5")
         v = found[0]
         self.assertEqual(v.tab_string(), "x-x-7-9-x-8")
-        self.assertEqual(v.active_strings, [2, 3, 5])
+        self.assertEqual([i for i, f in enumerate(v.frets) if f >= 0], [2, 3, 5])
         # The B string is left alone, which is what makes this a 5-3-2 and not a 5-4-3.
         self.assertEqual(v.frets[4], -1)
         # A and E are Fmaj7's 3rd and 7th; the root is deliberately absent.
-        self.assertEqual(sorted(v.pitch_classes()), [0, 4, 9])
+        self.assertEqual(sorted(m % 12 for m in v.midi_notes()), [0, 4, 9])
         self.assertEqual(max(v.midi_notes()), Note("C5").midi_note())
 
     def test_it_is_reachable_across_the_shell_qualities(self):
@@ -548,12 +548,12 @@ class TestFiveThreeTwoHighEShell(unittest.TestCase):
                     label = f"{chord_name} {melody} {v.tab_string()}"
                     self.assertEqual(len(v.active_frets()), 3, label)
                     self.assertIn(
-                        frozenset(v.active_strings), supported_string_sets(), label
+                        frozenset([i for i, f in enumerate(v.frets) if f >= 0]), supported_string_sets(), label
                     )
                     self.assertEqual(v.soprano_string(), 5, label)
                     self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), label)
                     self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], label)
-                    self.assertTrue(set(v.pitch_classes()) <= allowed, label)
+                    self.assertTrue({m % 12 for m in v.midi_notes()} <= allowed, label)
         self.assertGreater(checked, 0, "the sweep proved nothing")
 
     def test_it_is_offered_for_a_high_e_melody(self):
@@ -566,7 +566,7 @@ class TestFiveThreeTwoHighEShell(unittest.TestCase):
         )
         self.assertTrue(shells)
         self.assertTrue(
-            any(v.active_strings == [2, 3, 5] for v in shells), "no (5,3,2) offered"
+            any([i for i, f in enumerate(v.frets) if f >= 0] == [2, 3, 5] for v in shells), "no (5,3,2) offered"
         )
         for v in shells:
             self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
@@ -585,7 +585,7 @@ class TestFiveThreeTwoHighEShell(unittest.TestCase):
                         top_string=top_string, grips=("shell",),
                     ):
                         self.assertNotEqual(
-                            v.active_strings, [2, 3, 5],
+                            [i for i, f in enumerate(v.frets) if f >= 0], [2, 3, 5],
                             f"(5,3,2) offered for top_string={top_string}: "
                             f"{v.tab_string()}",
                         )
@@ -637,7 +637,7 @@ class TestSixFourThreeTwo(unittest.TestCase):
                 Note(melody), chord_name=chord_name,
                 top_string=4, grips=(grip,),
             )
-            if v.active_strings == [0, 2, 3, 4]
+            if [i for i, f in enumerate(v.frets) if f >= 0] == [0, 2, 3, 4]
         ]
 
     def test_it_produces_the_textbook_shape(self):
@@ -700,16 +700,16 @@ class TestSixFourThreeTwo(unittest.TestCase):
                     melody = note_name(midi)
                     for v in self.shapes(melody, quality, chord_name):
                         where = f"{chord_name} {melody} {v.tab_string()}"
-                        self.assertEqual(v.active_strings, [0, 2, 3, 4], where)
+                        self.assertEqual([i for i, f in enumerate(v.frets) if f >= 0], [0, 2, 3, 4], where)
                         self.assertEqual(v.soprano_string(), 4, where)
                         self.assertEqual(max(v.midi_notes()), midi, where)
                         self.assertLessEqual(
                             v.fret_span(), GRIP_MAX_SPAN["drop2_6432"], where
                         )
-                        self.assertTrue(set(v.pitch_classes()) <= allowed, where)
+                        self.assertTrue({m % 12 for m in v.midi_notes()} <= allowed, where)
                         self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
                         self.assertIn(
-                            frozenset(v.active_strings), supported_string_sets(), where
+                            frozenset([i for i, f in enumerate(v.frets) if f >= 0]), supported_string_sets(), where
                         )
 
 
@@ -751,7 +751,7 @@ class TestSixFourThreeTwo(unittest.TestCase):
                         Note(melody), chord_name=chord_name,
                         top_string=4, grips=("drop2",),
                     )
-                    if v.active_strings == [0, 2, 3, 4]
+                    if [i for i, f in enumerate(v.frets) if f >= 0] == [0, 2, 3, 4]
                 ],
                 [],
                 chord_name,
@@ -776,7 +776,7 @@ class TestSixFourThreeTwo(unittest.TestCase):
         # only true while every four-note shape had to be contiguous.
         supported = set(supported_string_sets())
         for v in contig:
-            self.assertIn(frozenset(v.active_strings), supported, v.tab_string())
+            self.assertIn(frozenset([i for i, f in enumerate(v.frets) if f >= 0]), supported, v.tab_string())
 
     def test_a_rootless_chord_is_refused(self):
         """
@@ -893,7 +893,7 @@ class TestGuideTones(unittest.TestCase):
                         top_string=top_string,
                     ):
                         sounding = {
-                            (pc - root_pc) % 12 for pc in voicing.pitch_classes()
+                            (midi - root_pc) % 12 for midi in voicing.midi_notes()
                         }
                         for want in guide:
                             checked += 1
@@ -1075,7 +1075,7 @@ class TestDerivedGripShapes(unittest.TestCase):
         for v in produced:
             self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop24"])
             self.assertIn(
-                frozenset(v.active_strings), supported_string_sets(), v.tab_string(),
+                frozenset([i for i, f in enumerate(v.frets) if f >= 0]), supported_string_sets(), v.tab_string(),
             )
 
     def test_a_drop24_only_sounds_chord_tones_under_a_chord_tone_melody(self):
@@ -1227,12 +1227,12 @@ class TestClosePosition(unittest.TestCase):
                         count += 1
                         where = f"{chord_name} {melody} {v.tab_string()}"
                         self.assertEqual(v.grip, "closed", where)
-                        self.assertTrue(set(v.pitch_classes()) <= tones, where)
+                        self.assertTrue({m % 12 for m in v.midi_notes()} <= tones, where)
                         self.assertLessEqual(
                             v.fret_span(), GRIP_MAX_SPAN["closed"], where
                         )
                         self.assertIn(
-                            frozenset(v.active_strings),
+                            frozenset([i for i, f in enumerate(v.frets) if f >= 0]),
                             supported_string_sets(), where,
                         )
                         self.assertEqual(
@@ -1343,12 +1343,12 @@ class TestPartialHarmonisation(unittest.TestCase):
             [("A5", "Dm7"), ("G5", "Cmaj7"), ("F5", "F7")]
         )
         self.assertEqual(
-            [s.tab_line() for s in steps],
+            [s.voicing.tab_string() for s in steps],
             ["10-x-10-10-10-x", "8-x-9-9-8-x", "x-x-x-x-x-13"],
             "the F7 step is the one the ban cost",
         )
         for step in steps[:2]:
-            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.voicing.tab_string())
         self.assertEqual(steps[2].grip, "melody")
         self.assertEqual(
             [note_name(n) for n in steps[2].voicing.midi_notes()], ["F5"],
@@ -1366,9 +1366,9 @@ class TestPartialHarmonisation(unittest.TestCase):
             [("G3", "G7"), ("G3", "Cmaj7")]
         )
         self.assertTrue(all(s.grip == "shell" for s in shell_steps),
-                        [s.tab_line() for s in shell_steps])
+                        [s.voicing.tab_string() for s in shell_steps])
         for step in shell_steps:
-            self.assertTrue(step.partial, step.tab_line())
+            self.assertTrue(step.partial, step.voicing.tab_string())
             self.assertLess(len(step.voicing.active_frets()), 4)
             self.assertIn("partial", format_progression([step]))
 
@@ -1381,7 +1381,7 @@ class TestPartialHarmonisation(unittest.TestCase):
             [("C5", "Am7b5"), ("C5", "D7b9"), ("Bb4", "Gm6")]
         )
         self.assertTrue(steps)
-        self.assertFalse(any(s.partial for s in steps), [s.tab_line() for s in steps])
+        self.assertFalse(any(s.partial for s in steps), [s.voicing.tab_string() for s in steps])
 
     def test_a_full_four_note_step_is_not_flagged(self):
         step = VoiceLeadingEngine.arrange_progression(

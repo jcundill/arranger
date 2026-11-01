@@ -361,7 +361,7 @@ class TestReductionAndArranging(unittest.TestCase):
             self.assertEqual(step.chord, "D7/C")
             # The shape's bottom note is the C, or within a tone of it.
             bottom = min(step.voicing.midi_notes()) % 12
-            self.assertIn(bottom, (0, 1, 11), step.tab_line())
+            self.assertIn(bottom, (0, 1, 11), step.voicing.tab_string())
 
     def test_melody_under_no_chord_becomes_a_melody_only_step(self):
         """A note with no harmony is voiced alone, not under an invented chord."""
@@ -448,8 +448,8 @@ class TestTheHeadRequestAsOneValue(unittest.TestCase):
             BUT_NOT_FOR_ME, options=ArrangeOptions(request=request)
         )[0]
         self.assertEqual(
-            [step.tab_line() for step in keywords],
-            [step.tab_line() for step in as_object],
+            [step.voicing.tab_string() for step in keywords],
+            [step.voicing.tab_string() for step in as_object],
         )
 
     def test_the_axis_has_no_keyword_spelling(self):
@@ -751,22 +751,22 @@ class TestHeadTexture(unittest.TestCase):
                 continue
             if step.voicing.grip == "melody":
                 # Demoted: playable, and the harmony is still named above it.
-                self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
+                self.assertEqual(len(step.voicing.active_frets()), 1, step.voicing.tab_string())
                 self.assertTrue(step.chord, "a demoted target still names its harmony")
                 continue
             if step.melody is None:
                 # A generated position the tune is silent at: the guitar *comps* it, and
                 # a comping part's arity is `comping_arity` - three, because the soprano
                 # string carries nothing here and so is free for the chord.
-                self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
+                self.assertEqual(len(step.voicing.active_frets()), 3, step.voicing.tab_string())
                 continue
-            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.voicing.tab_string())
             # The whole point of the fallback: a complete chord survives only while it
             # stays inside the reach.
             self.assertLess(
                 step.voicing.fret_span(),
                 arranger.grip_tables.GRIP_MAX_SPAN["drop2"],
-                "a target is still holding a full-span stretch: " + step.tab_line(),
+                "a target is still holding a full-span stretch: " + step.voicing.tab_string(),
             )
 
     def test_the_default_is_unchanged(self):
@@ -1032,7 +1032,7 @@ class TestCompoundMetres(unittest.TestCase):
             options=ArrangeOptions(request=Request(chord_notes="targets")),
         )[0]
         self.assertEqual(
-            [step.tab_line() for step in auto], [step.tab_line() for step in explicit]
+            [step.voicing.tab_string() for step in auto], [step.voicing.tab_string() for step in explicit]
         )
 
     def test_a_grouping_that_does_not_fill_the_bar_is_refused(self):

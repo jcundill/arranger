@@ -17,8 +17,8 @@
 - **the library's own front door answers the same six questions**, asserted on the
   tab rather than on the axes, so a request built in Python is the request the
   flags build;
-- **the two spellings are one vocabulary**, held together by `cli._REQUEST_DESTS`
-  rather than by convention.
+- **the two spellings are one vocabulary**, held together by the flag-to-field
+  mapping rather than by convention.
 
 The step loop's behaviour is elsewhere; this is the request's own arithmetic and
 its refusals.
@@ -42,7 +42,7 @@ from arranger.bass_rules import (
     BASS_RULE_ROOT,
     BASS_STYLE_NONE,
 )
-from arranger.cli import _REQUEST_DESTS, HEAD_HELP, add_common_arguments
+from arranger.cli import HEAD_HELP, add_common_arguments
 from arranger.options import (
     _BASS_NOTES_ROOT_FIFTH,
     _CHORD_FILLS_HOLD,
@@ -557,37 +557,11 @@ class TestTheLibrarySpelling(unittest.TestCase):
         )
 
 
-class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
-    """`head`'s flags and `Request`'s fields are the same six questions.
-
-    The request is spelled twice - once for a command line and once for a library
-    caller - and the two are held together by `cli._REQUEST_DESTS` rather than by
-    convention. A seventh question added to one spelling and not the other is a
-    question one of the two front ends cannot ask, and nothing else would notice:
-    the flag would parse and be ignored, or the field would be unreachable from a
-    command line.
-    """
-
-    def test_the_list_names_every_field_exactly_once(self):
-        """One entry per `Request` field, and no two questions sharing a flag."""
-        fields = [field for field, _ in _REQUEST_DESTS]
-        dests = [dest for _, dest in _REQUEST_DESTS]
-        self.assertEqual(sorted(fields), sorted(Request.__dataclass_fields__))
-        self.assertEqual(len(dests), len(set(dests)))
-
-    def test_every_dest_is_a_flag_the_parser_registers(self):
-        """A flag renamed without its entry moves the dest, and shows up here."""
-        parser = argparse.ArgumentParser()
-        add_common_arguments(parser, HEAD_HELP)
-        namespace = parser.parse_args([])
-        for field, dest in _REQUEST_DESTS:
-            with self.subTest(field=field):
-                self.assertIn(dest, vars(namespace))
+class TestTheParserAcceptsEachValue(unittest.TestCase):
+    """Every value the run header prints is one the parser accepts back."""
 
     def test_every_chord_notes_value_is_one_the_parser_accepts(self):
-        """The run header prints a spelling, so the parser has to take it back.
-
-        `--chord-notes targets` is the line the header prints for a `targets` request,
+        """`--chord-notes targets` is the line the header prints for a `targets` request,
         and a vocabulary entry the parser does not offer is a request a reader can copy
         out of the output and not paste back in.
         """

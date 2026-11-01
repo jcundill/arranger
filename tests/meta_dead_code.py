@@ -68,7 +68,12 @@ def _referenced(path: Path) -> Set[str]:
 
 
 class TestNoEngineNameIsOrphaned(unittest.TestCase):
-    """Every module-level engine name has a referrer somewhere."""
+    """Every module-level name has a referrer somewhere.
+
+    Covers both the engine package (`arranger/`) and top-level modules
+    (`headxml.py`, etc.), because a dead name at either level
+    is still dead code.
+    """
 
     def test_every_top_level_name_is_referenced(self) -> None:
         referenced: Set[str] = set()
@@ -76,7 +81,7 @@ class TestNoEngineNameIsOrphaned(unittest.TestCase):
             referenced |= _referenced(path)
 
         orphans: List[str] = []
-        for path in sorted(ENGINE.glob("*.py")):
+        for path in sorted(ENGINE.glob("*.py")) + sorted(ROOT.glob("*.py")):
             for name in sorted(_defined(path)):
                 # A dunder is the language's or the packaging's rather than the engine's:
                 # `__all__` is read by `import *`, `__version__` by `pyproject.toml`.
@@ -88,7 +93,7 @@ class TestNoEngineNameIsOrphaned(unittest.TestCase):
         self.assertEqual(
             orphans,
             [],
-            "these engine names are defined and referenced nowhere: delete them, or add "
+            "these names are defined and referenced nowhere: delete them, or add "
             "the caller (or the test) that was supposed to hold them",
         )
 

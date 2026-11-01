@@ -134,11 +134,6 @@ class GuitarProTestCase(unittest.TestCase):
 class TestRoundTrip(GuitarProTestCase):
     """What the written file contains, read back out of it."""
 
-    def test_the_file_carries_a_gp5_signature(self):
-        """A file Guitar Pro will recognise begins with the format's own header."""
-        from tabgp import GP_SIGNATURE
-        self.assertTrue(self.data().startswith(GP_SIGNATURE))
-
     def test_the_key_survives_the_round_trip(self):
         """Three flats written as three flats, and the mode carried beside them.
 
@@ -452,7 +447,7 @@ class TestRhythm(GuitarProTestCase):
                            bar=1, beat=2, duration=1.0)
         beats = self.beats(steps=[first, second])
         # One beat, lasting the whole bar: guitarpro writes a whole note as 1, since
-        # the number is the denominator. See `_duration_value`.
+        # the number is the denominator.
         self.assertEqual([b.duration.value for b in beats], [1])
 
     def test_a_dotted_half_is_split_rather_than_rounded_to_a_whole_note(self):
@@ -1573,20 +1568,6 @@ class TestModuleSurface(unittest.TestCase):
         self.assertIs(arranger.write_gp5, tabgp.write_gp5)
         self.assertIn("format_gp5", arranger.__all__)
         self.assertIn("write_gp5", arranger.__all__)
-
-    def test_duration_rounding_floors_rather_than_deleting(self):
-        """A length too short to write becomes a sixteenth, not nothing.
-
-        A beat with no duration occupies no time at all, so rounding down to zero
-        would delete the note rather than shorten it.
-        """
-        from tabgp import _duration_value
-        self.assertEqual(_duration_value(1.0), 4)     # a quarter
-        self.assertEqual(_duration_value(0.5), 8)     # an eighth
-        self.assertEqual(_duration_value(0.25), 16)   # a sixteenth
-        self.assertEqual(_duration_value(0.0), 16)    # no length is not a whole note
-        self.assertEqual(_duration_value(8.0), 1)     # a whole note
-
 
 @requires_guitarpro
 class TestARingingThumbIsNotRestruck(GuitarProTestCase):

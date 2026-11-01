@@ -15,7 +15,7 @@ RUFF ?= .venv/bin/ruff
 # modules - they cannot be added one at a time and forgotten, because there is
 # nothing to add. Adding a *new top-level module* is still a two-line change here
 # and in the typecheck target below.
-MODULES = arranger tabscore.py tabstaff.py tabstaff_grid.py tabstaff_ascii.py tabstaff_html.py tabxml.py tabgp.py headxml.py headxml_cli.py headxml_model.py headxml_read.py headxml_repeats.py headxml_timeline.py tuning.py grip_chart.py tests
+MODULES = arranger tabscore.py tabstaff.py tabstaff_grid.py tabstaff_ascii.py tabstaff_html.py tabxml.py tabgp.py headxml.py headxml_cli.py headxml_model.py headxml_read.py headxml_repeats.py headxml_timeline.py tuning.py tests
 
 # The suite is two halves and one command. A test about the **music** is
 # `tests/test_*.py`; a test about the **tree** - the module graph, the budgets, the
@@ -27,7 +27,7 @@ MODULES = arranger tabscore.py tabstaff.py tabstaff_grid.py tabstaff_ascii.py ta
 FEATURE_PATTERN = test_*.py
 META_PATTERN = meta_*.py
 
-.PHONY: help install install-extra install-extra-gp install-dev test test-features test-meta test-one typecheck lint format check demo build clean chart chart-audit
+.PHONY: help install install-extra install-extra-gp install-dev test test-features test-meta test-one typecheck lint format check demo build clean
 
 help:
 	@echo "Available targets:"
@@ -42,8 +42,6 @@ help:
 	@echo "  make format    Reformat the tree with ruff"
 	@echo "  make check     lint + typecheck + test - what CI runs, what a change must pass"
 	@echo "  make demo      Run the built-in demonstration arrangements"
-	@echo "  make chart     Regenerate common_grips.md from the engine's tables"
-	@echo "  make chart-audit  Check common_grips.md against those tables"
 	@echo "  make build     Build a wheel into dist/ (no extra tooling required)"
 	@echo "  make clean     Remove caches and build artefacts"
 	@echo ""
@@ -111,16 +109,6 @@ check: lint typecheck test
 
 demo:
 	$(PYTHON) -m arranger
-
-# The drop-2 shape chart is generated from the engine's own tables, never written
-# by hand: a hand-written chart is what this replaced, and its fret numbers
-# disagreed with its own labels. `chart-audit` is the check that would have caught
-# it, and it is cheap enough to run after any change to the voicing tables.
-chart:
-	$(PYTHON) grip_chart.py --write common_grips.md
-
-chart-audit:
-	$(PYTHON) grip_chart.py --audit common_grips.md
 
 build:
 	$(PYTHON) -m pip wheel . -w dist --no-deps

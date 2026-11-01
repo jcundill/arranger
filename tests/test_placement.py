@@ -410,7 +410,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         found = search_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
-        self.assertEqual(found.active_strings, [3, 4, 5])
+        self.assertEqual([i for i, f in enumerate(found.frets) if f >= 0], [3, 4, 5])
 
     def test_a_shape_cannot_sound_strings_the_tables_never_offered(self):
         """`supported_string_sets()` is enforced where the frets are, not only in the table.

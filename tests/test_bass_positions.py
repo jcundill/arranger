@@ -194,7 +194,7 @@ class TestTheStepsCarryTheLine(unittest.TestCase):
             request=Request(chord_on="none", bass_on="every-beat", bass_notes="root"),
         )
         rings = [step for step in steps if step.bass is not None]
-        self.assertEqual(len(rings), 4, [step.tab_line() for step in steps])
+        self.assertEqual(len(rings), 4, [step.voicing.tab_string() for step in steps])
 
     def test_a_waltz_bar_carries_three(self):
         from tests.support import WALTZ

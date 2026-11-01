@@ -819,11 +819,11 @@ class TestNoRegression(unittest.TestCase):
         # are defined once; a second copy of the literals is a second thing to forget
         # to update, and it is how a stale pin survives a deliberate change.
         self.assertEqual(
-            [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
+            [s.voicing.tab_string() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
             minor_cadence_tabs(),
         )
         self.assertEqual(
-            [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
+            [s.voicing.tab_string() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
             major_cadence_tabs(),
         )
 

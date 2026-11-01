@@ -144,10 +144,8 @@ class TestTheFrontEndDag(unittest.TestCase):
         offenders: List[str] = []
         for name in FRONT_ENDS:
             module = Path(name).stem
-            # `headxml` names the facade's public surface directly; `grip_chart`
-            # is a standalone chart-generator script (not imported as a library)
-            # that legitimately reads the engine's grip tables to build the chart.
-            if module in ("headxml", "grip_chart"):
+            # `headxml` names the facade's public surface directly.
+            if module == "headxml":
                 continue
             for imported in _arranger_imports(ROOT / name):
                 sub = imported.split(".", 1)[1]

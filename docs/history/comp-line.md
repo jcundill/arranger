@@ -312,7 +312,7 @@ leaves the count at ten either way with no top moved.
 Every move is a 2nd, a 3rd or a 4th (one 5th). Bar 1 walks the Dm7, bar 2 rises through the G13,
 bar 3 falls through the Cmaj7, bar 4 rises through the C6 — and the **inversion changes with the
 top**, because choosing the top tone is choosing the inversion (the bass follows from the search,
-and `common_grips.md`'s rule — the inversion is named by the bass — still holds).
+and the inversion-is-named-by-the-bass rule still holds).
 
 The same rules at two stabs a bar, and as the Charleston, keep the line:
 

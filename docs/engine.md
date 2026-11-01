@@ -20,7 +20,7 @@ not the map.
   only — no grip puts the soprano on them — so the melody floor is `G3`.
 - `step_types` — `Voicing` (frets, top_fret, avg_fret, grip, bass_pc, role,
   bass_midi, bass_string, plus `tab_string()`, `tab_block()`, `tab()`,
-  `active_frets()`, `fret_span()`, `midi_notes()`, `pitch_classes()`,
+  `active_frets()`, `fret_span()`, `midi_notes()`,
   `soprano_string()`, `upper_midi_notes()`) and `ArrangementStep` (chord, melody,
   voicing, non_chord_tone, strategy, harmonized_as, melody_only, chord_unvoiced,
   original_melody, bar, beat, duration, repeated, partial, palette, role,
@@ -41,23 +41,23 @@ not the map.
   `SHELL_DEGREES`, `COMPING_MAX_SPAN`, `COMPING_EXCLUDED_STRINGS`,
   `comping_string_sets`, `stated_tones`.
 - `grips` — the builders and candidate generators: `get_drop2_voicings`,
-  `get_grip_voicings`, `get_all_grip_voicings`, `get_interval_voicings`,
+  `get_grip_voicings`, `get_all_grip_voicings`,
   `get_octave_down_candidates`, `get_melody_only_voicings`,
-  `get_melody_only_voicing`, `get_comping_voicings`,
+  `get_comping_voicings`,
   `get_comping_voicings_for`, `sustain_inner_voices`, `CompingRequest`,
   `BASS_DEGREES_6432`.
 - `grip_place` — `search_shape`, `_searched_shape`, `place_shape`,
   `place_template`, `snapshot`, `sounds_distinct_pitches`, `frets_in_span`,
   `frets_in_band`, `Placement`, `ShapeSnapshot`.
 - `grips` — the builders and candidate generators: `get_drop2_voicings`,
-  `get_grip_voicings`, `get_all_grip_voicings`, `get_interval_voicings`,
+  `get_grip_voicings`, `get_all_grip_voicings`,
   `get_octave_down_candidates`, `get_melody_only_voicings`,
-  `get_melody_only_voicing`, `get_comping_voicings`,
+  `get_comping_voicings`,
   `get_comping_voicings_for`, `sustain_inner_voices`, `CompingRequest`.
 - `cost` — `voicing_cost`, `SelectionCriteria`, `best_voicing_for`,
   `VoicingScore` (7 fields: `foreign`, `outside`, `missing`, `span`, `position`,
   `movement`, `bass`), `VOICING_COST_CRITERIA`, `_CRITERION_LABELS`,
-  `calculate_voice_leading_distance`, `calculate_pitch_leading_distance`.
+  `calculate_pitch_leading_distance`.
 - `annotation` — `step_annotation`, `melody_degree_label`, `_silence_clause`,
   `_shape_clause`, `_window_clause`, `_omission_clause`, `_sounding_clause`,
   `_comp_line_clause`, `_comping_clause`, `_bass_annotation`.
@@ -156,8 +156,8 @@ is worse than a fret out of position.
 ## The request and the axes
 
 A caller asks six questions; `options.Request` holds them as one value, spelled
-twice: by `head`'s flags and by `Request(...)` on `arrange_progression`. `cli._REQUEST_DESTS`
-binds the two spellings; `tests/test_request.py` asserts they match.
+twice: by `head`'s flags and by `Request(...)` on `arrange_progression`. `tests/test_request.py`
+asserts the two spellings match.
 
 | question | flag | `Request(...)` | axis |
 |---|---|---|---|

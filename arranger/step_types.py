@@ -112,10 +112,6 @@ class Voicing:
                 midis.append(GuitarFretboard.fret_to_midi(s_idx, f))
         return midis
 
-    def pitch_classes(self) -> List[int]:
-        """Calculates pitch classes (0-11) of the active notes."""
-        return [m % 12 for m in self.midi_notes()]
-
     def soprano_string(self) -> int:
         """
         Returns the index of the highest sounding string (0 = low E ... 5 = high E).
@@ -126,30 +122,6 @@ class Voicing:
         """
         active = [s_idx for s_idx, f in enumerate(self.frets) if f >= 0]
         return max(active) if active else -1
-
-    @property
-    def active_strings(self) -> List[int]:
-        """
-        The indices of the strings that sound, in ascending (low to high) order.
-
-        This is the shape of the grip: two to four strings, all of them from one
-        GRIP_STRING_SETS entry. It is what a caller checks when it wants to know
-        whether a voicing really is the shape it claims to be.
-        """
-        return [s_idx for s_idx, f in enumerate(self.frets) if f >= 0]
-
-    @property
-    def fret_on_soprano(self) -> int:
-        """
-        The fret under the highest sounding string, or -1 when all strings are muted.
-
-        Compared against another voicing's this measures *neck position*, which is the
-        thing a player has to travel: fret numbers mean the same place on the neck
-        whichever string they are on, so this stays meaningful when a melody holds its
-        place by moving to a different string.
-        """
-        soprano = self.soprano_string()
-        return -1 if soprano < 0 else self.frets[soprano]
 
     # Backward compatibility: dictionary-like indexing voicing["frets"]
     def __getitem__(self, item: str) -> Any:
@@ -283,10 +255,6 @@ class ArrangementStep:
     @property
     def has_timing(self) -> bool:
         return self.bar is not None and self.beat is not None
-
-    def tab_line(self) -> str:
-        """Returns the one-line tab for this step, e.g. 'x-x-12-13-13-13'."""
-        return self.voicing.tab_string()
 
     def tab_block(self) -> List[str]:
         """Returns the six-line vertical tab for this step's voicing."""

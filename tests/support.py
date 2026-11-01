@@ -42,10 +42,9 @@ from arranger.grip_tables import SHELL_DEGREES
 from arranger.options import ArrangeOptions, Request
 from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
 
-#: The library's top-level modules: the shared score core, the renderers, the
-#: importer and the grip-chart generator. Shared by `meta_structure` (which budgets
-#: them) and `meta_front_end_dag` (which holds their imports to the facade rule), so
-#: the two lists cannot drift apart.
+#: The library's top-level modules: the shared score core, the renderers and the
+#: importer. Shared by `meta_structure` (which budgets them) and `meta_front_end_dag`
+#: (which holds their imports to the facade rule), so the two lists cannot drift apart.
 FRONT_ENDS = (
     "tabscore.py",
     "tabstaff.py",
@@ -55,7 +54,6 @@ FRONT_ENDS = (
     "tabxml.py",
     "tabgp.py",
     "headxml.py",
-    "grip_chart.py",
 )
 
 #: The committed MusicXML fixtures. Defined once because four test modules build paths

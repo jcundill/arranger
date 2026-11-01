@@ -230,7 +230,6 @@ class TestLoading(unittest.TestCase):
         """Melody under no harmony is melody alone, not a guessed chord."""
         head = self.load(note("E") + harmony("C", "major") + note("G"))
         self.assertEqual(head.notes[0].chord, NO_CHORD)
-        self.assertTrue(head.notes[0].is_no_chord)
         self.assertEqual(head.notes[1].chord, "Cmaj")
 
     def test_cut_time_places_beats_in_the_notated_beat(self):

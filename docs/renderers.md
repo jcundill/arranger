@@ -134,7 +134,7 @@ The reason is cost, plus one hard failure. Measured on the tree:
 
 So "the dependency is one-way" is the rule for the four rendering modules, and "no
 package module imports a front end at module scope" is the rule for the two that
-name the facade (`headxml`, `grip_chart`). `demo.main()`'s and `cli`'s imports are
+name the facade (`headxml`). `demo.main()`'s and `cli`'s imports are
 function-local for both reasons at once, and the two directions still do not
 deadlock: the front ends need only `tuning`, so neither side waits for the other.
 [docs/dependency-dag.md](dependency-dag.md) has the full table, and
@@ -474,11 +474,7 @@ property of the run rather than of the file, and the exact grouping is lost when
 arrangement is written out and read back. The importer can read the fact; the writers do
 not preserve the channel that stated it.
 
-A generated comping bar does read it, though: `headxml._bar_resolution`
-offers a **group-length** candidate ahead of the beat, so a 12/8 bar written in four
-dotted quarters generates four positions rather than twelve. The beat remains the
-fallback for a bar mixing subdivisions that no single finer resolution holds, so a busy
-bar is still generated on its beats rather than on an arbitrary one of them.
+A generated comping bar still generates on its beats rather than on an arbitrary one of them.
 
 ### What the staff's timing rows are, and what they are not
 
@@ -925,7 +921,7 @@ MusicXML score, and it is **not a replacement for MusicXML** — see below.
 | `_build_song` | the guitarpro `Song` |
 | `_duration_split` | a quarter-length to the `Duration` + `Tuplet` that sum to it |
 | `_sounding_frets` | which strings a step plays; a repeated melody is one note |
-| `GP_VERSION` / `GP_SIGNATURE` | `(5, 1, 0)` and the file header it writes |
+| `GP_VERSION` | `(5, 1, 0)` |
 
 **Why a third renderer rather than a replacement.** GP5 is a *tab* format, so it
 stores a fret and a string per note natively and a shape survives the round trip

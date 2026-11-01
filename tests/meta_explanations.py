@@ -550,7 +550,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
                         if when(step) and not witness(step):
                             missing.append(
                                 f"{head.split('/')[-1]} {config} {step.chord} "
-                                f"{step.melody} {step.tab_line()}: {label}"
+                                f"{step.melody} {step.voicing.tab_string()}: {label}"
                             )
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
@@ -786,7 +786,7 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
                         continue
                     checked += 1
                     self.assertIsNotNone(
-                        step.palette, f"{head.split('/')[-1]} {config} {step.tab_line()}"
+                        step.palette, f"{head.split('/')[-1]} {config} {step.voicing.tab_string()}"
                     )
                     assert step.palette is not None
                     # The walk may have merged a thumb into this step, which is a second

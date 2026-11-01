@@ -2,13 +2,13 @@
 
 This module is the class the library spells `VoiceLeadingEngine.get_drop2_voicings`
 and the test suite's call sites depend on. Every method is a one-line forwarder to
-the module that owns the body - `grips`, `cost`, `chords`, `bass_merge`, and, for
-the two entry points, `movement` and `step_prepare`.
+the module that owns the body - `grips`, `cost`, `chords`, `bass_merge`,
+and, for the entry point, `movement`.
 
 **The step loop is not here** - it is in `movement`, which imports this module's
 collaborators directly and does not import this module. `arrange_progression` below
-forwards to it and `prepare_step` to `step_prepare`, so the published spelling is
-unchanged and there is one loop rather than two.
+forwards to it, so the published spelling is unchanged and there is one loop rather
+than two.
 
 `StepPreparation` is re-exported for the same reason: it is the value
 `prepare_step` returns, and callers reach it as `arranger.steps.StepPreparation`.
@@ -23,10 +23,6 @@ from musthe import Note
 from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
-from .bass_merge import attach_bass
-from .bass_place import (
-    BassNote,
-)
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
@@ -43,10 +39,7 @@ from .movement import (
     arrange_progression,
 )
 from .options import DEFAULT_REQUEST, ArrangeOptions, Request
-from .step_prepare import (
-    StepPreparation,
-    prepare_step,
-)
+from .step_prepare import StepPreparation
 from .step_types import ArrangementStep, Voicing
 from .tuning import (
     NECK_FRET_MAX,
@@ -129,18 +122,6 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
-    def get_interval_voicings(
-        cls,
-        melody_note: Note,
-        chord_name: str,
-        top_string: int = 5,
-    ) -> List[Voicing]:
-        """See `grips.get_interval_voicings`."""
-        return _grips.get_interval_voicings(
-            melody_note, chord_name=chord_name, top_string=top_string
-        )
-
-    @classmethod
     def get_octave_down_candidates(
         cls,
         melody_note: Note,
@@ -173,18 +154,6 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
-    def get_all_drop2_voicings(
-        cls,
-        melody_note: Note,
-        chord_name: str,
-        top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES,
-    ) -> List[Voicing]:
-        """See `grips.get_all_drop2_voicings`."""
-        return _grips.get_all_drop2_voicings(
-            melody_note, chord_name=chord_name, top_strings=top_strings
-        )
-
-    @classmethod
     def get_melody_only_voicings(
         cls,
         melody_note: Note,
@@ -192,15 +161,6 @@ class VoiceLeadingEngine:
     ) -> List[Voicing]:
         """See `grips.get_melody_only_voicings`."""
         return _grips.get_melody_only_voicings(melody_note, prefer)
-
-    @classmethod
-    def get_melody_only_voicing(
-        cls,
-        melody_note: Note,
-        prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
-    ) -> Optional[Voicing]:
-        """See `grips.get_melody_only_voicing`."""
-        return _grips.get_melody_only_voicing(melody_note, prefer)
 
     @classmethod
     def sustain_inner_voices(
@@ -247,29 +207,6 @@ class VoiceLeadingEngine:
         """
         return _cost.voicing_cost(voicing, criteria)
 
-    @classmethod
-    def _best_voicing(
-        cls,
-        candidates: List[Voicing],
-        previous: Optional[Voicing] = None,
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-        allowed_tones: Optional[Container[int]] = None,
-        root_pc: Optional[int] = None,
-        melody_pc: Optional[int] = None,
-    ) -> Optional[Voicing]:
-        """See `cost.best_voicing`."""
-        return _cost.best_voicing(
-            candidates, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
-        )
-
-    @staticmethod
-    def calculate_voice_leading_distance(
-        voicing_a: Voicing | dict, voicing_b: Voicing | dict
-    ) -> float:
-        """See `cost.calculate_voice_leading_distance`."""
-        return _cost.calculate_voice_leading_distance(voicing_a, voicing_b)
-
     @staticmethod
     def calculate_pitch_leading_distance(
         voicing_a: Voicing | dict, voicing_b: Voicing | dict
@@ -277,43 +214,7 @@ class VoiceLeadingEngine:
         """See `cost.calculate_pitch_leading_distance`."""
         return _cost.calculate_pitch_leading_distance(voicing_a, voicing_b)
 
-    # --- the two entry points: forwarded to `movement`, which owns the loop ---
-
-    @classmethod
-    def attach_bass(
-        cls,
-        step: ArrangementStep,
-        note: Optional[BassNote],
-        arrangements: List[ArrangementStep],
-    ) -> None:
-        """See `bass_merge.attach_bass` - the full docstring is there."""
-        return attach_bass(step, note, arrangements)
-
-    @classmethod
-    def prepare_step(
-        cls,
-        progression: Sequence[Tuple[Optional[str], str]],
-        index: int,
-        previous: Optional[Voicing] = None,
-        previous_chord: Optional[str] = None,
-        top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
-        non_chord_tone: str = "extension",
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-        grips: Tuple[str, ...] = GRIP_PREFERENCE,
-    ) -> Optional[StepPreparation]:
-        """See `step_prepare.prepare_step` - the full docstring is there."""
-        return prepare_step(
-            progression,
-            index,
-            previous,
-            previous_chord,
-            top_strings,
-            non_chord_tone,
-            fret_min,
-            fret_max,
-            grips,
-        )
+    # --- the entry point: forwarded to `movement`, which owns the loop ---
 
     @classmethod
     def arrange_progression(

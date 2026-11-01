@@ -11,7 +11,6 @@ from arranger import (
     beat_offset,
     default_grouping,
     format_grouping,
-    grid_resolutions,
     group_starts,
     parts_has_melody_only,
     parts_have_chord,
@@ -292,52 +291,6 @@ def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
     slot still carries the note's own float beat, and only the *lookup* is rounded.
     """
     return (bar, round(beat * TICKS_PER_BEAT))
-
-
-def _bar_resolution(
-    head: Head, bar: int, beat_type: int, grouping: Optional[Sequence[int]] = None
-) -> int:
-    """The coarsest subdivision of a beat that holds every note this bar's melody writes.
-
-    The bar's own rhythm is the grid it is generated on, which is what makes a generated
-    chord land where the tune is: a bar of sixteenths is subdivided at sixteenths, an
-    eighth-note-triplet bar at triplets, and a bar whose tune is all on the beat at beats.
-    `grid_resolutions` is the vocabulary, converted through the metre - so no bar is ever
-    generated finer than a sixteenth note however busy its tune reads.
-
-    **The fallback is the beat, and it is a real answer rather than a failure.** A bar
-    mixing a sixteenth with a triplet has no single resolution that divides both, and
-    generating on its beats is what a player does under a line that busy. A bar with no
-    melody at all has nothing to fit and so takes the beat too, which is the rule
-    `chord_slots` has always followed for a bar the tune never enters.
-    """
-    onsets = [
-        round((note.beat - 1.0) * TICKS_PER_BEAT)
-        for note in head.notes
-        if note.bar == bar
-    ]
-    resolutions = grid_resolutions(beat_type)
-    # **A group is a candidate only when it divides the bar.** A 12/8 bar's generated
-    # positions are its dotted-quarter pulses when the tune is written on them, which
-    # is the coarsest reading of the bar's own rhythm; a mixed grouping (3+2) does not
-    # divide the bar, so it is not offered and the beat remains the fallback. The
-    # fallback stays `resolutions[0]` - the beat - rather than a group, so a bar mixing
-    # a sixteenth with a triplet is still generated on its beats.
-    group_ticks = TICKS_PER_BEAT * grouping[0] if grouping else 0
-    span = head.beats_per_bar * TICKS_PER_BEAT
-    coarse: Tuple[int, ...] = (
-        (group_ticks,)
-        if group_ticks > TICKS_PER_BEAT and span % group_ticks == 0
-        else ()
-    )
-    return next(
-        (
-            resolution
-            for resolution in coarse + resolutions
-            if all(onset % resolution == 0 for onset in onsets)
-        ),
-        resolutions[0],
-    )
 
 
 def _generated_beats(

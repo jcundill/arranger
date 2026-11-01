@@ -27,6 +27,7 @@ from arranger.grip_tables import (
 from arranger.grips import (
     _LAYOUT_GRIPS,
     _SEARCHED_GRIPS,
+    get_all_grip_voicings,
     string_sets_for,
 )
 from arranger.tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
@@ -227,7 +228,7 @@ class TestStringSetTable(unittest.TestCase):
                         upper = sorted(v.midi_notes())
                         if upper[-1] - upper[0] < 12:
                             continue
-                        ninths.add((chord_name, melody, tuple(v.active_strings)))
+                        ninths.add((chord_name, melody, tuple([i for i, f in enumerate(v.frets) if f >= 0])))
         self.assertTrue(
             any(tuple(sorted(pair)) == (1, 3) for _, _, pair in ninths),
             f"the skipped pair voiced no 9th; saw {sorted({p for _, _, p in ninths})}",
@@ -288,7 +289,7 @@ class TestStringSetTable(unittest.TestCase):
                 Note(melody), chord_name=chord_name,
                 top_string=3, grips=("shell",),
             )
-            if v.active_strings == [0, 2, 3]
+            if [i for i, f in enumerate(v.frets) if f >= 0] == [0, 2, 3]
         ]
         self.assertTrue(found, "no 6-4-3 shell is reachable anywhere")
 
@@ -334,7 +335,7 @@ class TestStringSetTable(unittest.TestCase):
                         continue
                     self.assertLessEqual(
                         len(step.voicing.active_frets()), 3,
-                        f"{chord_name} {melody} -> {step.tab_line()}",
+                        f"{chord_name} {melody} -> {step.voicing.tab_string()}",
                     )
 
 
@@ -395,8 +396,8 @@ class TestFretWindow(unittest.TestCase):
         )
         for step in steps:
             for fret in step.voicing.active_frets():
-                self.assertGreaterEqual(fret, NECK_FRET_MIN, step.tab_line())
-                self.assertLessEqual(fret, NECK_FRET_MAX, step.tab_line())
+                self.assertGreaterEqual(fret, NECK_FRET_MIN, step.voicing.tab_string())
+                self.assertLessEqual(fret, NECK_FRET_MAX, step.voicing.tab_string())
 
     def test_a_melody_off_the_end_of_the_board_is_emitted_silent(self):
         """
@@ -421,7 +422,7 @@ class TestFretWindow(unittest.TestCase):
         self.assertTrue(steps)
         for step in steps:
             for fret in step.voicing.active_frets():
-                self.assertLessEqual(fret, 4, step.tab_line())
+                self.assertLessEqual(fret, 4, step.voicing.tab_string())
 
 
 class TestKnownTableGaps(unittest.TestCase):
@@ -447,10 +448,8 @@ class TestKnownTableGaps(unittest.TestCase):
         tones = set(ChordParser.get_chord_tones("C13"))
         impure = [
             v
-            for v in self.engine.get_all_drop2_voicings(
-                Note("D5"), chord_name="C13"
-            )
-            if not set(v.pitch_classes()) <= tones
+            for v in get_all_grip_voicings(Note("D5"), chord_name="C13", grips=("drop2",))
+            if not {m % 12 for m in v.midi_notes()} <= tones
         ]
         # The gap this class existed to pin has closed - and closed for every chord tone,
         # not just this one melody: the tone-priority rule builds the shape for a 9th in
@@ -462,9 +461,7 @@ class TestKnownTableGaps(unittest.TestCase):
             impure,
             f"the 13-chord 9th gap reopened: {[v.tab_string() for v in impure]}",
         )
-        for v in self.engine.get_all_drop2_voicings(
-            Note("D5"), chord_name="C13"
-        ):
+        for v in get_all_grip_voicings(Note("D5"), chord_name="C13", grips=("drop2",)):
             self.assertEqual(
                 self.engine.voicing_cost(
                     v, SelectionCriteria(allowed_tones=tones)
@@ -485,12 +482,10 @@ class TestKnownTableGaps(unittest.TestCase):
         tested, so both are asserted present.
         """
         tones = set(ChordParser.get_chord_tones("C13"))
-        candidates = self.engine.get_all_drop2_voicings(
-            Note("D5"), chord_name="C13"
-        )
+        candidates = get_all_grip_voicings(Note("D5"), chord_name="C13", grips=("drop2",))
         # Every one is a correct voicing of C13 - that is the point of the fix - and they
         # differ in where they sit, so this still has both pools to rank.
-        pure = [v for v in candidates if set(v.pitch_classes()) <= tones]
+        pure = [v for v in candidates if {m % 12 for m in v.midi_notes()} <= tones]
         self.assertEqual(len(pure), len(candidates), "a C13 shape is still sounding a wrong note")
         self.assertGreaterEqual(len(pure), 2, "need at least two shapes to rank them")
         # Position is now the only thing separating them, and the criterion under test
@@ -523,8 +518,8 @@ class TestKnownTableGaps(unittest.TestCase):
                     [(melody, chord_name)]
                 ):
                     self.assertTrue(
-                        set(step.voicing.pitch_classes()) <= tones,
-                        f"{chord_name} {melody} -> {step.tab_line()}",
+                        {m % 12 for m in step.voicing.midi_notes()} <= tones,
+                        f"{chord_name} {melody} -> {step.voicing.tab_string()}",
                     )
 
 
@@ -533,13 +528,13 @@ class TestVoicingAccessors(unittest.TestCase):
 
     def test_active_strings_and_soprano_fret(self):
         v = Voicing(frets=[-1, 10, 10, 10, 10, -1], top_fret=10, avg_fret=10.0)
-        self.assertEqual(v.active_strings, [1, 2, 3, 4])
+        self.assertEqual([i for i, f in enumerate(v.frets) if f >= 0], [1, 2, 3, 4])
         self.assertEqual(v.soprano_string(), 4)
-        self.assertEqual(v.fret_on_soprano, 10)
+        self.assertEqual(v.frets[v.soprano_string()] if v.soprano_string() >= 0 else -1, 10)
 
     def test_a_muted_voicing_reports_nothing_sounding(self):
         v = Voicing(frets=[-1] * 6, top_fret=0, avg_fret=0.0)
         self.assertEqual(v.soprano_string(), -1)
-        self.assertEqual(v.fret_on_soprano, -1)
+        self.assertEqual(v.frets[v.soprano_string()] if v.soprano_string() >= 0 else -1, -1)
         self.assertEqual(v.fret_span(), 0)
         self.assertIsNone(v.bass_pc)

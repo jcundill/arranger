@@ -58,6 +58,7 @@ from arranger.grip_tables import (
 )
 from arranger.grips import (
     _interval_offsets,
+    get_grip_voicings,
 )
 from arranger.grouping import COMMON_TIME
 from arranger.options import CHORD_NOTES, CHORD_NOTES_FULL, ArrangeOptions
@@ -340,7 +341,7 @@ class TestRoles(unittest.TestCase):
         for step in steps:
             if step.role == ROLE_TARGET:
                 self.assertLessEqual(
-                    grip_pluck_count(step.grip), RIGHT_HAND_STRINGS - 1, step.tab_line()
+                    grip_pluck_count(step.grip), RIGHT_HAND_STRINGS - 1, step.voicing.tab_string()
                 )
 
     def test_a_uniform_texture_offers_the_whole_family_set(self):
@@ -456,7 +457,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         )
         self.assertTrue(steps, "the arrangement must not be lost")
         for step in steps:
-            self.assertEqual(step.grip, "melody", step.tab_line())
+            self.assertEqual(step.grip, "melody", step.voicing.tab_string())
 
     def test_a_fill_may_reach_the_entries_that_are_not_grips(self):
         """
@@ -507,17 +508,17 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         )
         self.assertEqual(len(steps), 1)
         step = steps[0]
-        self.assertIn(step.voicing.grip, ("drop3", "drop2", "closed", "melody", "drop2_6432"), step.tab_line())
+        self.assertIn(step.voicing.grip, ("drop3", "drop2", "closed", "melody", "drop2_6432"), step.voicing.tab_string())
         self.assertEqual(step.chord, "Ebmaj")
         self.assertEqual(max(step.voicing.midi_notes()), Note("G4").midi_note())
         if step.voicing.grip == "melody":
             self.assertEqual(step.voicing.fret_span(), 0)
         else:
             # A complete chord, and every note is a tone of Ebmaj.
-            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.voicing.tab_string())
             tones = {t % 12 for t in ChordParser.get_chord_tones("Ebmaj")}
             self.assertLessEqual(
-                {p % 12 for p in step.voicing.midi_notes()}, tones, step.tab_line()
+                {p % 12 for p in step.voicing.midi_notes()}, tones, step.voicing.tab_string()
             )
 
     def test_a_playable_target_is_never_demoted(self):
@@ -562,7 +563,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     so four strings is the most that can sound at once. That is the same four
     `supported_string_sets()` states, and it states it for a **voicing**: a step is the
     thing the renderers print, and the thumb note is merged into the step *after*
-    selection (`VoiceLeadingEngine.attach_bass`), so no check ever saw the two together.
+    selection (`bass_merge.attach_bass`), so no check ever saw the two together.
     A four-note target on a strong beat with a bass note placed under it is five
     simultaneous plucks - one more hand than a player has. The counts are in
     [docs/history/open-issues.md](../docs/history/open-issues.md) item 2.
@@ -704,12 +705,12 @@ class TestTheRightHandBudget(unittest.TestCase):
         checked = 0
         for step in steps:
             sounding = [fret for fret in step.voicing.frets if fret >= 0]
-            self.assertLessEqual(len(sounding), RIGHT_HAND_STRINGS, step.tab_line())
+            self.assertLessEqual(len(sounding), RIGHT_HAND_STRINGS, step.voicing.tab_string())
             if step.role == ROLE_TARGET and step.voicing.bass_string is not None:
                 self.assertLessEqual(
                     grip_pluck_count(step.voicing.grip),
                     RIGHT_HAND_STRINGS - 1,
-                    f"{step.tab_line()} spends every finger on the chord",
+                    f"{step.voicing.tab_string()} spends every finger on the chord",
                 )
                 checked += 1
         self.assertGreater(checked, 0, "no target carried a bass, so nothing was tested")
@@ -795,11 +796,11 @@ class TestBackwardCompatibility(unittest.TestCase):
         wrong notes instead of flagging them.
         """
         self.assertEqual(
-            [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
+            [s.voicing.tab_string() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
             minor_cadence_tabs(),
         )
         self.assertEqual(
-            [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
+            [s.voicing.tab_string() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
             major_cadence_tabs(),
         )
         # Three of the four moved, all for the same reason: `drop3` and `drop24` are in
@@ -846,7 +847,7 @@ class TestBackwardCompatibility(unittest.TestCase):
                 ),
             )
         self.assertEqual(
-            [s.tab_line() for s in steps],
+            [s.voicing.tab_string() for s in steps],
             [
                 "x-x-7-9-6-8",
                 "x-x-7-9-x-8",
@@ -885,7 +886,7 @@ class TestBackwardCompatibility(unittest.TestCase):
                 ),
             )
         self.assertEqual(
-            [s.tab_line() for s in steps],
+            [s.voicing.tab_string() for s in steps],
             [
                 "x-x-7-9-6-8",
                 "x-x-7-9-6-8",
@@ -951,7 +952,7 @@ class TestBackwardCompatibility(unittest.TestCase):
                 time_signature=COMMON_TIME
             )
         self.assertEqual(
-            [s.tab_line() for s in plain], [s.tab_line() for s in explicit]
+            [s.voicing.tab_string() for s in plain], [s.voicing.tab_string() for s in explicit]
         )
 
     def test_an_unknown_texture_raises_before_any_voicing_work(self):
@@ -1155,7 +1156,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         for step in self.arrange(self.MELODY_ALONE):
             self.assertEqual(len(step.voicing.active_frets()), 1)
             self.assertIn(
-                frozenset(step.voicing.active_strings),
+                frozenset([i for i, f in enumerate(step.voicing.frets) if f >= 0]),
                 supported_string_sets(),
                 "a solo note must be one of the singleton sets",
             )
@@ -1254,8 +1255,8 @@ class TestTargetsTexture(unittest.TestCase):
                 # two textures need not agree - a target is voice-led from the shape
                 # before it, which is thinner, and a different string set can follow
                 # from that. What must hold is that a target never drops below four notes.
-                self.assertIn(thin.grip, FOUR_NOTE_GRIPS, thin.tab_line())
-                self.assertIn(plain.grip, FOUR_NOTE_GRIPS, plain.tab_line())
+                self.assertIn(thin.grip, FOUR_NOTE_GRIPS, thin.voicing.tab_string())
+                self.assertIn(plain.grip, FOUR_NOTE_GRIPS, plain.voicing.tab_string())
 
     def test_a_weak_beat_never_sounds_a_note_outside_the_chord(self):
         """
@@ -1277,7 +1278,7 @@ class TestTargetsTexture(unittest.TestCase):
                 )
             )
             harmony = tones | {max(step.voicing.midi_notes()) % 12}
-            for pc in step.voicing.pitch_classes():
+            for pc in {m % 12 for m in step.voicing.midi_notes()}:
                 self.assertIn(pc, harmony, f"{step.chord} under {step.melody}")
         self.assertGreater(checked, 0, "the fixture must contain fills")
 
@@ -1290,10 +1291,10 @@ class TestTargetsTexture(unittest.TestCase):
         """
         for step in self.steps:
             voicing = step.voicing
-            self.assertIn(frozenset(voicing.active_strings), supported_string_sets())
+            self.assertIn(frozenset([i for i, f in enumerate(voicing.frets) if f >= 0]), supported_string_sets())
             self.assertLessEqual(voicing.fret_span(), GRIP_MAX_SPAN[voicing.grip])
             # The melody is on the soprano string and is the highest note sounding.
-            self.assertEqual(voicing.soprano_string(), voicing.active_strings[-1])
+            self.assertEqual(voicing.soprano_string(), [i for i, f in enumerate(voicing.frets) if f >= 0][-1])
             for fret in voicing.active_frets():
                 self.assertTrue(0 <= fret <= 18)
 
@@ -1380,15 +1381,13 @@ class TestIntervalGrip(unittest.TestCase):
         checked = 0
         for _quality, name in self.QUALITIES:
             for melody in ("C5", "E5", "A4", "G4", "B4"):
-                for voicing in VoiceLeadingEngine.get_interval_voicings(
-                    Note(melody), chord_name=name
-                ):
+                for voicing in get_grip_voicings(Note(melody), chord_name=name, grips=("interval",)):
                     checked += 1
                     active = voicing.active_frets()
                     self.assertEqual(len(active), 2, f"{name} under {melody}")
                     self.assertLessEqual(voicing.fret_span(), 4)
                     self.assertIn(
-                        frozenset(voicing.active_strings), supported_string_sets()
+                        frozenset([i for i, f in enumerate(voicing.frets) if f >= 0]), supported_string_sets()
                     )
                     self.assertEqual(voicing.grip, "interval")
                     # The melody is the higher of the two notes.
@@ -1406,9 +1405,7 @@ class TestIntervalGrip(unittest.TestCase):
         allowed = {3, 8, 9}
         for _quality, name in self.QUALITIES:
             for melody in ("C5", "A4", "G4"):
-                for voicing in VoiceLeadingEngine.get_interval_voicings(
-                    Note(melody), chord_name=name
-                ):
+                for voicing in get_grip_voicings(Note(melody), chord_name=name, grips=("interval",)):
                     low, high = sorted(voicing.midi_notes())
                     self.assertIn((high - low) % 12, allowed, f"{name} under {melody}")
 
@@ -1483,7 +1480,7 @@ class TestIntervalGrip(unittest.TestCase):
         to measure from either.
         """
         with self.assertRaises(ValueError):
-            VoiceLeadingEngine.get_interval_voicings(Note("C5"), chord_name="maj7")
+            get_grip_voicings(Note("C5"), chord_name="maj7", grips=("interval",))
 
     def test_offsets_are_empty_rather_than_guessed_for_an_unknown_quality(self):
         """A quality with no tone set yields no intervals at all."""
@@ -1623,7 +1620,7 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
                         step.voicing.soprano_string(),
                         previous.voicing.soprano_string(),
                         f"{path} bar {step.bar} beat {step.beat}: the hold of "
-                        f"{step.melody} re-struck on another string ({step.tab_line()})",
+                        f"{step.melody} re-struck on another string ({step.voicing.tab_string()})",
                     )
         # The corpus is deliberately shorter than the retired transcriptions, so
         # the premise is that both kinds of hold are exercised, not an old

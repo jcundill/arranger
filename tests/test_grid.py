@@ -124,7 +124,7 @@ class TestAProgressionWithNoTiming(unittest.TestCase):
             options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual(
-            [step.tab_line() for step in timed], [step.tab_line() for step in steps]
+            [step.voicing.tab_string() for step in timed], [step.voicing.tab_string() for step in steps]
         )
 
 

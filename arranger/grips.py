@@ -133,33 +133,6 @@ def get_drop2_voicings(
     )
 
 
-def get_interval_voicings(
-    melody_note: Note,
-    chord_name: str,
-    top_string: int = 5,
-) -> List[Voicing]:
-    """Two-note interval fingerings under the melody: a 3rd, a 6th or a 10th.
-
-    The arranging guide's fill for the notes between a chord on a strong beat and
-    the next one. It is a **texture and not a harmony** - it says nothing about
-    what the chord is, and it is meant to sit on a weak beat - so unlike a duo it
-    is offered under *any* melody degree, including a 3rd or a 7th that a duo
-    refuses. The **fill-only palette** is what confines it to fill slots, which is what
-    makes the looser rule safe.
-
-    Kept as a named entry point for the same reason as `get_drop2_voicings`: every
-    grip family is reachable from the public surface, so a caller who wants a
-    single one does not have to know the tuple spelling. It is exactly
-    `get_grip_voicings` with the grip pinned to "interval".
-
-    Returns an empty list when the melody is unreachable on that string - the same
-    limitation every root-measured grip has.
-    """
-    return get_grip_voicings(
-        melody_note, chord_name, top_string, grips=("interval",)
-    )
-
-
 def lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
     """The subset of `top_strings` below the high E, so a transposed melody is voiced
     on the B string rather than back on the high E. Falls back to `top_strings`
@@ -298,28 +271,6 @@ def get_all_grip_voicings(
     return candidates
 
 
-def get_all_drop2_voicings(
-    melody_note: Note,
-    chord_name: str,
-    top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES,
-) -> List[Voicing]:
-    """Collects Drop-2 fingerings for every allowed soprano string in top_strings.
-
-    High-E candidates come first, so a caller that simply takes the first result
-    keeps the traditional top-string fingering. A melody below the high E string's
-    open pitch (E4) simply yields no high-E candidates and is arranged on the B
-    string instead of being skipped.
-
-    This is pure candidate generation: it neither filters by neck position nor
-    transposes. A melody whose only position lies above HIGH_FRET_LIMIT is
-    re-voiced an octave down by `get_octave_down_candidates`, which
-    `arrange_progression` calls - so the two cannot recurse into each other.
-    """
-    return get_all_grip_voicings(
-        melody_note, chord_name, top_strings, grips=("drop2",)
-    )
-
-
 def get_melody_only_voicings(
     melody_note: Note,
     prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
@@ -358,21 +309,6 @@ def get_melody_only_voicings(
         if candidates:
             return candidates
     return []
-
-
-def get_melody_only_voicing(
-    melody_note: Note,
-    prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
-) -> Optional[Voicing]:
-    """The first candidate `get_melody_only_voicings` offers, or None when it offers none.
-
-    A caller that just wants *a* fingering for the tune alone takes the earliest string
-    in the preference order that can carry the note, which is the high E whenever it can.
-    A route that can weigh the alternatives against where the hand is asks for the list
-    and lets `cost.voicing_cost` choose.
-    """
-    candidates = get_melody_only_voicings(melody_note, prefer)
-    return candidates[0] if candidates else None
 
 
 def sustain_inner_voices(previous_voicing: Voicing | dict, melody_note: Note) -> Optional[Voicing]:

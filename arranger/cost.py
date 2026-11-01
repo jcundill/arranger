@@ -176,8 +176,7 @@ def voicing_cost(voicing: Voicing, criteria: SelectionCriteria) -> VoicingScore:
        exists to enable. With no previous chord it becomes "start near the middle of
        the neck".
     5. total pitch movement of the voices in semitones, so it stays meaningful when the
-       melody changes string: `calculate_pitch_leading_distance`, not the fret-based
-       `calculate_voice_leading_distance`.
+       melody changes string: `calculate_pitch_leading_distance`.
     6. bass function, when `root_pc` is given: 0 for a root or a 5th in the lowest
        voice, 1 otherwise. A *tie-break*, not a priority - consulted only when two
        shapes already agree on everything above, which is exactly the situation
@@ -366,29 +365,12 @@ def best_voicing_for(
     return min(candidates, key=criteria.cost)
 
 
-def calculate_voice_leading_distance(voicing_a: Voicing | dict, voicing_b: Voicing | dict) -> float:
-    """
-    Total fret movement across the strings both voicings sound.
-
-    The string-set dependent counterpart to `calculate_pitch_leading_distance`: a fret
-    delta is a semitone delta, but only for as long as the note stays on its string.
-    """
-    frets_a = voicing_a["frets"] if isinstance(voicing_a, dict) else voicing_a.frets
-    frets_b = voicing_b["frets"] if isinstance(voicing_b, dict) else voicing_b.frets
-    total_distance = 0
-    for f_a, f_b in zip(frets_a, frets_b):
-        if f_a >= 0 and f_b >= 0:
-            total_distance += abs(f_a - f_b)
-    return float(total_distance)
-
-
 def calculate_pitch_leading_distance(voicing_a: Voicing | dict, voicing_b: Voicing | dict) -> float:
     """
     Sums the movement of every voice between two voicings, in semitones.
 
-    The string-set agnostic counterpart to `calculate_voice_leading_distance`: it
-    compares sounding pitches rather than fret numbers, so it stays meaningful when one
-    chord puts the melody on the high E string and the next on the B string.
+    It compares sounding pitches rather than fret numbers, so it stays meaningful when
+    one chord puts the melody on the high E string and the next on the B string.
     """
     frets_a = voicing_a["frets"] if isinstance(voicing_a, dict) else voicing_a.frets
     frets_b = voicing_b["frets"] if isinstance(voicing_b, dict) else voicing_b.frets

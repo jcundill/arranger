@@ -133,8 +133,8 @@ class TestArrangementStepTab(unittest.TestCase):
 
     def test_tab_line_delegates_to_voicing(self):
         """tab_line() is the one-line form and equals voicing.tab_string()."""
-        self.assertEqual(self.step.tab_line(), "x-x-10-10-10-10")
-        self.assertEqual(self.step.tab_line(), self.voicing.tab_string())
+        self.assertEqual(self.step.voicing.tab_string(), "x-x-10-10-10-10")
+        self.assertEqual(self.step.voicing.tab_string(), self.voicing.tab_string())
 
     def test_tab_block_delegates_to_voicing(self):
         """tab_block() equals voicing.tab_block() line for line."""
@@ -226,7 +226,7 @@ class TestFormatProgression(unittest.TestCase):
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             format_progression(self.major)
-            self.major[0].tab_line()
+            self.major[0].voicing.tab_string()
             self.major[0].tab_block()
             self.major[0].voicing.tab()
             self.major[0].voicing.tab_block()
@@ -448,7 +448,7 @@ class TestRepeatedMelody(unittest.TestCase):
 
     def test_voicing_is_unchanged_so_the_shape_is_still_available(self):
         """The flag is presentational: the step keeps its full drop-2 voicing."""
-        self.assertEqual(self.steps[1].tab_line(), "x-1-1-0-1-x")
+        self.assertEqual(self.steps[1].voicing.tab_string(), "x-1-1-0-1-x")
 
     def test_one_line_tab_plays_a_single_note(self):
         """Only the melody string carries a fret; every other string is muted."""
@@ -552,7 +552,7 @@ class TestTheExplanationWraps(unittest.TestCase):
             self.assertEqual(
                 " ".join(line[self.COLUMN :] for line in lines).split(),
                 annotation.split(),
-                f"{head} {step.chord} {step.tab_line()}",
+                f"{head} {step.chord} {step.voicing.tab_string()}",
             )
         self.assertGreater(checked, 100, "the sweep stopped rendering anything")
 
@@ -579,7 +579,7 @@ class TestTheExplanationWraps(unittest.TestCase):
                 self.assertEqual(
                     line[: self.COLUMN],
                     " " * self.COLUMN,
-                    f"{head} {step.chord} {step.tab_line()}",
+                    f"{head} {step.chord} {step.voicing.tab_string()}",
                 )
 
     def test_the_number_of_steps_that_wrap(self):

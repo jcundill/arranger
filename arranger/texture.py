@@ -192,7 +192,7 @@ def texture_palette(
     `melody`); a target may not, because neither of them states a chord part.
 
     The empty tuple is a real answer, not an omission: it means the left hand plays
-    nothing here, which is how a one-note fill reaches `get_melody_only_voicing` and how
+    nothing here, which is how a one-note fill reaches `get_melody_only_voicings` and how
     a melody-only selection reaches the same route.
     """
     arity = derived_arity(texture, parts, has_thumb)
