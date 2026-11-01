@@ -113,7 +113,7 @@ def melody_alone_case(
 
     Returns one of `_MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` or
     `MELODY_ALONE_NO_CHORD`. The two non-default answers reach the same *route* -
-    `get_melody_only_voicing` rather than grip lookup - but they build different
+    `get_melody_only_voicings` rather than grip lookup - but they build different
     steps, which is why this returns a kind rather than a bool: an `NC` bar sets
     `melody_only=True`, and a texture case must **not**, because the step does have
     a harmony, it is simply not being spelled out, and the flag would make the
@@ -150,7 +150,7 @@ def melody_alone_case(
     `docs/history/comping-styles.md` the engine passes `sings_here` here, not the arrangement's
     route: a slot the guitar does not sing is either one whose selection has no soprano
     or one carrying no melody note. Every answer here ends at
-    `get_melody_only_voicing`, which is the melody on its own - so this function cannot
+    `get_melody_only_voicings`, which is the melody on its own - so this function cannot
     be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
     a fill would put the tune straight back on the guitar and the axis would be honoured
     only on targets: under `chord_notes="targets"` with a walk under it, a fill that answers
@@ -169,7 +169,7 @@ def melody_alone_case(
 
     **`on_grid=False` is a position the chord's rhythm does not name, and it is the
     one case where the guitar plays nothing rather than one note.** Every other answer ends at
-    `get_melody_only_voicing`, which is the tune on its own; there is no such thing
+    `get_melody_only_voicings`, which is the tune on its own; there is no such thing
     when the tune is somebody else's, so an off-grid slot on the comping route is a
     **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/history/comping-styles.md`
     §4.2's "a melody note with no chord position on it sounds alone", and it needs two
@@ -204,7 +204,7 @@ def melody_alone_case(
     # The singing route answers `NC` the way it always has, and it must keep doing so
     # even though the comping route above returns `NONE` for the same slot: the two
     # routes build different steps there (the caller emits a rest step that says why, versus
-    # `get_melody_only_voicing` with `melody_only=True`), which is the reason this
+    # `get_melody_only_voicings` with `melody_only=True`), which is the reason this
     # function returns a *kind* and not a bool. Dropping the `NC` answer along with the
     # comping one sent the note through the harmonised path instead, where it found no
     # voicing and vanished - 11 tests across four files, all `NC`.

@@ -27,7 +27,7 @@ from arranger.grip_tables import (
 from arranger.grips import (
     _LAYOUT_GRIPS,
     _SEARCHED_GRIPS,
-    get_all_drop2_voicings,
+    get_all_grip_voicings,
     string_sets_for,
 )
 from arranger.tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
@@ -448,10 +448,8 @@ class TestKnownTableGaps(unittest.TestCase):
         tones = set(ChordParser.get_chord_tones("C13"))
         impure = [
             v
-            for v in get_all_drop2_voicings(
-                Note("D5"), chord_name="C13"
-            )
-            if not set(v.pitch_classes()) <= tones
+            for v in get_all_grip_voicings(Note("D5"), chord_name="C13", grips=("drop2",))
+            if not {m % 12 for m in v.midi_notes()} <= tones
         ]
         # The gap this class existed to pin has closed - and closed for every chord tone,
         # not just this one melody: the tone-priority rule builds the shape for a 9th in
@@ -463,9 +461,7 @@ class TestKnownTableGaps(unittest.TestCase):
             impure,
             f"the 13-chord 9th gap reopened: {[v.tab_string() for v in impure]}",
         )
-        for v in get_all_drop2_voicings(
-            Note("D5"), chord_name="C13"
-        ):
+        for v in get_all_grip_voicings(Note("D5"), chord_name="C13", grips=("drop2",)):
             self.assertEqual(
                 self.engine.voicing_cost(
                     v, SelectionCriteria(allowed_tones=tones)
@@ -486,12 +482,10 @@ class TestKnownTableGaps(unittest.TestCase):
         tested, so both are asserted present.
         """
         tones = set(ChordParser.get_chord_tones("C13"))
-        candidates = get_all_drop2_voicings(
-            Note("D5"), chord_name="C13"
-        )
+        candidates = get_all_grip_voicings(Note("D5"), chord_name="C13", grips=("drop2",))
         # Every one is a correct voicing of C13 - that is the point of the fix - and they
         # differ in where they sit, so this still has both pools to rank.
-        pure = [v for v in candidates if set(v.pitch_classes()) <= tones]
+        pure = [v for v in candidates if {m % 12 for m in v.midi_notes()} <= tones]
         self.assertEqual(len(pure), len(candidates), "a C13 shape is still sounding a wrong note")
         self.assertGreaterEqual(len(pure), 2, "need at least two shapes to rank them")
         # Position is now the only thing separating them, and the criterion under test
@@ -524,7 +518,7 @@ class TestKnownTableGaps(unittest.TestCase):
                     [(melody, chord_name)]
                 ):
                     self.assertTrue(
-                        set(step.voicing.pitch_classes()) <= tones,
+                        {m % 12 for m in step.voicing.midi_notes()} <= tones,
                         f"{chord_name} {melody} -> {step.voicing.tab_string()}",
                     )
 

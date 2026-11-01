@@ -8,7 +8,7 @@ from musthe import Note
 from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, format_progression
 from arranger.annotation import step_annotation
 from arranger.chords import parse_symbol
-from arranger.grips import drop2_template_for, get_melody_only_voicing
+from arranger.grips import drop2_template_for, get_melody_only_voicings
 from arranger.melody_alone import melody_alone_shape
 from arranger.options import ArrangeOptions, Request
 from arranger.render import print_step
@@ -16,14 +16,15 @@ from arranger.tuning import NO_CHORD
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):
-    """get_melody_only_voicing plays one note on one string, for NC bars."""
+    """The first candidate `get_melody_only_voicings` offers: one note on one string, for NC bars."""
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
     def test_high_e_string_is_preferred(self):
         """F4 sits on the high E string at fret 1."""
-        voicing = get_melody_only_voicing(Note("F4"))
+        candidates = get_melody_only_voicings(Note("F4"))
+        voicing = candidates[0] if candidates else None
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.tab_string(), "x-x-x-x-x-1")
@@ -32,7 +33,8 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_below_the_high_e_open_pitch_falls_to_the_b_string(self):
         """Eb4 cannot be played on the high E, so it drops to the B string."""
-        voicing = get_melody_only_voicing(Note("Eb4"))
+        candidates = get_melody_only_voicings(Note("Eb4"))
+        voicing = candidates[0] if candidates else None
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.tab_string(), "x-x-x-x-4-x")
@@ -40,7 +42,8 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_low_melody_uses_a_string_outside_the_melody_choices(self):
         """G3 is unreachable on both melody strings and sounds on the open G."""
-        voicing = get_melody_only_voicing(Note("G3"))
+        candidates = get_melody_only_voicings(Note("G3"))
+        voicing = candidates[0] if candidates else None
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.tab_string(), "x-x-x-0-x-x")
@@ -49,14 +52,16 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
     def test_exactly_one_active_fret(self):
         """Whatever string is chosen, a melody-only step is a single fret."""
         for name in ("F5", "Eb5", "Db5", "Bb4", "G3", "Bb3", "B3"):
-            voicing = get_melody_only_voicing(Note(name))
+            candidates = get_melody_only_voicings(Note(name))
+            voicing = candidates[0] if candidates else None
             self.assertIsNotNone(voicing, name)
             assert voicing is not None
             self.assertEqual(len(voicing.active_frets()), 1, name)
 
     def test_top_fret_and_avg_fret_describe_the_single_fret(self):
         """top_fret/avg_fret are consistent for a one-fret voicing."""
-        voicing = get_melody_only_voicing(Note("Bb3"))
+        candidates = get_melody_only_voicings(Note("Bb3"))
+        voicing = candidates[0] if candidates else None
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.top_fret, 3)
@@ -64,23 +69,25 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_unreachable_note_returns_none(self):
         """Below the low E open there is nothing to play."""
-        self.assertIsNone(get_melody_only_voicing(Note("D2")))
+        self.assertEqual(get_melody_only_voicings(Note("D2")), [])
 
     def test_notes_above_the_18th_fret_return_none(self):
         """B5 and C6 are the only NC pitches the database has that cannot sound."""
         for name in ("B5", "C6"):
-            self.assertIsNone(get_melody_only_voicing(Note(name)), name)
+            self.assertEqual(get_melody_only_voicings(Note(name)), [], name)
 
     def test_prefer_order_is_honoured(self):
         """A caller may pin the melody to a specific string."""
-        voicing = get_melody_only_voicing(Note("G3"), prefer=(3,))
+        candidates = get_melody_only_voicings(Note("G3"), prefer=(3,))
+        voicing = candidates[0] if candidates else None
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.soprano_string(), 3)
 
     def test_out_of_range_prefer_indices_are_ignored(self):
         """A bad index in `prefer` must not raise or index off the fretboard."""
-        voicing = get_melody_only_voicing(Note("F4"), prefer=(99, -1))
+        candidates = get_melody_only_voicings(Note("F4"), prefer=(99, -1))
+        voicing = candidates[0] if candidates else None
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.soprano_string(), 5)
@@ -120,10 +127,10 @@ class TestMelodyOnlyPalette(unittest.TestCase):
         )
 
     def test_the_singular_is_the_first_of_the_palette(self):
-        """`get_melody_only_voicing` stays the preference-order answer it always was."""
+        """`get_melody_only_voicings` stays the preference-order answer it always was."""
         for name in ("F4", "Eb4", "G3", "Bb4", "Eb5"):
             note = Note(name)
-            first = get_melody_only_voicing(note)
+            first = get_melody_only_voicings(note)[0] if get_melody_only_voicings(note) else None
             candidates = self.engine.get_melody_only_voicings(note)
             self.assertIsNotNone(first, name)
             self.assertEqual(first, candidates[0], name)
@@ -489,7 +496,7 @@ class TestExtendedExtensionMappings(unittest.TestCase):
         self.assertTrue(step.non_chord_tone)
         tones = set(ChordParser.get_chord_tones("G7b9"))
         self.assertTrue(
-            set(step.voicing.pitch_classes()) <= tones, step.voicing.tab_string()
+            {m % 12 for m in step.voicing.midi_notes()} <= tones, step.voicing.tab_string()
         )
         self.assertLessEqual(step.voicing.fret_span(), 5)
 
@@ -508,7 +515,7 @@ class TestExtendedExtensionMappings(unittest.TestCase):
         self.assertTrue(all(step.strategy == "extension" for step in result))
         for step, _quality, name in zip(result, ("7sus4", "maj7#11", "m9b5"), expected_names):
             tones = set(ChordParser.get_chord_tones(name))
-            self.assertTrue(set(step.voicing.pitch_classes()) <= tones, step.voicing.tab_string())
+            self.assertTrue({m % 12 for m in step.voicing.midi_notes()} <= tones, step.voicing.tab_string())
 
 
 class TestSustainInnerVoices(unittest.TestCase):
@@ -559,10 +566,10 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         self.assertEqual([step.non_chord_tone for step in result], [False, True, False])
         self.assertEqual(result[1].strategy, "extension")
         self.assertEqual(result[1].harmonized_as, "Cmaj9")
-        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 4, 7, 11])
+        self.assertEqual(sorted(m % 12 for m in result[1].voicing.midi_notes()), [2, 4, 7, 11])
         # The old fallback produced Bb-Eb-G-D (an Ebmaj7 shape); it must now be a
         # genuine Cmaj7-family voicing.
-        self.assertNotEqual(sorted(result[1].voicing.pitch_classes()), [2, 3, 7, 10])
+        self.assertNotEqual(sorted(m % 12 for m in result[1].voicing.midi_notes()), [2, 3, 7, 10])
 
     def test_diminished_strategy(self):
         """The Barry Harris substitution voices D5 inside Bdim7 and resolves back."""
@@ -573,7 +580,7 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         )
         self.assertEqual(result[1].strategy, "diminished")
         self.assertEqual(result[1].harmonized_as, "Bdim7")
-        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 8, 11])
+        self.assertEqual(sorted(m % 12 for m in result[1].voicing.midi_notes()), [2, 5, 8, 11])
         # Still a complete four-note Bdim7, not a shell. It briefly was one while
         # criterion 0 was scoring the *substituted* voicing against the *written*
         # Cmaj7: every Bdim7 candidate was then three foreign notes, so purity could not
@@ -645,7 +652,7 @@ class TestNoChordSteps(unittest.TestCase):
 
         The two fields are one fact stated twice, and on this path they
         disagreed for the field's whole life: the voicing said "melody" (set
-        in `grips.get_melody_only_voicing` precisely so a reader would not
+        in `grips.get_melody_only_voicings` precisely so a reader would not
         conclude a four-note drop-2 had been chosen) while the step rested on
         its "drop2" default. Whatever reads the step rather than its voicing
         would read the lie.

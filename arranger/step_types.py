@@ -112,10 +112,6 @@ class Voicing:
                 midis.append(GuitarFretboard.fret_to_midi(s_idx, f))
         return midis
 
-    def pitch_classes(self) -> List[int]:
-        """Calculates pitch classes (0-11) of the active notes."""
-        return [m % 12 for m in self.midi_notes()]
-
     def soprano_string(self) -> int:
         """
         Returns the index of the highest sounding string (0 = low E ... 5 = high E).

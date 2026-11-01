@@ -347,14 +347,6 @@ class ChartCell:
     def where(self) -> str:
         return f"line {self.line}, column {self.column + 1}"
 
-    @property
-    def midis(self) -> List[int]:
-        return [
-            GuitarFretboard.fret_to_midi(s, f)
-            for s, f in enumerate(self.frets)
-            if f >= 0
-        ]
-
     def tab(self) -> str:
         return Voicing(list(self.frets), 0, 0.0).tab_string()
 

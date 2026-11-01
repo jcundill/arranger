@@ -1,7 +1,13 @@
 import unittest
 
-from arranger import VoiceLeadingEngine
-from arranger.cost import calculate_voice_leading_distance
+from arranger import VoiceLeadingEngine, Voicing
+
+
+def _fret_distance(first: Voicing, second: Voicing) -> float:
+    """Fret-based movement across the strings both voicings sound."""
+    frets_a = first.frets
+    frets_b = second.frets
+    return sum(abs(a - b) for a, b in zip(frets_a, frets_b) if a >= 0 and b >= 0)
 
 
 class TestProgressions(unittest.TestCase):
@@ -29,8 +35,8 @@ class TestProgressions(unittest.TestCase):
         self.assertEqual(result[2].chord, "Cm7")
 
         # Verify smooth physical voice leading: movements between chords should be small
-        dist_1_to_2 = calculate_voice_leading_distance(result[0].voicing, result[1].voicing)
-        dist_2_to_3 = calculate_voice_leading_distance(result[1].voicing, result[2].voicing)
+        dist_1_to_2 = _fret_distance(result[0].voicing, result[1].voicing)
+        dist_2_to_3 = _fret_distance(result[1].voicing, result[2].voicing)
 
         # In this cadence, G7b9 is only 1 fret shift from Dm7b5 (dist = 1)
         self.assertLessEqual(dist_1_to_2, 4)
@@ -51,7 +57,7 @@ class TestProgressions(unittest.TestCase):
         # shape spanned 1: that is the cost this end of the ban pays.
         self.assertEqual(result[2].voicing.grip, "drop3")
         self.assertEqual(
-            sorted(result[2].voicing.pitch_classes()), [0, 3, 7, 10], "still a Cm7"
+            sorted(m % 12 for m in result[2].voicing.midi_notes()), [0, 3, 7, 10], "still a Cm7"
         )
 
     def test_autumn_leaves_minor_cadence(self):
@@ -85,7 +91,7 @@ class TestProgressions(unittest.TestCase):
             [step.grip for step in result], ["drop2", "drop2", "drop3"]
         )
         self.assertEqual(
-            sorted(result[2].voicing.pitch_classes()), [2, 4, 7, 10], "still a Gm6"
+            sorted(m % 12 for m in result[2].voicing.midi_notes()), [2, 4, 7, 10], "still a Gm6"
         )
         self.assertTrue(not any(step.partial for step in result))
 
@@ -159,11 +165,11 @@ class TestProgressions(unittest.TestCase):
         # below span, so it cannot recover a shape that span has already rejected.
         # Recovering it would mean ranking the bass above span, which was measured and
         # brings back the five-fret `8-x-8-8-13-x` this change exists to remove.
-        self.assertEqual(sorted(result[0].voicing.pitch_classes()), [0, 2, 5, 9])
+        self.assertEqual(sorted(m % 12 for m in result[0].voicing.midi_notes()), [0, 2, 5, 9])
         # G7 states its root and a fourth voice - a complete G7 with G2 underneath,
         # rather than the bare shell F3 B3 D4.
-        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 7, 11])  # G B D F
-        self.assertEqual(sorted(result[2].voicing.pitch_classes()), [0, 4, 11])  # C E B
+        self.assertEqual(sorted(m % 12 for m in result[1].voicing.midi_notes()), [2, 5, 7, 11])  # G B D F
+        self.assertEqual(sorted(m % 12 for m in result[2].voicing.midi_notes()), [0, 4, 11])  # C E B
 
     def test_high_e_only_top_strings_emits_silent_steps(self):
         """top_strings=(5,) keeps the old refusal, emitted silent rather than dropped.

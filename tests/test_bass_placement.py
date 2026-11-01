@@ -28,6 +28,7 @@ from arranger import (
     supported_string_sets,
 )
 from arranger.annotation import step_annotation
+from arranger.bass_merge import attach_bass
 
 # The precedence rule `bass._melody_in_force` implements. Imported from where it
 # lives rather than through the package facade, because these are private to
@@ -44,6 +45,7 @@ from arranger.bass_rules import (
 from arranger.fingers import MAX_HAND_SPAN, hand_span
 from arranger.grip_tables import GRIP_MAX_SPAN
 from arranger.parts import PART_NAMES
+from arranger.step_prepare import prepare_step
 from arranger.texture import texture_palette
 from arranger.tuning import PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET, STANDARD_TUNING
 from tabgp import _sounding_frets
@@ -761,7 +763,7 @@ class TestTheRefusal(unittest.TestCase):
         the field. Running `attach_bass` also proves the step *survives*, which is
         the other half of the trade: the upper voicing is kept.
         """
-        VoiceLeadingEngine.attach_bass(
+        attach_bass(
             step,
             BassNote(bar=1, beat=1.0, pitch_class=pc(name), role=BASS_ROLE_ANCHOR),
             arrangements if arrangements is not None else [step],
@@ -1007,7 +1009,7 @@ class TestTheInvariant(unittest.TestCase):
         """
         triple = [("F5", "Fmaj7")]
         palette = texture_palette(ROLE_TARGET, "chord2", PART_NAMES)
-        walking = VoiceLeadingEngine.prepare_step(triple, 0, grips=palette)
+        walking = prepare_step(triple, 0, grips=palette)
         assert walking is not None
         self.assertTrue(walking.candidates)
         for candidate in walking.candidates:

@@ -1,7 +1,13 @@
 import unittest
 
 from arranger import VoiceLeadingEngine, Voicing
-from arranger.cost import calculate_voice_leading_distance
+
+
+def _fret_distance(first: Voicing | dict, second: Voicing | dict) -> float:
+    """Fret-based movement across the strings both voicings sound."""
+    frets_a = first["frets"] if isinstance(first, dict) else first.frets
+    frets_b = second["frets"] if isinstance(second, dict) else second.frets
+    return float(sum(abs(a - b) for a, b in zip(frets_a, frets_b) if a >= 0 and b >= 0))
 
 
 class TestVoiceLeading(unittest.TestCase):
@@ -11,19 +17,19 @@ class TestVoiceLeading(unittest.TestCase):
         """Distance between identical voicings should be 0."""
         v1 = Voicing(frets=[-1, -1, 10, 10, 9, 10], top_fret=10, avg_fret=9.75)
         v2 = Voicing(frets=[-1, -1, 10, 10, 9, 10], top_fret=10, avg_fret=9.75)
-        self.assertEqual(calculate_voice_leading_distance(v1, v2), 0.0)
+        self.assertEqual(_fret_distance(v1, v2), 0.0)
 
     def test_distance_known_movement(self):
         """Moving each of the 4 voices by 1 fret should result in distance 4."""
         v1 = Voicing(frets=[-1, -1, 10, 10, 9, 10], top_fret=10, avg_fret=9.75)
         v2 = Voicing(frets=[-1, -1, 11, 11, 10, 11], top_fret=11, avg_fret=10.75)
-        self.assertEqual(calculate_voice_leading_distance(v1, v2), 4.0)
+        self.assertEqual(_fret_distance(v1, v2), 4.0)
 
     def test_distance_with_dict_backward_compatibility(self):
         """Should support distance calculation with legacy dict inputs."""
         d1 = {"frets": [-1, -1, 5, 5, 5, 7], "top_fret": 7, "avg_fret": 5.5}
         d2 = {"frets": [-1, -1, 5, 5, 5, 6], "top_fret": 6, "avg_fret": 5.25}
-        self.assertEqual(calculate_voice_leading_distance(d1, d2), 1.0)
+        self.assertEqual(_fret_distance(d1, d2), 1.0)
 
     def test_pitch_distance_matches_fret_distance_within_one_string_set(self):
         """
@@ -33,7 +39,7 @@ class TestVoiceLeading(unittest.TestCase):
         v1 = Voicing(frets=[-1, -1, 10, 12, 11, 11], top_fret=11, avg_fret=11.0)
         v2 = Voicing(frets=[-1, -1, 12, 13, 13, 13], top_fret=13, avg_fret=12.75)
         self.assertEqual(
-            calculate_voice_leading_distance(v1, v2),
+            _fret_distance(v1, v2),
             VoiceLeadingEngine.calculate_pitch_leading_distance(v1, v2),
         )
 
@@ -48,7 +54,7 @@ class TestVoiceLeading(unittest.TestCase):
 
         self.assertEqual(VoiceLeadingEngine.calculate_pitch_leading_distance(high_e, b_string), 0.0)
         # The fret-based metric cannot see this equivalence
-        self.assertNotEqual(calculate_voice_leading_distance(high_e, b_string), 0.0)
+        self.assertNotEqual(_fret_distance(high_e, b_string), 0.0)
 
     def test_pitch_distance_with_dict_backward_compatibility(self):
         """Legacy dict inputs must work with the pitch-based metric too."""
@@ -80,9 +86,7 @@ class TestVoiceLeading(unittest.TestCase):
             same_strings = (
                 [i for i, f in enumerate(previous.voicing.frets) if f >= 0] == [i for i, f in enumerate(current.voicing.frets) if f >= 0]
             )
-            fret = calculate_voice_leading_distance(
-                previous.voicing, current.voicing
-            )
+            fret = _fret_distance(previous.voicing, current.voicing)
             pitch = VoiceLeadingEngine.calculate_pitch_leading_distance(
                 previous.voicing, current.voicing
             )

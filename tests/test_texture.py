@@ -58,7 +58,7 @@ from arranger.grip_tables import (
 )
 from arranger.grips import (
     _interval_offsets,
-    get_interval_voicings,
+    get_grip_voicings,
 )
 from arranger.grouping import COMMON_TIME
 from arranger.options import CHORD_NOTES, CHORD_NOTES_FULL, ArrangeOptions
@@ -563,7 +563,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     so four strings is the most that can sound at once. That is the same four
     `supported_string_sets()` states, and it states it for a **voicing**: a step is the
     thing the renderers print, and the thumb note is merged into the step *after*
-    selection (`VoiceLeadingEngine.attach_bass`), so no check ever saw the two together.
+    selection (`bass_merge.attach_bass`), so no check ever saw the two together.
     A four-note target on a strong beat with a bass note placed under it is five
     simultaneous plucks - one more hand than a player has. The counts are in
     [docs/history/open-issues.md](../docs/history/open-issues.md) item 2.
@@ -1278,7 +1278,7 @@ class TestTargetsTexture(unittest.TestCase):
                 )
             )
             harmony = tones | {max(step.voicing.midi_notes()) % 12}
-            for pc in step.voicing.pitch_classes():
+            for pc in {m % 12 for m in step.voicing.midi_notes()}:
                 self.assertIn(pc, harmony, f"{step.chord} under {step.melody}")
         self.assertGreater(checked, 0, "the fixture must contain fills")
 
@@ -1381,9 +1381,7 @@ class TestIntervalGrip(unittest.TestCase):
         checked = 0
         for _quality, name in self.QUALITIES:
             for melody in ("C5", "E5", "A4", "G4", "B4"):
-                for voicing in get_interval_voicings(
-                    Note(melody), chord_name=name
-                ):
+                for voicing in get_grip_voicings(Note(melody), chord_name=name, grips=("interval",)):
                     checked += 1
                     active = voicing.active_frets()
                     self.assertEqual(len(active), 2, f"{name} under {melody}")
@@ -1407,9 +1405,7 @@ class TestIntervalGrip(unittest.TestCase):
         allowed = {3, 8, 9}
         for _quality, name in self.QUALITIES:
             for melody in ("C5", "A4", "G4"):
-                for voicing in get_interval_voicings(
-                    Note(melody), chord_name=name
-                ):
+                for voicing in get_grip_voicings(Note(melody), chord_name=name, grips=("interval",)):
                     low, high = sorted(voicing.midi_notes())
                     self.assertIn((high - low) % 12, allowed, f"{name} under {melody}")
 
@@ -1484,7 +1480,7 @@ class TestIntervalGrip(unittest.TestCase):
         to measure from either.
         """
         with self.assertRaises(ValueError):
-            get_interval_voicings(Note("C5"), chord_name="maj7")
+            get_grip_voicings(Note("C5"), chord_name="maj7", grips=("interval",))
 
     def test_offsets_are_empty_rather_than_guessed_for_an_unknown_quality(self):
         """A quality with no tone set yields no intervals at all."""

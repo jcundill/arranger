@@ -415,13 +415,13 @@ class TestVoicingCost(unittest.TestCase):
         )
         self.assertTrue(candidates)
         tones = set(ChordParser.get_chord_tones("Cm7b5"))
-        clean = [v for v in candidates if set(v.pitch_classes()) <= tones]
+        clean = [v for v in candidates if {m % 12 for m in v.midi_notes()} <= tones]
         self.assertTrue(clean)
         for v in candidates:
             cost = self.engine.voicing_cost(
                 v, SelectionCriteria(allowed_tones=tones)
             )
-            if set(v.pitch_classes()) <= tones:
+            if {m % 12 for m in v.midi_notes()} <= tones:
                 self.assertEqual(cost[0], 0.0, v.tab_string())
             else:
                 self.assertGreater(cost[0], 0.0, v.tab_string())
