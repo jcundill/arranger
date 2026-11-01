@@ -137,4 +137,4 @@ ignore = ["E501", "B905", "SIM102", "SIM117"]
 "tabstaff.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "headxml", "grip_chart", "tests"]
+known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "headxml", "tests"]

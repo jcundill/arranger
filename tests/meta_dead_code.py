@@ -71,7 +71,7 @@ class TestNoEngineNameIsOrphaned(unittest.TestCase):
     """Every module-level name has a referrer somewhere.
 
     Covers both the engine package (`arranger/`) and top-level modules
-    (`grip_chart.py`, `headxml.py`, etc.), because a dead name at either level
+    (`headxml.py`, etc.), because a dead name at either level
     is still dead code.
     """
 

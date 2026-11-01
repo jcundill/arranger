@@ -34,9 +34,9 @@ from typing import List, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The four names the distribution ships (see `pyproject.toml`). `grip_chart` is a
-# developer script that generates `common_grips.md`, so it stays out of the wheel;
-# it is still a flat module and is covered by the flatness test below.
+# The names the distribution ships (see `pyproject.toml`). `grip_chart` used to
+# be a developer script here; it has been removed, so only the shipped names
+# remain flat modules.
 SHIPPED = (
     "tabscore",
     "tabstaff",
@@ -53,7 +53,7 @@ SHIPPED = (
     "headxml_timeline",
     "tuning",
 )
-FLAT_MODULES = SHIPPED + ("grip_chart",)
+FLAT_MODULES = SHIPPED
 
 
 def _guitarpro_imports(tree: ast.Module) -> List[Tuple[int, bool]]:
@@ -141,13 +141,8 @@ class TestTheModuleSurface(unittest.TestCase):
                     "one file, not a directory",
                 )
 
-    def test_the_distribution_ships_the_five_and_not_the_chart(self):
-        """`py-modules` names exactly the shared core, the renderers and the importer.
-
-        `grip_chart` is a repository tool, not part of the installed library; the
-        assertion keeps a future `py-modules` edit from shipping it, which would
-        put a generator inside a runtime distribution.
-        """
+    def test_the_distribution_ships_the_expected_names(self):
+        """`py-modules` names exactly the shared core, the renderers and the importer."""
         data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         shipped = data["tool"]["setuptools"]["py-modules"]
         self.assertEqual(sorted(shipped), sorted(SHIPPED))

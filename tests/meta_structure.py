@@ -245,7 +245,6 @@ BUDGETS: Dict[str, Budget] = {
     # `note_name` is the longest function at 11 lines.
     "tuning.py": Budget(4, 11, 2),
     "headxml.py": Budget(17, 117, 8),
-    "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 14),
     "tabscore.py": Budget(10, 114, 5),
     # `tabstaff.py` is now a facade over `tabstaff_ascii` and `tabstaff_html`;
