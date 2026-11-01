@@ -73,12 +73,6 @@ INVERSION_NAMES: Dict[int, str] = {
     7: "2nd Inv", 10: "3rd Inv", 11: "3rd Inv",
 }
 
-# The words a hand-written chart uses to name an inversion, and the bass degree
-# each one claims.
-CLAIMED_INVERSIONS: Dict[str, int] = {
-    "root": 0, "1st": 3, "2nd": 7, "3rd": 10,
-}
-
 MAX_FRET = 18
 
 _PITCH_NAMES = ("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")

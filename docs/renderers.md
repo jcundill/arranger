@@ -474,11 +474,7 @@ property of the run rather than of the file, and the exact grouping is lost when
 arrangement is written out and read back. The importer can read the fact; the writers do
 not preserve the channel that stated it.
 
-A generated comping bar does read it, though: `headxml._bar_resolution`
-offers a **group-length** candidate ahead of the beat, so a 12/8 bar written in four
-dotted quarters generates four positions rather than twelve. The beat remains the
-fallback for a bar mixing subdivisions that no single finer resolution holds, so a busy
-bar is still generated on its beats rather than on an arbitrary one of them.
+A generated comping bar still generates on its beats rather than on an arbitrary one of them.
 
 ### What the staff's timing rows are, and what they are not
 
