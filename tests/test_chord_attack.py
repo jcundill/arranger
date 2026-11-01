@@ -211,7 +211,7 @@ class TestATieEndsAtAStab(unittest.TestCase):
             self._steps(chord_on="1", chord_notes="2"), bar=5, beat=1.0
         )
         self.assertEqual(step.melody, "C4")
-        self.assertEqual(step.tab_line(), "x-x-2-0-x-x")
+        self.assertEqual(step.voicing.tab_string(), "x-x-2-0-x-x")
         self.assertTrue(step.melody_released)
         lines = format_progression([step]).splitlines()
         self.assertTrue(lines[0].startswith("Cmaj"), lines[0])
@@ -230,7 +230,7 @@ class TestATieEndsAtAStab(unittest.TestCase):
             self._steps(chord_on="1", chord_notes="2"), bar=3, beat=1.0
         )
         self.assertEqual(step.melody, "A4")
-        self.assertEqual(step.tab_line(), "x-x-x-5-7-x")
+        self.assertEqual(step.voicing.tab_string(), "x-x-x-5-7-x")
         self.assertTrue(step.melody_released)
         self.assertIn("the stab ends the tied A4", format_progression([step]))
 
@@ -281,7 +281,7 @@ class TestATieEndsAtAStab(unittest.TestCase):
                     self.assertTrue(origin.voicing.midi_notes(), f"{head} {step.bar}")
                     self.assertNotIn(
                         Note(step.melody).midi_note(), step.voicing.midi_notes(),
-                        f"{head} {step.chord} {step.melody} {step.tab_line()}",
+                        f"{head} {step.chord} {step.melody} {step.voicing.tab_string()}",
                     )
         self.assertGreater(released, 5, "the sweep stopped arranging a stab under a tie")
 

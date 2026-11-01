@@ -243,7 +243,7 @@ class TestTheCompingReach(unittest.TestCase):
             section=(1, 2),
             request=Request(melody=False, bass_on="every-beat", bass_notes="root"),
         )
-        self.assertIn("3-x-4-4-8-x", [step.tab_line() for step in steps])
+        self.assertIn("3-x-4-4-8-x", [step.voicing.tab_string() for step in steps])
 
     def test_the_stretch_a_fifth_fret_bought_is_off_the_palette(self):
         """`Dm7` in the default band: the same top tone, spelled inside the hand's four.
@@ -337,7 +337,7 @@ class TestTheCompingReach(unittest.TestCase):
                 self.assertLessEqual(
                     step.voicing.fret_span(),
                     COMPING_MAX_SPAN,
-                    f"{path} bar {step.bar} beat {step.beat}: {step.tab_line()}",
+                    f"{path} bar {step.bar} beat {step.beat}: {step.voicing.tab_string()}",
                 )
         self.assertGreater(steps, 30, "the sweep measured almost no comping steps")
 
@@ -619,7 +619,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         stronger "the melody's pitch never appears", which is coincidence-dependent.
         """
         for step in self.comped():
-            self.assertFalse(step.melody_voiced, step.tab_line())
+            self.assertFalse(step.melody_voiced, step.voicing.tab_string())
 
     def test_the_melody_is_never_pinned_to_a_top_string(self):
         """No soprano is reserved for the tune, because there is no tune to pin.
@@ -637,7 +637,7 @@ class TestTheCompingArrangement(unittest.TestCase):
             active = frozenset(
                 i for i, fret in enumerate(step.voicing.frets) if fret >= 0
             )
-            self.assertIn(active, comping_sets, step.tab_line())
+            self.assertIn(active, comping_sets, step.voicing.tab_string())
 
     def test_no_comping_step_over_the_committed_heads_sounds_the_high_e(self):
         """The palette's rule, asserted at the level the tab is read at.
@@ -671,7 +671,7 @@ class TestTheCompingArrangement(unittest.TestCase):
                     self.assertNotIn(
                         5,
                         active,
-                        f"{path} --chord-notes {notes}: {step.tab_line()}",
+                        f"{path} --chord-notes {notes}: {step.voicing.tab_string()}",
                     )
         self.assertGreater(checked, 50, "the sweep found too few comping steps")
 
@@ -696,7 +696,7 @@ class TestTheCompingArrangement(unittest.TestCase):
             self.assertEqual(step.grip, "shell")
             self.assertEqual(
                 len(step.voicing.active_frets()), 3,
-                step.tab_line(),
+                step.voicing.tab_string(),
             )
             self.assertTrue(step.partial)
 
@@ -714,7 +714,7 @@ class TestTheCompingArrangement(unittest.TestCase):
             sounding = {midi % 12 for midi in step.voicing.upper_midi_notes()}
             self.assertTrue(
                 guide_pcs(name) <= sounding,
-                f"{name}: {step.tab_line()} sounds {sorted(sounding)} without both "
+                f"{name}: {step.voicing.tab_string()} sounds {sorted(sounding)} without both "
                 f"guide tones {sorted(guide_pcs(name))}",
             )
 
@@ -737,10 +737,10 @@ class TestTheCompingArrangement(unittest.TestCase):
         for step in self.comped(chord_notes="targets", timings=self.timings):
             self.assertEqual(
                 len(step.voicing.active_frets()), 3,
-                step.tab_line(),
+                step.voicing.tab_string(),
             )
-            self.assertEqual(step.grip, "shell", step.tab_line())
-            self.assertFalse(step.melody_voiced, step.tab_line())
+            self.assertEqual(step.grip, "shell", step.voicing.tab_string())
+            self.assertFalse(step.melody_voiced, step.voicing.tab_string())
 
     def test_the_bass_axis_still_decides_the_bottom(self):
         """`bass_notes="walk"` walks under a comping part, and `bass_on="none"` does not.
@@ -1036,8 +1036,8 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
         self.assertTrue(comps, "the rhythm was ignored on a singing selection")
         for step in comps:
             # A comp states the chord and invents no melody; the written symbol is kept.
-            self.assertTrue(step.voicing.active_frets(), step.tab_line())
-            self.assertFalse(step.grip == "melody", step.tab_line())
+            self.assertTrue(step.voicing.active_frets(), step.voicing.tab_string())
+            self.assertFalse(step.grip == "melody", step.voicing.tab_string())
 
     def test_the_comp_arity_excludes_the_silent_soprano(self):
         """The shape is the voices that will sound: four voices state a three-note shell.
@@ -1051,7 +1051,7 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
         comps = [s for s in steps if not s.melody_voiced]
         self.assertTrue(comps)
         for step in comps:
-            self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 3, step.voicing.tab_string())
 
     def test_every_comp_sounds_only_chord_tones(self):
         """A comping shape is held to the full tone set of the chord it states."""
@@ -1061,7 +1061,7 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
                 continue
             allowed = chord_pcs(step.chord)
             sounding = {pitch % 12 for pitch in step.voicing.midi_notes()}
-            self.assertTrue(sounding <= allowed, step.tab_line())
+            self.assertTrue(sounding <= allowed, step.voicing.tab_string())
 
     def test_no_written_note_is_dropped_by_the_rhythm(self):
         """The rhythm *adds* positions; it never removes a written note's slot."""
@@ -1095,11 +1095,11 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             bar, beat = step.bar or 0, step.beat or 0.0
             if (bar, round(beat, 6)) in written:
                 continue
-            self.assertIsNone(step.melody, step.tab_line())
+            self.assertIsNone(step.melody, step.voicing.tab_string())
             self.assertEqual(
                 melody_state(head, bar, beat),
                 "silent",
-                step.tab_line(),
+                step.voicing.tab_string(),
             )
 
     def test_a_melody_only_selection_adds_nothing(self):
@@ -1152,7 +1152,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertFalse(steps[0].melody_voiced)
         sounding = {pitch % 12 for pitch in steps[0].voicing.midi_notes()}
-        self.assertTrue(sounding <= chord_pcs("Bdim7"), steps[0].tab_line())
+        self.assertTrue(sounding <= chord_pcs("Bdim7"), steps[0].voicing.tab_string())
 
     def test_sustain_substitutes_nothing(self):
         """The one strategy with no comping meaning leaves the written chord alone.
@@ -1298,7 +1298,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
                 # after the comping shape is chosen, so it is not one of the notes
                 # the arity counts.
                 self.assertLessEqual(
-                    len(step.voicing.upper_midi_notes()), ceiling, step.tab_line()
+                    len(step.voicing.upper_midi_notes()), ceiling, step.voicing.tab_string()
                 )
             structure = [(s.bar, s.beat, s.chord, s.role) for s in steps]
             if baseline is None:
@@ -1382,10 +1382,10 @@ class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
         self.assertEqual(self._sounding(steps), [1.0, 3.0])
         for step in steps:
             if step.voicing.active_frets():
-                self.assertIsNone(step.silence, step.tab_line())
+                self.assertIsNone(step.silence, step.voicing.tab_string())
                 continue
-            self.assertEqual(step.silence, SILENCE_GRID, step.tab_line())
-            self.assertIn(step.chord, self.NAMES, step.tab_line())
+            self.assertEqual(step.silence, SILENCE_GRID, step.voicing.tab_string())
+            self.assertIn(step.chord, self.NAMES, step.voicing.tab_string())
 
     def test_a_named_position_the_progression_does_not_occupy_is_a_rest(self):
         """`1and` is a position four entries at 1-4 do not have, so nothing sounds.
@@ -1397,7 +1397,7 @@ class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
         self.assertEqual(len(steps), 4)
         self.assertEqual(self._sounding(steps), [])
         for step in steps:
-            self.assertEqual(step.silence, SILENCE_GRID, step.tab_line())
+            self.assertEqual(step.silence, SILENCE_GRID, step.voicing.tab_string())
 
     def test_the_rhythm_is_compped_when_the_progression_spells_it(self):
         """The positive half: the offbeats are reachable, as entries of their own.
@@ -1436,7 +1436,7 @@ class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
         for step in steps:
             if not step.voicing.active_frets():
                 continue
-            self.assertEqual(step.beat % 1, 0.5, step.tab_line())
+            self.assertEqual(step.beat % 1, 0.5, step.voicing.tab_string())
 
 
 class TestACompOnlySelectionPlaysTheRhythmItNames(unittest.TestCase):
@@ -1512,7 +1512,7 @@ class TestACompOnlySelectionPlaysTheRhythmItNames(unittest.TestCase):
         """What the rule changes is *when* a chord is struck, not which shape it is."""
         steps, _head = self._steps()
         self.assertEqual(
-            [step.tab_line() for step in steps],
+            [step.voicing.tab_string() for step in steps],
             ["x-5-9-7-x-x", "x-x-9-7-8-x", "x-x-5-5-5-x", "x-7-5-5-x-x"],
         )
 
@@ -1592,7 +1592,7 @@ class TestTheCompStaysUnderTheTune(unittest.TestCase):
         step = slot[0]
         self.assertEqual(step.melody, "C4")
         self.assertFalse(step.melody_voiced)
-        self.assertEqual(step.tab_line(), "x-x-2-0-x-x")
+        self.assertEqual(step.voicing.tab_string(), "x-x-2-0-x-x")
         self.assertLess(max(step.voicing.midi_notes()), Note("C4").midi_note())
 
     def test_every_comp_under_a_tune_note_stays_below_it(self):
@@ -1618,7 +1618,7 @@ class TestTheCompStaysUnderTheTune(unittest.TestCase):
                     tune = Note(step.melody).midi_note()
                     self.assertLess(
                         max(step.voicing.midi_notes()), tune,
-                        f"{head} {step.chord} {step.melody} {step.tab_line()}",
+                        f"{head} {step.chord} {step.melody} {step.voicing.tab_string()}",
                     )
                     checked += 1
         self.assertGreater(checked, 20, "the sweep stopped arranging a comp under a tune")

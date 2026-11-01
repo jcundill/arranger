@@ -156,8 +156,8 @@ is worse than a fret out of position.
 ## The request and the axes
 
 A caller asks six questions; `options.Request` holds them as one value, spelled
-twice: by `head`'s flags and by `Request(...)` on `arrange_progression`. `cli._REQUEST_DESTS`
-binds the two spellings; `tests/test_request.py` asserts they match.
+twice: by `head`'s flags and by `Request(...)` on `arrange_progression`. `tests/test_request.py`
+asserts the two spellings match.
 
 | question | flag | `Request(...)` | axis |
 |---|---|---|---|

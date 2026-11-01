@@ -51,7 +51,6 @@ if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
 
 __all__ = [
     "HEAD_HELP",
-    "_REQUEST_DESTS",
     "_CommonHelp",
     "ScoreMeta",
     "add_common_arguments",
@@ -97,25 +96,6 @@ class _CommonHelp:
     chord_fills: str
     bass_on: str
     bass_notes: str
-
-
-#: The six request questions, as `(the Request field, the flag's argparse dest)`.
-#:
-#: One list, because the six are one vocabulary spelled twice - by these flags and by
-#: `Request(...)` - and a seventh question added to one spelling but not the other
-#: would be a question one of the two front ends could not ask. `melody` is the one
-#: name that differs: the flag states the exception (`--no-melody`) where the field
-#: states the shipped default. The order is the flags' own, grouped by layer, which is
-#: why it is not the dataclass field order; `tests/test_request.py` holds the two
-#: spellings to this list as a set rather than a sequence.
-_REQUEST_DESTS: Tuple[Tuple[str, str], ...] = (
-    ("melody", "no_melody"),
-    ("chord_on", "chord_on"),
-    ("chord_notes", "chord_notes"),
-    ("chord_fills", "chord_fills"),
-    ("bass_on", "bass_on"),
-    ("bass_notes", "bass_notes"),
-)
 
 
 @dataclass(frozen=True)

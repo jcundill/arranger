@@ -290,14 +290,14 @@ class TestAFillInARealHead(unittest.TestCase):
         from arranger import format_progression
 
         for step in fill:
-            self.assertFalse(step.melody_voiced, step.tab_line())
+            self.assertFalse(step.melody_voiced, step.voicing.tab_string())
             self.assertIn("the tune is silent here", format_progression([step]))
 
     def test_the_default_run_still_invents_nothing(self):
         """The same section without the flag is the tune's own notes and no fill."""
         steps, _head, _notes = arranged(SLASH, section=(5, 7))
         self.assertTrue(all(step.melody for step in steps))
-        self.assertEqual(len(steps), 3, [step.tab_line() for step in steps])
+        self.assertEqual(len(steps), 3, [step.voicing.tab_string() for step in steps])
 
     def test_the_staff_shows_the_fill_as_a_column_of_its_own(self):
         """The whole-progression renderer agrees with the one-line tab.

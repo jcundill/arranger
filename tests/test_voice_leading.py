@@ -1,6 +1,7 @@
 import unittest
 
 from arranger import VoiceLeadingEngine, Voicing
+from arranger.cost import calculate_voice_leading_distance
 
 
 class TestVoiceLeading(unittest.TestCase):
@@ -10,19 +11,19 @@ class TestVoiceLeading(unittest.TestCase):
         """Distance between identical voicings should be 0."""
         v1 = Voicing(frets=[-1, -1, 10, 10, 9, 10], top_fret=10, avg_fret=9.75)
         v2 = Voicing(frets=[-1, -1, 10, 10, 9, 10], top_fret=10, avg_fret=9.75)
-        self.assertEqual(VoiceLeadingEngine.calculate_voice_leading_distance(v1, v2), 0.0)
+        self.assertEqual(calculate_voice_leading_distance(v1, v2), 0.0)
 
     def test_distance_known_movement(self):
         """Moving each of the 4 voices by 1 fret should result in distance 4."""
         v1 = Voicing(frets=[-1, -1, 10, 10, 9, 10], top_fret=10, avg_fret=9.75)
         v2 = Voicing(frets=[-1, -1, 11, 11, 10, 11], top_fret=11, avg_fret=10.75)
-        self.assertEqual(VoiceLeadingEngine.calculate_voice_leading_distance(v1, v2), 4.0)
+        self.assertEqual(calculate_voice_leading_distance(v1, v2), 4.0)
 
     def test_distance_with_dict_backward_compatibility(self):
         """Should support distance calculation with legacy dict inputs."""
         d1 = {"frets": [-1, -1, 5, 5, 5, 7], "top_fret": 7, "avg_fret": 5.5}
         d2 = {"frets": [-1, -1, 5, 5, 5, 6], "top_fret": 6, "avg_fret": 5.25}
-        self.assertEqual(VoiceLeadingEngine.calculate_voice_leading_distance(d1, d2), 1.0)
+        self.assertEqual(calculate_voice_leading_distance(d1, d2), 1.0)
 
     def test_pitch_distance_matches_fret_distance_within_one_string_set(self):
         """
@@ -32,7 +33,7 @@ class TestVoiceLeading(unittest.TestCase):
         v1 = Voicing(frets=[-1, -1, 10, 12, 11, 11], top_fret=11, avg_fret=11.0)
         v2 = Voicing(frets=[-1, -1, 12, 13, 13, 13], top_fret=13, avg_fret=12.75)
         self.assertEqual(
-            VoiceLeadingEngine.calculate_voice_leading_distance(v1, v2),
+            calculate_voice_leading_distance(v1, v2),
             VoiceLeadingEngine.calculate_pitch_leading_distance(v1, v2),
         )
 
@@ -47,7 +48,7 @@ class TestVoiceLeading(unittest.TestCase):
 
         self.assertEqual(VoiceLeadingEngine.calculate_pitch_leading_distance(high_e, b_string), 0.0)
         # The fret-based metric cannot see this equivalence
-        self.assertNotEqual(VoiceLeadingEngine.calculate_voice_leading_distance(high_e, b_string), 0.0)
+        self.assertNotEqual(calculate_voice_leading_distance(high_e, b_string), 0.0)
 
     def test_pitch_distance_with_dict_backward_compatibility(self):
         """Legacy dict inputs must work with the pitch-based metric too."""
@@ -77,22 +78,22 @@ class TestVoiceLeading(unittest.TestCase):
         self.assertEqual(len(result), 3)
         for previous, current in zip(result, result[1:]):
             same_strings = (
-                previous.voicing.active_strings == current.voicing.active_strings
+                [i for i, f in enumerate(previous.voicing.frets) if f >= 0] == [i for i, f in enumerate(current.voicing.frets) if f >= 0]
             )
-            fret = VoiceLeadingEngine.calculate_voice_leading_distance(
+            fret = calculate_voice_leading_distance(
                 previous.voicing, current.voicing
             )
             pitch = VoiceLeadingEngine.calculate_pitch_leading_distance(
                 previous.voicing, current.voicing
             )
             if same_strings:
-                self.assertEqual(fret, pitch, f"{previous.tab_line()} -> {current.tab_line()}")
+                self.assertEqual(fret, pitch, f"{previous.voicing.tab_string()} -> {current.voicing.tab_string()}")
             else:
                 # Different string sets: the pitch metric is the meaningful one, and
                 # the fret metric is only a proxy for it.
                 self.assertNotEqual(
                     fret, pitch,
-                    f"{previous.tab_line()} -> {current.tab_line()} spans two "
+                    f"{previous.voicing.tab_string()} -> {current.voicing.tab_string()} spans two "
                     "string sets yet the metrics still agree - check the pitch metric",
                 )
 

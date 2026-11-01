@@ -1,6 +1,7 @@
 import unittest
 
 from arranger import VoiceLeadingEngine
+from arranger.cost import calculate_voice_leading_distance
 
 
 class TestProgressions(unittest.TestCase):
@@ -28,8 +29,8 @@ class TestProgressions(unittest.TestCase):
         self.assertEqual(result[2].chord, "Cm7")
 
         # Verify smooth physical voice leading: movements between chords should be small
-        dist_1_to_2 = self.engine.calculate_voice_leading_distance(result[0].voicing, result[1].voicing)
-        dist_2_to_3 = self.engine.calculate_voice_leading_distance(result[1].voicing, result[2].voicing)
+        dist_1_to_2 = calculate_voice_leading_distance(result[0].voicing, result[1].voicing)
+        dist_2_to_3 = calculate_voice_leading_distance(result[1].voicing, result[2].voicing)
 
         # In this cadence, G7b9 is only 1 fret shift from Dm7b5 (dist = 1)
         self.assertLessEqual(dist_1_to_2, 4)
@@ -132,7 +133,7 @@ class TestProgressions(unittest.TestCase):
         )
         for step in result:
             self.assertNotEqual(
-                step.voicing.active_strings, [0, 1, 2, 3], step.tab_line()
+                [i for i, f in enumerate(step.voicing.frets) if f >= 0], [0, 1, 2, 3], step.voicing.tab_string()
             )
         # G7 is a complete chord on 6-4-3-2, the one default set that reaches the low E,
         # and Cmaj7 is a three-note shell, because a melody that low has no four-note
@@ -141,8 +142,8 @@ class TestProgressions(unittest.TestCase):
             [step.grip for step in result],
             ["drop2", "drop2_6432", "shell"],
         )
-        self.assertEqual(result[1].voicing.active_strings, [0, 2, 3, 4])  # 6-4-3-2
-        self.assertEqual(result[2].voicing.active_strings, [1, 2, 3])     # 5-4-3
+        self.assertEqual([i for i, f in enumerate(result[1].voicing.frets) if f >= 0], [0, 2, 3, 4])  # 6-4-3-2
+        self.assertEqual([i for i, f in enumerate(result[2].voicing.frets) if f >= 0], [1, 2, 3])     # 5-4-3
         # Dm7 is the one step that changed grip, and it is a real trade rather than a
         # pure gain. It was 6-4-3-2 (`5-x-3-5-3-x`, span 2, lowest voice A2) and is now
         # the contiguous 5-4-3-2 (`x-3-3-2-3-x`, span 1, lowest voice C3).

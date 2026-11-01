@@ -129,18 +129,6 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
-    def get_interval_voicings(
-        cls,
-        melody_note: Note,
-        chord_name: str,
-        top_string: int = 5,
-    ) -> List[Voicing]:
-        """See `grips.get_interval_voicings`."""
-        return _grips.get_interval_voicings(
-            melody_note, chord_name=chord_name, top_string=top_string
-        )
-
-    @classmethod
     def get_octave_down_candidates(
         cls,
         melody_note: Note,
@@ -173,18 +161,6 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
-    def get_all_drop2_voicings(
-        cls,
-        melody_note: Note,
-        chord_name: str,
-        top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES,
-    ) -> List[Voicing]:
-        """See `grips.get_all_drop2_voicings`."""
-        return _grips.get_all_drop2_voicings(
-            melody_note, chord_name=chord_name, top_strings=top_strings
-        )
-
-    @classmethod
     def get_melody_only_voicings(
         cls,
         melody_note: Note,
@@ -192,15 +168,6 @@ class VoiceLeadingEngine:
     ) -> List[Voicing]:
         """See `grips.get_melody_only_voicings`."""
         return _grips.get_melody_only_voicings(melody_note, prefer)
-
-    @classmethod
-    def get_melody_only_voicing(
-        cls,
-        melody_note: Note,
-        prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
-    ) -> Optional[Voicing]:
-        """See `grips.get_melody_only_voicing`."""
-        return _grips.get_melody_only_voicing(melody_note, prefer)
 
     @classmethod
     def sustain_inner_voices(
@@ -246,29 +213,6 @@ class VoiceLeadingEngine:
         window override and no chord to check against.
         """
         return _cost.voicing_cost(voicing, criteria)
-
-    @classmethod
-    def _best_voicing(
-        cls,
-        candidates: List[Voicing],
-        previous: Optional[Voicing] = None,
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-        allowed_tones: Optional[Container[int]] = None,
-        root_pc: Optional[int] = None,
-        melody_pc: Optional[int] = None,
-    ) -> Optional[Voicing]:
-        """See `cost.best_voicing`."""
-        return _cost.best_voicing(
-            candidates, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
-        )
-
-    @staticmethod
-    def calculate_voice_leading_distance(
-        voicing_a: Voicing | dict, voicing_b: Voicing | dict
-    ) -> float:
-        """See `cost.calculate_voice_leading_distance`."""
-        return _cost.calculate_voice_leading_distance(voicing_a, voicing_b)
 
     @staticmethod
     def calculate_pitch_leading_distance(

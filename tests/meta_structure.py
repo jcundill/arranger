@@ -373,7 +373,6 @@ TEST_SEAMS: Set[str] = {
     "meta_explanations -> arranger.options._CHORD_FILLS_HOLD",
     "test_chord_fills -> arranger.options._CHORD_FILLS_HOLD",
     "test_request -> arranger.options._CHORD_FILLS_HOLD",
-    "test_request -> arranger.cli._REQUEST_DESTS",
     # The CLI's help formatter, exercised on its own.
     "test_cli -> arranger.cli._CommonHelp",
 }

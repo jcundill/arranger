@@ -122,8 +122,8 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
         theirs, their_notes = through_slots(triples, timings, request, **kwargs)
 
         self.assertEqual(
-            [step.tab_line() for step in mine],
-            [step.tab_line() for step in theirs],
+            [step.voicing.tab_string() for step in mine],
+            [step.voicing.tab_string() for step in theirs],
             f"{label}: the two entry points voiced one slot differently",
         )
         for field in ("grip", "partial", "repeated", "role", "metric_weight", "melody_only"):
@@ -315,7 +315,7 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
         slot_source = source_of("arranger.slots")
         for snippet in (
             "prepare_step(",
-            "_best_voicing(",
+            "best_voicing(",
             "ArrangementStep(",
         ):
             with self.subTest(snippet=snippet):

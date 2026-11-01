@@ -254,7 +254,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         # The part that does carry them states a complete comping shape, and the
         # guide-tone pair is *inside* it rather than being the whole of it.
         for step in self.arrange(CHORD_ONLY):
-            self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 3, step.voicing.tab_string())
             self.assertLessEqual(guide_pcs(step.chord), {m % 12 for m in step.voicing.midi_notes()})
 
     def test_the_chord_part_sounds_the_whole_chord_where_the_bass_states_one_note(self):
@@ -267,7 +267,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         """
         self.assertEqual({len(s.voicing.active_frets()) for s in self.arrange(CHORD_ONLY)}, {3})
         for step in self.arrange(LONE_BASS):
-            self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 1, step.voicing.tab_string())
 
     def test_the_chord_part_still_sounds_its_guide_tones(self):
         """The other half of "untouched": the notes are still the chord's 3rd and 7th.
@@ -279,7 +279,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
             self.assertLessEqual(
                 guide_pcs(step.chord),
                 {m % 12 for m in step.voicing.midi_notes()},
-                f"{step.tab_line()} dropped a guide tone",
+                f"{step.voicing.tab_string()} dropped a guide tone",
             )
 
     def test_a_bass_voice_lies_in_the_low_register(self):
@@ -292,9 +292,9 @@ class TestABassPartIsABassNote(unittest.TestCase):
         """
         for name in ("Cmaj7", "A7", "Dm7b5", "Bbmaj7", "Fmaj7", "G7"):
             for voicing in bass_comping(name):
-                self.assertIn(min(voicing.active_strings), (0, 1, 2), voicing.tab_string())
+                self.assertIn(min([i for i, f in enumerate(voicing.frets) if f >= 0]), (0, 1, 2), voicing.tab_string())
         for step in self.arrange(LONE_BASS):
-            self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
+            self.assertLessEqual(min([i for i, f in enumerate(step.voicing.frets) if f >= 0]), 2, step.voicing.tab_string())
 
     def test_a_bass_voice_sounds_a_root_or_a_fifth(self):
         """The degree rule `BASS_DEGREES_6432` already states, read from that table.
@@ -360,15 +360,15 @@ class TestABassPartIsABassNote(unittest.TestCase):
             for bass_voice in (False, True):
                 for voicing in get_comping_voicings(name, notes=1, bass_voice=bass_voice):
                     self.assertIn(
-                        frozenset(voicing.active_strings),
+                        frozenset([i for i, f in enumerate(voicing.frets) if f >= 0]),
                         supported,
                         voicing.tab_string(),
                     )
         for step in self.arrange(LONE_BASS):
             self.assertIn(
-                frozenset(step.voicing.active_strings),
+                frozenset([i for i, f in enumerate(step.voicing.frets) if f >= 0]),
                 supported,
-                step.tab_line(),
+                step.voicing.tab_string(),
             )
 
     def test_the_bass_part_sits_under_the_chord_part(self):
@@ -398,7 +398,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         lone = [len(s.voicing.active_frets()) for s in self.arrange(LONE_BASS)]
         self.assertEqual(set(lone), {1}, "the lone bass states more than one note")
         for step in self.arrange(LONE_BASS):
-            self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
+            self.assertLessEqual(min([i for i, f in enumerate(step.voicing.frets) if f >= 0]), 2, step.voicing.tab_string())
         counts = {len(s.voicing.active_frets()) for s in self.arrange(BASS_AND_CHORD)}
         self.assertEqual(
             counts,
@@ -440,7 +440,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
                     3,
                     f"{name} {voicing.tab_string()} is no longer a three-voice shell",
                 )
-                self.assertIn(frozenset(voicing.active_strings), shell_sets, voicing.tab_string())
+                self.assertIn(frozenset([i for i, f in enumerate(voicing.frets) if f >= 0]), shell_sets, voicing.tab_string())
 
 
 class TestRepeatedStepsHoldTheShape(unittest.TestCase):

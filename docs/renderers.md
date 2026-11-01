@@ -921,7 +921,7 @@ MusicXML score, and it is **not a replacement for MusicXML** — see below.
 | `_build_song` | the guitarpro `Song` |
 | `_duration_split` | a quarter-length to the `Duration` + `Tuplet` that sum to it |
 | `_sounding_frets` | which strings a step plays; a repeated melody is one note |
-| `GP_VERSION` / `GP_SIGNATURE` | `(5, 1, 0)` and the file header it writes |
+| `GP_VERSION` | `(5, 1, 0)` |
 
 **Why a third renderer rather than a replacement.** GP5 is a *tab* format, so it
 stores a fret and a string per note natively and a shape survives the round trip

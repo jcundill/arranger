@@ -90,8 +90,8 @@ loop and a slow one.
 tune, when each accompaniment layer attacks, what each states, and what the chord does in a
 melody rest - and `options.resolve_request` derives the axes from them. The six are **one
 value spelled twice**: by those flags and by `Request(...)` on
-`arrange_progression(progression, request=Request(...))`, with `cli._REQUEST_DESTS` the one
-list holding the two spellings to the same six. Both are the **user-facing vocabulary**; the
+`arrange_progression(progression, request=Request(...))`, with the flag-to-field mapping
+the one list holding the two spellings to the same six. Both are the **user-facing vocabulary**; the
 axes below are the engine's implementation, **derived from the request and reachable no
 other way** - no entry point takes an axis as a keyword, which
 `tests/meta_structure.py::TestTheAxesAreNotEntryPointKeywords` holds. `texture` (how many

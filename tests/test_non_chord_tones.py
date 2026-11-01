@@ -8,7 +8,7 @@ from musthe import Note
 from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, format_progression
 from arranger.annotation import step_annotation
 from arranger.chords import parse_symbol
-from arranger.grips import drop2_template_for
+from arranger.grips import drop2_template_for, get_melody_only_voicing
 from arranger.melody_alone import melody_alone_shape
 from arranger.options import ArrangeOptions, Request
 from arranger.render import print_step
@@ -23,7 +23,7 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_high_e_string_is_preferred(self):
         """F4 sits on the high E string at fret 1."""
-        voicing = self.engine.get_melody_only_voicing(Note("F4"))
+        voicing = get_melody_only_voicing(Note("F4"))
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.tab_string(), "x-x-x-x-x-1")
@@ -32,7 +32,7 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_below_the_high_e_open_pitch_falls_to_the_b_string(self):
         """Eb4 cannot be played on the high E, so it drops to the B string."""
-        voicing = self.engine.get_melody_only_voicing(Note("Eb4"))
+        voicing = get_melody_only_voicing(Note("Eb4"))
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.tab_string(), "x-x-x-x-4-x")
@@ -40,7 +40,7 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_low_melody_uses_a_string_outside_the_melody_choices(self):
         """G3 is unreachable on both melody strings and sounds on the open G."""
-        voicing = self.engine.get_melody_only_voicing(Note("G3"))
+        voicing = get_melody_only_voicing(Note("G3"))
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.tab_string(), "x-x-x-0-x-x")
@@ -49,14 +49,14 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
     def test_exactly_one_active_fret(self):
         """Whatever string is chosen, a melody-only step is a single fret."""
         for name in ("F5", "Eb5", "Db5", "Bb4", "G3", "Bb3", "B3"):
-            voicing = self.engine.get_melody_only_voicing(Note(name))
+            voicing = get_melody_only_voicing(Note(name))
             self.assertIsNotNone(voicing, name)
             assert voicing is not None
             self.assertEqual(len(voicing.active_frets()), 1, name)
 
     def test_top_fret_and_avg_fret_describe_the_single_fret(self):
         """top_fret/avg_fret are consistent for a one-fret voicing."""
-        voicing = self.engine.get_melody_only_voicing(Note("Bb3"))
+        voicing = get_melody_only_voicing(Note("Bb3"))
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.top_fret, 3)
@@ -64,23 +64,23 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
 
     def test_unreachable_note_returns_none(self):
         """Below the low E open there is nothing to play."""
-        self.assertIsNone(self.engine.get_melody_only_voicing(Note("D2")))
+        self.assertIsNone(get_melody_only_voicing(Note("D2")))
 
     def test_notes_above_the_18th_fret_return_none(self):
         """B5 and C6 are the only NC pitches the database has that cannot sound."""
         for name in ("B5", "C6"):
-            self.assertIsNone(self.engine.get_melody_only_voicing(Note(name)), name)
+            self.assertIsNone(get_melody_only_voicing(Note(name)), name)
 
     def test_prefer_order_is_honoured(self):
         """A caller may pin the melody to a specific string."""
-        voicing = self.engine.get_melody_only_voicing(Note("G3"), prefer=(3,))
+        voicing = get_melody_only_voicing(Note("G3"), prefer=(3,))
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.soprano_string(), 3)
 
     def test_out_of_range_prefer_indices_are_ignored(self):
         """A bad index in `prefer` must not raise or index off the fretboard."""
-        voicing = self.engine.get_melody_only_voicing(Note("F4"), prefer=(99, -1))
+        voicing = get_melody_only_voicing(Note("F4"), prefer=(99, -1))
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.soprano_string(), 5)
@@ -123,7 +123,7 @@ class TestMelodyOnlyPalette(unittest.TestCase):
         """`get_melody_only_voicing` stays the preference-order answer it always was."""
         for name in ("F4", "Eb4", "G3", "Bb4", "Eb5"):
             note = Note(name)
-            first = self.engine.get_melody_only_voicing(note)
+            first = get_melody_only_voicing(note)
             candidates = self.engine.get_melody_only_voicings(note)
             self.assertIsNotNone(first, name)
             self.assertEqual(first, candidates[0], name)
@@ -638,7 +638,7 @@ class TestNoChordSteps(unittest.TestCase):
         # is the B string's fret 6 rather than the G string's fret 10 - both sound F4, and
         # fret 6 is nearer the window's middle. Where the tune stands alone the window and
         # the hand still decide it - see `TestTheLoneNoteIsPlacedLikeAChord`.
-        self.assertEqual(step.tab_line(), "x-x-x-x-6-x")
+        self.assertEqual(step.voicing.tab_string(), "x-x-x-x-6-x")
 
     def test_nc_step_grip_mirrors_the_voicing(self):
         """`step.grip` says what `voicing.grip` says, not the "drop2" default.

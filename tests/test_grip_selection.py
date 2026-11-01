@@ -17,6 +17,7 @@ from arranger.cost import (
     PARTITION_CRITERION,
     SPAN_CRITERION,
     VOICING_COST_CRITERIA,
+    best_voicing,
 )
 from arranger.grip_tables import GRIP_PREFERENCE
 from arranger.grips import BASS_DEGREES_6432
@@ -56,7 +57,7 @@ class TestPositionContinuity(unittest.TestCase):
         for previous, step in zip(steps, steps[1:]):
             jump = abs(step.voicing.avg_fret - previous.voicing.avg_fret)
             self.assertLessEqual(
-                jump, 4.0, f"{previous.tab_line()} -> {step.tab_line()}"
+                jump, 4.0, f"{previous.voicing.tab_string()} -> {step.voicing.tab_string()}"
             )
 
     def test_a_repeated_melody_keeps_its_fret(self):
@@ -64,7 +65,7 @@ class TestPositionContinuity(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("D5", "Dm7"), ("D5", "G7"), ("D5", "Dm7b5")]
         )
-        frets = [s.voicing.fret_on_soprano for s in steps]
+        frets = [s.voicing.frets[s.voicing.soprano_string()] if s.voicing.soprano_string() >= 0 else -1 for s in steps]
         self.assertLessEqual(max(frets) - min(frets), 5, frets)
 
     def test_the_soprano_may_change_string_to_hold_its_position(self):
@@ -90,7 +91,7 @@ class TestSelectionDeterminism(unittest.TestCase):
         ]
         first = VoiceLeadingEngine.arrange_progression(progression)
         second = VoiceLeadingEngine.arrange_progression(progression)
-        self.assertEqual([s.tab_line() for s in first], [s.tab_line() for s in second])
+        self.assertEqual([s.voicing.tab_string() for s in first], [s.voicing.tab_string() for s in second])
 
     def test_the_family_is_the_engines_search_space(self):
         """The family is the engine's search space, so there is nothing to pin.
@@ -108,7 +109,7 @@ class TestSelectionDeterminism(unittest.TestCase):
             top_strings=(5,),
         )
         self.assertEqual(
-            [s.tab_line() for s in steps],
+            [s.voicing.tab_string() for s in steps],
             ["x-x-10-10-10-10", "x-8-x-7-8-7", "x-x-9-9-8-8"],
         )
         # Every one of them is four strings with the melody on top, which is what the
@@ -203,7 +204,7 @@ class TestVoicingCost(unittest.TestCase):
             Note("C5"), chord_name="Cmaj7"
         )
         self.assertTrue(candidates)
-        best = self.engine._best_voicing(candidates, previous=None)
+        best = best_voicing(candidates, previous=None)
         self.assertIsNotNone(best)
         assert best is not None  # pyright does not narrow through assertIsNotNone
         for v in candidates:
@@ -294,7 +295,7 @@ class TestVoicingCost(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         middle = (NECK_FRET_MIN + NECK_FRET_MAX) / 2.0
         self.assertLessEqual(
-            abs(steps[0].voicing.avg_fret - middle), 4.0, steps[0].tab_line()
+            abs(steps[0].voicing.avg_fret - middle), 4.0, steps[0].voicing.tab_string()
         )
 
     def test_span_outranks_neck_position(self):
@@ -318,7 +319,7 @@ class TestVoicingCost(unittest.TestCase):
             Note("C5"), chord_name="Cm7b5"
         )
         self.assertTrue(candidates)
-        best = self.engine._best_voicing(candidates, previous=chosen)
+        best = best_voicing(candidates, previous=chosen)
         assert best is not None  # pyright does not narrow through assertIsNotNone
         self.assertLessEqual(best.fret_span(), chosen.fret_span())
 
