@@ -34,6 +34,7 @@ from .tuning import (
     MELODY_STRING_CHOICES_FULL,
     STANDARD_TUNING,
     GuitarFretboard,
+    Technique,
     note_name,
 )
 
@@ -43,6 +44,7 @@ def get_grip_voicings(
     chord_name: str,
     top_string: int = 5,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """Generates fingerings for `grips` on one string block, pinned to the melody.
 
@@ -69,6 +71,10 @@ def get_grip_voicings(
     `GRIP_MAX_SPAN[grip]`. It sounds chord tones only, with one deliberate exception: an
     `interval` fill may sit a diatonic tone of the key under a melody that is not a chord
     tone, because a fill is a texture rather than a claim about the chord.
+
+    `technique`, when given, is attached to every candidate voicing: techniques describe
+    *how* a fret is played and do not enter `voicing_cost`, so they never influence
+    selection. `get_all_grip_voicings` and `get_octave_down_candidates` forward it.
     """
     melody_midi = melody_note.midi_note()
 
@@ -96,6 +102,7 @@ def get_grip_voicings(
                         template, strings, melody_midi, top_fret, grip
                     )
                     if voicing is not None:
+                        voicing.technique = technique
                         valid_voicings.append(voicing)
                 continue
             # A searched family: one shape per string set, and the search finds it.
@@ -106,6 +113,7 @@ def get_grip_voicings(
                 continue
             found = place_shape(request, allowed)
             if found is not None:
+                found.technique = technique
                 valid_voicings.append(found)
 
     return valid_voicings
@@ -115,6 +123,7 @@ def get_drop2_voicings(
     melody_note: Note,
     chord_name: str,
     top_string: int = 5,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """Generates valid 4-string Drop-2 fretboard fingerings pinned to the melody note.
 
@@ -127,9 +136,11 @@ def get_drop2_voicings(
     Kept as a named entry point because it is what callers reach for directly and
     its output is part of the library's published behaviour. It is exactly
     `get_grip_voicings` with the grip pinned to drop-2.
+
+    `technique` is forwarded to `get_grip_voicings` and attached to every candidate.
     """
     return get_grip_voicings(
-        melody_note, chord_name, top_string, grips=("drop2",)
+        melody_note, chord_name, top_string, grips=("drop2",), technique=technique
     )
 
 
@@ -197,10 +208,13 @@ def _melody_only_voicings_on(
     melody_note: Note,
     strings: Tuple[int, ...],
     octave_shift: int,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """One single-fret Voicing per string in `strings` that can carry `melody_note`, in the
     order given. The shift is applied to the *note*, not to the fret, so an octave-down
     attempt asks the fretboard the same question it would ask of the written pitch.
+
+    `technique` is attached to every candidate.
     """
     shifted = Note(note_name(melody_note.midi_note() + octave_shift))
     candidates: List[Voicing] = []
@@ -209,16 +223,15 @@ def _melody_only_voicings_on(
         if 0 <= fret <= HIGH_FRET_LIMIT:
             frets = [-1] * len(STANDARD_TUNING)
             frets[string_index] = fret
-            # `grip` is set rather than left at its "drop2" default: this is a
-            # single-fret shape, and a caller reading `voicing.grip` would otherwise
-            # conclude a four-note drop-2 had been chosen. The playability invariant
-            # keys off this field.
-            candidates.append(Voicing(
-                frets=frets,
-                top_fret=fret,
-                avg_fret=float(fret),
-                grip="melody",
-            ))
+            candidates.append(
+                Voicing(
+                    frets=frets,
+                    top_fret=fret,
+                    avg_fret=float(fret),
+                    grip="melody",
+                    technique=technique,
+                )
+            )
     return candidates
 
 
@@ -227,6 +240,7 @@ def get_octave_down_candidates(
     chord_name: str,
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """Candidates for melody_note an octave lower, on the strings below the high E.
 
@@ -234,6 +248,8 @@ def get_octave_down_candidates(
     down an octave brings it into a playable position rather than dropping the step.
     High-E candidates are excluded - the octave-down note lands on a lower string,
     which is why `lower_soprano_strings` trims the set.
+
+    `technique` is forwarded to `get_all_grip_voicings` and attached to every candidate.
     """
     octave_down = Note(note_name(melody_note.midi_note() - 12))
     return get_all_grip_voicings(
@@ -241,6 +257,7 @@ def get_octave_down_candidates(
         chord_name,
         top_strings=lower_soprano_strings(top_strings),
         grips=grips,
+        technique=technique,
     )
 
 
@@ -249,6 +266,7 @@ def get_all_grip_voicings(
     chord_name: str,
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """Collects fingerings for every allowed soprano string in `top_strings`.
 
@@ -261,11 +279,15 @@ def get_all_grip_voicings(
     transposes. A melody whose only position lies outside the window is re-voiced
     an octave down by `get_octave_down_candidates`, which `arrange_progression`
     calls - so the two cannot recurse into each other.
+
+    `technique` is forwarded to `get_grip_voicings` and attached to every candidate.
     """
     candidates: List[Voicing] = []
     for top_string in top_strings:
         candidates.extend(
-            get_grip_voicings(melody_note, chord_name, top_string, grips)
+            get_grip_voicings(
+                melody_note, chord_name, top_string, grips, technique=technique
+            )
         )
 
     return candidates
@@ -274,6 +296,7 @@ def get_all_grip_voicings(
 def get_melody_only_voicings(
     melody_note: Note,
     prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """Every single-fret Voicing that plays melody_note alone, in preference order.
 
@@ -294,6 +317,8 @@ def get_melody_only_voicings(
     rather than being respelled: emptiness is the documented signal that a note cannot
     sound (B5 is fret 19, C6 is fret 20 - both past the end of the board), and quietly
     playing it an octave down would hide that from the caller.
+
+    `technique` is attached to every candidate.
     """
     # Reachability at the written pitch, across every string, decides whether the
     # octave-down attempt is legitimate at all. Without this a genuinely
@@ -305,17 +330,25 @@ def get_melody_only_voicings(
         return []
 
     for strings, octave_shift in _melody_only_string_groups(prefer):
-        candidates = _melody_only_voicings_on(melody_note, strings, octave_shift)
+        candidates = _melody_only_voicings_on(
+            melody_note, strings, octave_shift, technique=technique
+        )
         if candidates:
             return candidates
     return []
 
 
-def sustain_inner_voices(previous_voicing: Voicing | dict, melody_note: Note) -> Optional[Voicing]:
+def sustain_inner_voices(
+    previous_voicing: Voicing | dict,
+    melody_note: Note,
+    technique: Optional[Technique] = None,
+) -> Optional[Voicing]:
     """Strategy 3: hold the previous chord's three inner voices and move only the
     soprano to the new melody note, the way a player sustains a shape under a
     passing tone. Returns None when the melody is unreachable on the same
     string within a playable span, so the caller can reharmonise instead.
+
+    `technique` is attached to the returned voicing when given.
     """
     frets = previous_voicing["frets"] if isinstance(previous_voicing, dict) else previous_voicing.frets
     frets = list(frets)
@@ -349,6 +382,7 @@ def sustain_inner_voices(previous_voicing: Voicing | dict, melody_note: Note) ->
         avg_fret=sum(active) / len(active),
         grip=prev_grip,
         bass_pc=min(midis) % 12 if midis else None,
+        technique=technique,
     )
 
 

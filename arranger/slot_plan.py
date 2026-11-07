@@ -456,7 +456,8 @@ def slot_state(
     updated in place.
     """
     index = slot.index
-    note_str, name = inputs.arrangement.progression[index]
+    entry = inputs.arrangement.progression[index]
+    note_str, name = entry[0], entry[1]
     if note_str is None:
         # A melody-only selection's note-less slot is **tune silent** unless the thumb
         # has something there: `chord_on="none"` with a thumb plays the bass part, and a

@@ -856,6 +856,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_slash_bass_clause",
             "_sounding_clause",
             "_substitution_clause",
+            "_technique_clause",
             "_transposition_clause",
             "_window_clause",
         }

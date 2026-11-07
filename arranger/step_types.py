@@ -15,9 +15,24 @@ instead of owning them.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple, TypeAlias, Union
 
-from .tuning import ROLE_TARGET, STRING_NAMES, GuitarFretboard
+from .tuning import (
+    ROLE_TARGET,
+    STRING_NAMES,
+    GuitarFretboard,
+    Technique,
+)
+
+# One entry of a progression passed to the step loop: a melody note and a chord name,
+# optionally carrying a `Technique` that describes how the note is fretted (e.g. a bend
+# read from a MusicXML `<technical>`). Two-tuples are the historical spelling and remain
+# the default; the trailing technique defaults to `None` so every existing caller is
+# unaffected. `prepare_step` is the only consumer that reads the third element.
+ProgressionEntry: TypeAlias = Union[
+    Tuple[Optional[str], str],
+    Tuple[Optional[str], str, Optional[Technique]],
+]
 
 # What an unsounded string renders as when the caller asks to see mutes, and the
 # width every fret cell is padded to. Two characters covers frets 0-18, which is
@@ -38,6 +53,7 @@ class Voicing:
     role: str = ROLE_TARGET
     bass_midi: Optional[int] = None
     bass_string: Optional[int] = None
+    technique: Optional[Technique] = None
 
     def tab_string(self) -> str:
         """Returns standard tab representation, e.g. 'x-x-12-13-13-13'."""

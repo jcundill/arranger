@@ -18,7 +18,7 @@ from .grip_requests import chord_context
 from .grip_tables import COMPING_MAX_SPAN, comping_string_sets
 from .grip_templates import _shell_voicing
 from .step_types import Voicing
-from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard
+from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Technique
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,7 @@ class CompingRequest:
     notes: int = 3
     bass_voice: bool = False
     band: Optional[Tuple[int, int]] = None
+    technique: Optional[Technique] = None
 
 
 def _comping_collapse_key(
@@ -132,6 +133,7 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
             )
             if found is None:
                 continue
+            found.technique = request.technique
             if band is None:
                 key: Tuple[Any, ...] = (
                     max(frets) - min(frets), sum(frets) / len(frets)
@@ -196,6 +198,7 @@ def get_comping_voicings(
     fret_max: int = NECK_FRET_MAX,
     notes: int = 3,
     bass_voice: bool = False,
+    technique: Optional[Technique] = None,
 ) -> List[Voicing]:
     """The primitive spelling of `get_comping_voicings_for`, kept for callers.
 
@@ -208,4 +211,5 @@ def get_comping_voicings(
         fret_max=fret_max,
         notes=notes,
         bass_voice=bass_voice,
+        technique=technique,
     ))

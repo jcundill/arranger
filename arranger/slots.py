@@ -28,7 +28,7 @@ from musthe import Note
 
 from .chords import bass_pitch_class, parse_symbol, slash_bass
 from .options import ArrangeOptions, resolve_request
-from .step_types import ArrangementStep
+from .step_types import ArrangementStep, ProgressionEntry
 from .steps import VoiceLeadingEngine
 
 __all__ = [
@@ -66,7 +66,7 @@ def parse_bar_range(text: str) -> Tuple[int, Optional[int]]:
         raise ValueError(f"Bar range {text!r} is empty; HI must be greater than LO")
     return (lo, hi)
 def unresolved_steps(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     non_chord_tone: str = "extension",
     onsets: Optional[Container[int]] = None,
 ) -> List[int]:
@@ -87,7 +87,8 @@ def unresolved_steps(
     comping route the retry must not fire there. `None` scans every slot.
     """
     unresolved: List[int] = []
-    for index, (note, name) in enumerate(progression):
+    for index, entry in enumerate(progression):
+        note, name = entry[0], entry[1]
         if onsets is not None and index not in onsets:
             continue
         if parse_symbol(name) is None:
@@ -104,7 +105,7 @@ def unresolved_steps(
 
 
 def _next_chord_tone_melody(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     index: int,
     onsets: Optional[Container[int]] = None,
 ) -> Optional[str]:
@@ -125,7 +126,8 @@ def _next_chord_tone_melody(
     for offset in range(index + 1, len(progression)):
         if onsets is not None and offset not in onsets:
             continue
-        melody, name = progression[offset]
+        entry = progression[offset]
+        melody, name = entry[0], entry[1]
         if melody is None or parse_symbol(name) is None:
             continue
         if VoiceLeadingEngine.is_chord_tone(Note(melody), name):
@@ -139,7 +141,7 @@ def _next_chord_tone_melody(
 
 
 def arrange_slots(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
     *,
     options: Optional[ArrangeOptions] = None,
@@ -240,7 +242,9 @@ def arrange_slots(
             # rescue, so it looked like a corpus bug rather than a shadowing one. The
             # same trap `_slot_options` dodges for `bass`, documented beside its own
             # loop.
-            note, name = progression[index]
+            entry = progression[index]
+            note, name = entry[0], entry[1]
+            technique = entry[2] if len(entry) == 3 else None
             if note is None:
                 # Not produced by `unresolved_steps`, which skips a slot with no
                 # melody - there is no onset for the rescue to fire at. Kept so the
@@ -251,7 +255,7 @@ def arrange_slots(
                 next_melody=_next_chord_tone_melody(progression, index, onsets),
             )
             if resolved is not None:
-                working[index] = (note, resolved)
+                working[index] = (note, resolved, technique)
                 rescued.append(index)
 
     options = _slot_options(
@@ -267,7 +271,7 @@ def arrange_slots(
     return steps, rescued, notes
 
 def _slot_options(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]],
     onsets: Optional[Container[int]],
     options: ArrangeOptions,
@@ -316,10 +320,11 @@ def _slot_options(
 
     # --- the slash bass, as data -------------------------------------------------
     bass_pcs: Dict[int, Optional[int]] = {}
-    for index, (_melody, name) in enumerate(progression):
+    for index, entry in enumerate(progression):
         # Named `slash`, not `bass`: the request's bass policy is a field of
         # `options`, and a loop local of that name would read like the policy while
         # holding a pitch class.
+        _melody, name = entry[0], entry[1]
         slash = slash_bass(name)
         if slash is not None:
             bass_pcs[index] = bass_pitch_class(slash)

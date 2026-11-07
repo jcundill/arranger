@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from arranger.chords import midi_to_note_name
+from arranger.tuning import Technique
 
 # ---------------------------------------------------------------------------
 # Records
@@ -48,6 +49,7 @@ class HeadNote:
     quality: Optional[str] = None
     bass: Optional[str] = None
     lyrics: Tuple[str, ...] = ()
+    technique: Optional[Technique] = None
 
     @property
     def key(self) -> Tuple[int, float]:

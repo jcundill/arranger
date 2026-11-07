@@ -28,7 +28,7 @@ from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .resolution import felt_beat_timings, resolve_knobs, resolve_policies
 from .route_dispatch import dispatch_step
 from .slot_plan import Carried, SlotInputs, SlotRhythmFacts, slot_state
-from .step_types import ArrangementStep
+from .step_types import ArrangementStep, ProgressionEntry
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -63,7 +63,7 @@ def _placed(
 
 
 def _loop_slots(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     slots: Optional[List[Slot]],
 ) -> List[Slot]:
@@ -87,7 +87,7 @@ def _loop_slots(
 
 
 def _timeline(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     beats_per_bar: int,
 ) -> Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]:
@@ -103,7 +103,7 @@ def _timeline(
 
 
 def arrange_progression(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     non_chord_tone: str = "extension",
     fret_min: int = NECK_FRET_MIN,

@@ -291,6 +291,7 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _bass_alone_clause(step),
         _bass_room_clause(step),
         _bass_refusal_clause(step),
+        _technique_clause(step),
     )
     for clause in derived:
         if clause:
@@ -595,6 +596,57 @@ def _bass_refusal_clause(step: ArrangementStep) -> str:
         f"would need a fifth fret, or the reach is wider than five frets; the "
         f"step keeps its upper voicing"
     )
+
+
+def _technique_clause(step: ArrangementStep) -> str:
+    """Phrases how a fretted note is played, from `step.voicing.technique`.
+
+    A technique describes *how* a fret is played, so it rides on the voicing, not
+    the step. Silent when there is no technique - which is every step arranged
+    before this existed, so existing output is unchanged.
+    """
+    technique = step.voicing.technique
+    if technique is None:
+        return ""
+    parts: List[str] = []
+    if technique.bend_semitones:
+        word = "pre-bend" if technique.bend_pre else "bend"
+        if technique.bend_release:
+            word += " release"
+        parts.append(
+            f"{word} {technique.bend_semitones} semitone{'s' if technique.bend_semitones > 1 else ''}"
+        )
+    if technique.link == "hammer":
+        parts.append("hammer on")
+    elif technique.link == "pull":
+        parts.append("pull off")
+    if technique.slide:
+        kind = "legato slide" if technique.slide == "legato" else "shift slide"
+        if technique.slide_in:
+            kind += f" into from {technique.slide_in}"
+        if technique.slide_out:
+            kind += f" sliding out {technique.slide_out}"
+        parts.append(kind)
+    if technique.harmonic:
+        parts.append(f"{technique.harmonic} harmonic")
+    if technique.vibrato:
+        parts.append("vibrato")
+    if technique.palm_mute:
+        parts.append("palm mute")
+    if technique.let_ring:
+        parts.append("let ring")
+    if technique.staccato:
+        parts.append("staccato")
+    if technique.grace:
+        grace = "grace note"
+        if technique.grace_hammer and technique.grace_fret is not None:
+            grace += f" hammered onto fret {technique.grace_fret}"
+        parts.append(grace)
+    if technique.stroke:
+        parts.append(f"{technique.stroke} stroke")
+    if not parts:
+        return ""
+    return "technique: " + _and_list(parts)
 
 
 def _bass_room_clause(step: ArrangementStep) -> str:

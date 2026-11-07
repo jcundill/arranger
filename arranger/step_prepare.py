@@ -24,10 +24,11 @@ from .bass_merge import next_resolution_melody
 from .chords import ChordParser, resolve_substitute_harmony
 from .grip_tables import GRIP_PREFERENCE
 from .grips import MELODY_STRING_CHOICES_FULL
-from .step_types import Voicing
+from .step_types import ProgressionEntry, Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    Technique,
     note_name,
 )
 
@@ -93,6 +94,7 @@ def _voices_for(
     written: str,
     name: str,
     window: _SearchWindow,
+    technique: Optional[Technique] = None,
 ) -> _Voiced:
     """The candidates for the note, after the octave-down rescue.
 
@@ -107,10 +109,14 @@ def _voices_for(
     playable but sits too high. A melody unreachable at the written pitch (C6,
     fret 20 - past the end of the board) is left alone, because there is no shape
     to move down and respelling it would hide the real problem.
+
+    `technique` is forwarded to `get_all_grip_voicings` and `get_octave_down_candidates`
+    and attached to every candidate.
     """
     candidates = _grips.get_all_grip_voicings(
         melody_note, name,
         top_strings=window.top_strings, grips=window.grips,
+        technique=technique,
     )
     voiced = _Voiced(candidates=candidates, melody=melody_note, original_melody=None)
     here = _cost.window_penalty(candidates, window.fret_min, window.fret_max)
@@ -119,6 +125,7 @@ def _voices_for(
     octave_down = _grips.get_octave_down_candidates(
         melody_note, name,
         top_strings=window.top_strings, grips=window.grips,
+        technique=technique,
     )
     # Only take the lower octave when it genuinely improves the placement, or a
     # merely slightly out-of-window melody would be moved for nothing.
@@ -140,8 +147,9 @@ def _apply_non_chord_tone(
     previous: Optional[Voicing],
     previous_chord: Optional[str],
     window: _SearchWindow,
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     index: int,
+    technique: Optional[Technique] = None,
 ) -> _Voiced:
     """Re-voice a melody that is not a chord tone, and record what was done.
 
@@ -152,9 +160,13 @@ def _apply_non_chord_tone(
     line has to name it: "non-chord tone" alone cannot tell a substitution that
     failed from one that was never attempted. What distinguishes the two is
     `harmonized_as`, which stays None here - not the strategy field.
+
+    `technique` is forwarded to the substitute voicings.
     """
     if strategy == "sustain" and previous is not None:
-        sustained = _grips.sustain_inner_voices(previous, voiced.melody)
+        sustained = _grips.sustain_inner_voices(
+            previous, voiced.melody, technique=technique
+        )
         if sustained is not None:
             return replace(
                 voiced,
@@ -174,6 +186,7 @@ def _apply_non_chord_tone(
             voiced.melody,
             substitute_name,
             top_strings=window.top_strings, grips=window.grips,
+            technique=technique,
         )
         if substituted:
             return replace(
@@ -186,7 +199,7 @@ def _apply_non_chord_tone(
 
 
 def prepare_step(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     index: int,
     previous: Optional[Voicing] = None,
     previous_chord: Optional[str] = None,
@@ -209,7 +222,10 @@ def prepare_step(
     by the `sustain` strategy, and `previous_chord` is what that strategy
     reports as `harmonized_as`.
     """
-    note_str, name = progression[index]
+    entry = progression[index]
+    note_str, name = entry[0], entry[1]
+    # The trailing technique is optional: two-tuple entries carry None here.
+    technique = entry[2] if len(entry) == 3 else None
     if note_str is None:
         # No melody to pin. `arrange_progression` skips such a slot before it can
         # reach here - every singing route needs a note, and the comping route
@@ -221,7 +237,7 @@ def prepare_step(
         top_strings=top_strings, grips=grips,
         fret_min=fret_min, fret_max=fret_max,
     )
-    voiced = _voices_for(melody_note, note_str, name, window)
+    voiced = _voices_for(melody_note, note_str, name, window, technique=technique)
     is_non_chord_tone = (
         _chords.quality_of(name) in ChordParser.CHORD_TONES_FROM_ROOT
         and not _chords.is_chord_tone(melody_note, name)
@@ -236,6 +252,7 @@ def prepare_step(
             window=window,
             progression=progression,
             index=index,
+            technique=technique,
         )
 
     if not voiced.candidates:
