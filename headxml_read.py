@@ -826,42 +826,70 @@ def _beat_from_onset(onset: float, divisions: int, beat_type: int) -> float:
 
 
 def _read_technical(note: ElementTree.Element) -> Optional[Technique]:
-    """One `<note>`'s `<technical>` as a `Technique`, or `None` when it has none.
+    """One `<note>`'s techniques as a `Technique`, or `None` when it has none.
 
     A technique describes *how* a fret is played, so it rides on the note read
     here and lands on `Voicing.technique` via `HeadNote.technique`. Every field
-    is neutral by default, so a note with no `<technical>` reads as no technique
+    is neutral by default, so a note with no techniques reads as no technique
     and every existing score is unaffected.
+
+    MusicXML splits techniques between `<technical>` (hammer-on, pull-off,
+    bend, harmonic, tap-hand, vibrato) and direct `<notations>` children
+    (slide, scoop, plop, doit, fall-off). Both are read here; whichever a
+    writer uses is honoured, and the two can even be mixed on one note.
     """
-    technical = note.find("technical")
-    if technical is None:
-        return None
+    notations = note.find("notations")
+    if notations is None:
+        technical = note.find("technical")
+        if technical is None:
+            return None
+        containers = [technical]
+    else:
+        containers = [notations]
     technique = Technique()
-    for item in technical:
-        tag = item.tag
-        if tag == "hammer-on":
-            technique.link = LINK_HAMMER
-        elif tag == "pull-off":
-            technique.link = LINK_PULL
-        elif tag == "slide":
-            technique.slide = SLIDE_LEGATO
-        elif tag == "scoop":
-            technique.slide_in = SLIDE_IN_BELOW
-        elif tag == "plop":
-            technique.slide_in = SLIDE_IN_ABOVE
-        elif tag == "doit":
-            technique.slide_out = SLIDE_OUT_UP
-        elif tag == "fall-off":
-            technique.slide_out = SLIDE_OUT_DOWN
-        elif tag == "bend":
-            _read_bend(item, technique)
-        elif tag == "harmonic":
-            _read_harmonic(item, technique)
-        elif tag == "tap-hand":
-            technique.tapped = True
-        elif tag == "vibrato":
-            technique.vibrato = True
+    for container in containers:
+        for item in container:
+            if item.tag == "technical":
+                # A `<technical>` nested inside `<notations>`: read its children.
+                for child in item:
+                    _apply_technical_child(child, technique)
+            else:
+                # slide, scoop, plop, doit, fall-off are direct `<notations>` children.
+                _apply_technical_child(item, technique)
     return technique
+
+
+def _apply_technical_child(item: ElementTree.Element, technique: Technique) -> None:
+    """One technique element, applied to `technique`.
+
+    MusicXML splits techniques between `<technical>` (hammer-on, pull-off,
+    bend, harmonic, tap-hand, vibrato) and direct `<notations>` children
+    (slide, scoop, plop, doit, fall-off); both spellings are accepted here so
+    the reader is not tied to one writer's convention.
+    """
+    tag = item.tag
+    if tag == "hammer-on":
+        technique.link = LINK_HAMMER
+    elif tag == "pull-off":
+        technique.link = LINK_PULL
+    elif tag == "slide":
+        technique.slide = SLIDE_LEGATO
+    elif tag == "scoop":
+        technique.slide_in = SLIDE_IN_BELOW
+    elif tag == "plop":
+        technique.slide_in = SLIDE_IN_ABOVE
+    elif tag == "doit":
+        technique.slide_out = SLIDE_OUT_UP
+    elif tag == "fall-off":
+        technique.slide_out = SLIDE_OUT_DOWN
+    elif tag == "bend":
+        _read_bend(item, technique)
+    elif tag == "harmonic":
+        _read_harmonic(item, technique)
+    elif tag == "tap-hand":
+        technique.tapped = True
+    elif tag == "vibrato":
+        technique.vibrato = True
 
 
 def _read_bend(bend: ElementTree.Element, technique: Technique) -> None:

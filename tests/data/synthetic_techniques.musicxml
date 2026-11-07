@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+<work><work-title>Synthetic Techniques</work-title></work>
+<movement-title>Synthetic Techniques</movement-title>
+<identification><creator type="composer">Fixture Generator</creator></identification>
+<part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>
+<part id="P1">
+<measure number="1">
+<attributes><divisions>4</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+<harmony><root><root-step>C</root-step></root><kind text="maj7">major-seventh</kind></harmony>
+<note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><hammer-on type="start" number="1"/></technical></notations></note>
+<note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><pull-off type="start" number="1"/></technical></notations></note>
+<note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><bend><bend-alter>2</bend-alter></bend></technical></notations></note>
+<note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><slide type="start" number="1" line-type="solid"/></technical></notations></note>
+</measure>
+<measure number="2">
+<harmony><root><root-step>C</root-step></root><kind text="maj7">major-seventh</kind></harmony>
+<note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><scoop/></technical></notations></note>
+<note><pitch><step>F</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><plop/></technical></notations></note>
+<note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><doit/></technical></notations></note>
+<note><pitch><step>A</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><fall-off/></technical></notations></note>
+</measure>
+<measure number="3">
+<harmony><root><root-step>C</root-step></root><kind text="maj7">major-seventh</kind></harmony>
+<note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><harmonic><natural/></harmonic></technical></notations></note>
+<note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><harmonic><artificial/></harmonic></technical></notations></note>
+<note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><harmonic><pinched/></harmonic></technical></notations></note>
+<note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><notations><technical><tap-hand/><vibrato type="start"/></technical></notations></note>
+</measure>
+</part>
+</score-partwise>

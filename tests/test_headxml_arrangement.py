@@ -32,6 +32,7 @@ from tests.support import (
     I_WAS_DOING_ALL_RIGHT,
     RAINY_DAY,
     SEVEN_FOUR,
+    SYNTHETIC_TECHNIQUES,
     TENOR_MADNESS,
     TROUBLE_IN_MIND,
     TWELVE_EIGHT,
@@ -1165,3 +1166,59 @@ class TestGroupingFromTheScore(unittest.TestCase):
         self.addCleanup(os.unlink, path)
         head = load_musicxml(path)
         self.assertEqual((head.grouping, head.grouping_source), ((), ""))
+
+
+class TestTechniquesRoundTrip(unittest.TestCase):
+    """A `<technical>` written into a MusicXML head survives as `Voicing.technique`.
+
+    The technique rides on the note through `head_skeleton`'s slots and the
+    engine's candidate voicings, so a bend, slide, harmonic or hammer-on written
+    into the score is still on the tab's voicing after arrangement.
+    """
+
+    # (bar, beat) -> the technique the fixture's note at that position carries.
+    EXPECTED = {
+        (1, 1.0): ("link", "hammer"),
+        (1, 2.0): ("link", "pull"),
+        (1, 3.0): ("bend_semitones", 2),
+        (1, 4.0): ("slide", "legato"),
+        (2, 1.0): ("slide_in", "below"),
+        (2, 2.0): ("slide_in", "above"),
+        (2, 3.0): ("slide_out", "up"),
+        (2, 4.0): ("slide_out", "down"),
+        (3, 1.0): ("harmonic", "natural"),
+        (3, 2.0): ("harmonic", "artificial"),
+        (3, 3.0): ("harmonic", "pinch"),
+        (3, 4.0): ("tapped_vibrato", None),
+    }
+
+    def steps(self):
+        steps, _head, report = arrange_xml_head(SYNTHETIC_TECHNIQUES)
+        self.assertFalse(report)
+        return steps
+
+    def test_every_technique_lands_on_the_step_voicing(self):
+        found = {}
+        for step in self.steps():
+            voicing = step.voicing
+            if voicing is None or voicing.technique is None:
+                continue
+            assert step.bar is not None and step.beat is not None
+            found[(step.bar, step.beat)] = voicing.technique
+        self.assertEqual(set(found), set(self.EXPECTED))
+
+    def test_each_technique_matches_what_the_score_wrote(self):
+        steps = self.steps()
+        for step in steps:
+            voicing = step.voicing
+            if voicing is None or voicing.technique is None:
+                continue
+            assert step.bar is not None and step.beat is not None
+            technique = voicing.technique
+            key = (step.bar, step.beat)
+            field, value = self.EXPECTED[key]
+            if field == "tapped_vibrato":
+                self.assertTrue(technique.tapped, f"{key} tapped")
+                self.assertTrue(technique.vibrato, f"{key} vibrato")
+            else:
+                self.assertEqual(getattr(technique, field), value, f"{key} {field}")

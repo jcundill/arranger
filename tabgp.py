@@ -465,11 +465,19 @@ def _apply_technique(gp: Any, note: Any, technique: Optional[Technique]) -> None
 
     # Harmonic: natural / pinch / artificial.
     if technique.harmonic == "natural":
-        effect.harmonic = gp.NaturalHarmonic
+        effect.harmonic = gp.NaturalHarmonic()
     elif technique.harmonic == "pinch":
-        effect.harmonic = gp.PinchHarmonic
+        effect.harmonic = gp.PinchHarmonic()
     elif technique.harmonic == "artificial":
-        effect.harmonic = gp.ArtificialHarmonic
+        harmonic = gp.ArtificialHarmonic()
+        # Pre-set pitch/octave so PyGuitarPro's writer does not need
+        # `note.realValue`, which requires a measure->track back-reference that
+        # is unavailable here. The pitch class is the fretted note's; the touch
+        # point is 12 frets above, which shares its pitch class.
+        string_pc = _STRING_PITCH_CLASSES.get(note.string, 0)
+        harmonic.pitch = gp.PitchClass((note.value + string_pc) % 12)
+        harmonic.octave = gp.Octave.ottava
+        effect.harmonic = harmonic
 
     # Hammer / pull (GP5 expresses both as the hammer flag), vibrato, mute,
     # ring, staccato.
@@ -1219,6 +1227,12 @@ __all__ = ["format_gp5", "write_gp5"]
 
 
 _GP_STRING_OFFSET = 6
+
+# Standard-tuning open-string pitch classes, keyed by guitarpro's string number
+# (1 = high E … 6 = low E). `note.realValue = fret + string_pitch_class` needs the
+# measure->track back-reference, which PyGuitarPro's writer does not provide here,
+# so the artificial-harmonic pitch is computed from this table instead.
+_STRING_PITCH_CLASSES: Dict[int, int] = {1: 4, 2: 11, 3: 7, 4: 2, 5: 9, 6: 4}
 
 # The shortest note value a beat can carry, as a guitarpro Duration value. A
 # sixteenth is the practical floor: nothing this library generates is shorter than
