@@ -334,7 +334,7 @@ class TestReductionAndArranging(unittest.TestCase):
         """The bass rides in the name, as the corpus path keeps it, and rule B
         promotes a triad whose bass is its own seventh."""
         head = self.load(harmony("A", "minor", bass="G") + note("E"))
-        _melody, name = head_skeleton(head)[0][0]
+        _melody, name, _technique = head_skeleton(head)[0][0]
         # A minor triad over G is a minor 7th, and the promotion is `parse_symbol`'s.
         symbol = parse_symbol(name)
         assert symbol is not None
