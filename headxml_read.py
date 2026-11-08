@@ -12,7 +12,21 @@ from arranger.chords import ChordParser
 from arranger.grouping import grouping_allowed, parse_grouping
 from headxml_model import BarInstruction, Head, HeadChange, HeadNote
 from headxml_repeats import expand_repeats
-from tuning import NO_CHORD, PITCH_CLASS_NAMES
+from tuning import (
+    HARMONIC_ARTIFICIAL,
+    HARMONIC_NATURAL,
+    HARMONIC_PINCH,
+    LINK_HAMMER,
+    LINK_PULL,
+    NO_CHORD,
+    PITCH_CLASS_NAMES,
+    SLIDE_IN_ABOVE,
+    SLIDE_IN_BELOW,
+    SLIDE_LEGATO,
+    SLIDE_OUT_DOWN,
+    SLIDE_OUT_UP,
+    Technique,
+)
 
 # ---------------------------------------------------------------------------
 # Chord symbols
@@ -811,6 +825,107 @@ def _beat_from_onset(onset: float, divisions: int, beat_type: int) -> float:
     return 1.0 + (onset / divisions) * (beat_type / 4.0)
 
 
+def _read_technical(note: ElementTree.Element) -> Optional[Technique]:
+    """One `<note>`'s techniques as a `Technique`, or `None` when it has none.
+
+    A technique describes *how* a fret is played, so it rides on the note read
+    here and lands on `Voicing.technique` via `HeadNote.technique`. Every field
+    is neutral by default, so a note with no techniques reads as no technique
+    and every existing score is unaffected.
+
+    MusicXML splits techniques between `<technical>` (hammer-on, pull-off,
+    bend, harmonic, tap-hand, vibrato) and direct `<notations>` children
+    (slide, scoop, plop, doit, fall-off). Both are read here; whichever a
+    writer uses is honoured, and the two can even be mixed on one note.
+    """
+    notations = note.find("notations")
+    if notations is None:
+        technical = note.find("technical")
+        if technical is None:
+            return None
+        containers = [technical]
+    else:
+        containers = [notations]
+    technique = Technique()
+    for container in containers:
+        for item in container:
+            if item.tag == "technical":
+                # A `<technical>` nested inside `<notations>`: read its children.
+                for child in item:
+                    _apply_technical_child(child, technique)
+            else:
+                # slide, scoop, plop, doit, fall-off are direct `<notations>` children.
+                _apply_technical_child(item, technique)
+    return technique
+
+
+def _apply_technical_child(item: ElementTree.Element, technique: Technique) -> None:
+    """One technique element, applied to `technique`.
+
+    MusicXML splits techniques between `<technical>` (hammer-on, pull-off,
+    bend, harmonic, tap-hand, vibrato) and direct `<notations>` children
+    (slide, scoop, plop, doit, fall-off); both spellings are accepted here so
+    the reader is not tied to one writer's convention.
+    """
+    tag = item.tag
+    if tag == "hammer-on":
+        technique.link = LINK_HAMMER
+    elif tag == "pull-off":
+        technique.link = LINK_PULL
+    elif tag == "slide":
+        technique.slide = SLIDE_LEGATO
+    elif tag == "scoop":
+        technique.slide_in = SLIDE_IN_BELOW
+    elif tag == "plop":
+        technique.slide_in = SLIDE_IN_ABOVE
+    elif tag == "doit":
+        technique.slide_out = SLIDE_OUT_UP
+    elif tag == "fall-off":
+        technique.slide_out = SLIDE_OUT_DOWN
+    elif tag == "bend":
+        _read_bend(item, technique)
+    elif tag == "harmonic":
+        _read_harmonic(item, technique)
+    elif tag == "tap-hand":
+        technique.tapped = True
+    elif tag == "vibrato":
+        technique.vibrato = True
+
+
+def _read_bend(bend: ElementTree.Element, technique: Technique) -> None:
+    """A `<bend>`'s semitone depth, from one or more `<bend-alter>` values.
+
+    Each `<bend-alter>` states semitones, possibly fractional, and the deepest
+    point is what a single `bend_semitones` field can hold.
+    """
+    deepest = 0.0
+    for alter in bend.findall("bend-alter"):
+        text = alter.text
+        if text is None:
+            child = alter.find("alter")
+            text = child.text if child is not None else None
+        if not text:
+            continue
+        try:
+            value = float(text.strip())
+        except ValueError:
+            continue
+        if abs(value) > abs(deepest):
+            deepest = value
+    if deepest:
+        technique.bend_semitones = int(round(deepest))
+
+
+def _read_harmonic(harmonic: ElementTree.Element, technique: Technique) -> None:
+    """A `<harmonic>`'s flavour: natural, artificial or pinch."""
+    if harmonic.find("natural") is not None:
+        technique.harmonic = HARMONIC_NATURAL
+    elif harmonic.find("artificial") is not None:
+        technique.harmonic = HARMONIC_ARTIFICIAL
+    elif harmonic.find("pinched") is not None:
+        technique.harmonic = HARMONIC_PINCH
+
+
 @dataclass
 class _NotesWalk:
     """One part's walk, and everything it remembers between elements.
@@ -842,11 +957,13 @@ class _NotesWalk:
     # each `<harmony>` occupies. Separate from `notes` because a `<harmony>` can
     # precede nothing at all - see `HeadChange` and open-issues item 1.
     changes: List[HeadChange] = field(default_factory=list)
-    # The `<chord>` group being assembled at the current cursor: (pitch, length),
-    # together with the onset it started at, whether it ends a tie, and the lyrics
-    # on its first member. Flushed when the next unmarked note - or the bar line -
-    # proves the group is complete.
-    group: List[Tuple[int, int]] = field(default_factory=list)
+    # The `<chord>` group being assembled at the current cursor: (pitch, length,
+    # technique), together with the onset it started at, whether it ends a tie, and
+    # the lyrics on its first member. Flushed when the next unmarked note - or the
+    # bar line - proves the group is complete. The technique belongs to whichever
+    # group member is the melody (the highest pitch), so it rides on each entry and
+    # is taken with the one that wins.
+    group: List[Tuple[int, int, Optional[Technique]]] = field(default_factory=list)
     group_onset: int = 0
     group_tie: bool = False
     group_tuplet: bool = False
@@ -1121,7 +1238,7 @@ class _NotesWalk:
             # chord-melody part's top line is the tune and the rest is the
             # arrangement under it, so the reduction is the point, not a loss.
             self.skip("lower voices of a chord group")
-            self.group.append((pitch, length))
+            self.group.append((pitch, length, _read_technical(child)))
             return
         # An unmarked note ends whatever group was open: its own group starts
         # here, and the previous one is complete. The flush is therefore
@@ -1136,7 +1253,7 @@ class _NotesWalk:
         if self.group:
             self.flush()
             self.group.clear()
-        self.group.append((pitch, length))
+        self.group.append((pitch, length, _read_technical(child)))
         self.group_onset = onset
         self.group_tie = _stops_a_tie(child)
         self.group_tuplet = _is_tuplet(child)
@@ -1177,7 +1294,7 @@ class _NotesWalk:
         """
         if not self.group:
             return
-        pitch, length = max(self.group, key=lambda item: item[0])
+        pitch, length, technique = max(self.group, key=lambda item: item[0])
         if self.group_tie and self.notes and self.notes[-1].pitch == pitch:
             self.notes[-1].duration += length / self.divisions / 4.0
             return
@@ -1205,6 +1322,7 @@ class _NotesWalk:
                 quality=self.group_quality,
                 bass=self.group_bass,
                 lyrics=self.group_lyrics,
+                technique=technique,
             )
         )
 

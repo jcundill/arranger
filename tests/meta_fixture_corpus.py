@@ -45,7 +45,13 @@ from tests.support import (
 #: The files the repository deliberately does not generate.
 #: `synthetic_pickup_unmarked.musicxml` is a hand-written fixture reproducing the
 #: Blue Moon regression (an unmarked short first bar); it is not generator output.
-RETAINED = {"Trouble_in_Mind_Blues.musicxml", "synthetic_pickup_unmarked.musicxml"}
+#: `synthetic_techniques.musicxml` is hand-written because the generator does not
+#: emit `<technical>`; it pins the MusicXML technique read.
+RETAINED = {
+    "Trouble_in_Mind_Blues.musicxml",
+    "synthetic_pickup_unmarked.musicxml",
+    "synthetic_techniques.musicxml",
+}
 
 #: Names from the retired corpus. None may be committed again.
 RETIRED = {

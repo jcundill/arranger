@@ -36,6 +36,7 @@ dist/
 !tests/data/*.musicxml
 !tests/data/*.mxl
 leadsheet_export.json
+examples
 
 *.pdf
 

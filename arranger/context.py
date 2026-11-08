@@ -19,6 +19,8 @@ from typing import Mapping, Optional, Sequence, Tuple
 
 from musthe import Note
 
+from .step_types import ProgressionEntry
+
 
 @dataclass(frozen=True)
 class SlotTiming:
@@ -61,7 +63,7 @@ class SlotIdentity:
     Every route reads identity.
     """
 
-    progression: Sequence[Tuple[Optional[str], str]]
+    progression: Sequence[ProgressionEntry]
     index: int
 
 
@@ -92,7 +94,7 @@ class SlotArrangementFacts:
     playing rather than *where*.
     """
 
-    progression: Sequence[Tuple[Optional[str], str]]
+    progression: Sequence[ProgressionEntry]
     texture: str
     parts: Tuple[str, ...]
     melody_only: bool

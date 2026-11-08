@@ -26,7 +26,20 @@ from xml.etree import ElementTree
 
 from arranger import ChordParser
 from arranger.options import ArrangeOptions, Request
-from arranger.tuning import NO_CHORD
+from arranger.tuning import (
+    HARMONIC_ARTIFICIAL,
+    HARMONIC_NATURAL,
+    HARMONIC_PINCH,
+    LINK_HAMMER,
+    LINK_PULL,
+    NO_CHORD,
+    SLIDE_IN_ABOVE,
+    SLIDE_IN_BELOW,
+    SLIDE_LEGATO,
+    SLIDE_OUT_DOWN,
+    SLIDE_OUT_UP,
+    Technique,
+)
 from headxml import (
     Head,
     _key_label,
@@ -332,6 +345,95 @@ class TestLoading(unittest.TestCase):
         )
         self.assertIn("Neapolitan", " ".join(head.unmapped))
         self.assertTrue(any("cannot voice" in written for written in head.report))
+
+
+class TestTechniquesRead(unittest.TestCase):
+    """A `<note>`'s `<technical>` becomes `HeadNote.technique`.
+
+    The technique rides on the note the same way a chord or a lyric does, and
+    lands on `Voicing.technique` when the head is arranged - so a bend, a slide
+    or a hammer-on written into the score survives into the GP5 file.
+    """
+
+    def load(self, measures: str) -> Head:
+        path = write_score(score(measures))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    def _technique(self, technical: str) -> Technique:
+        """One bar holding one note carrying the given `<technical>` XML.
+
+        Returns the note's technique, failing the test when none was read.
+        """
+        head = self.load(
+            harmony("C", "major")
+            + f"<note>{technical}<pitch><step>E</step><octave>4</octave></pitch><duration>4</duration></note>"
+        )
+        technique = head.notes[0].technique
+        if technique is None:
+            self.fail("expected a technique to be read")
+        return technique
+
+    def test_a_hammer_on_sets_the_link(self):
+        self.assertIs(self._technique(
+            '<technical><hammer-on type="start" number="1"/></technical>'
+        ).link, LINK_HAMMER)
+
+    def test_a_pull_off_sets_the_link(self):
+        self.assertIs(self._technique(
+            '<technical><pull-off type="start" number="1"/></technical>'
+        ).link, LINK_PULL)
+
+    def test_a_bend_is_read_as_semitones(self):
+        self.assertEqual(self._technique(
+            "<technical><bend><bend-alter>2</bend-alter></bend></technical>"
+        ).bend_semitones, 2)
+
+    def test_a_fractional_bend_is_rounded(self):
+        self.assertEqual(self._technique(
+            "<technical><bend><bend-alter>1.5</bend-alter></bend></technical>"
+        ).bend_semitones, 2)
+
+    def test_a_slide_sets_legato(self):
+        self.assertIs(self._technique(
+            '<technical><slide type="start" number="1"/></technical>'
+        ).slide, SLIDE_LEGATO)
+
+    def test_a_scoop_slides_in_from_below(self):
+        self.assertIs(self._technique("<technical><scoop/></technical>").slide_in, SLIDE_IN_BELOW)
+
+    def test_a_plop_slides_in_from_above(self):
+        self.assertIs(self._technique("<technical><plop/></technical>").slide_in, SLIDE_IN_ABOVE)
+
+    def test_a_doit_slides_out_upward(self):
+        self.assertIs(self._technique("<technical><doit/></technical>").slide_out, SLIDE_OUT_UP)
+
+    def test_a_fall_off_slides_out_downward(self):
+        self.assertIs(self._technique("<technical><fall-off/></technical>").slide_out, SLIDE_OUT_DOWN)
+
+    def test_a_natural_harmonic(self):
+        self.assertIs(self._technique(
+            "<technical><harmonic><natural/></harmonic></technical>"
+        ).harmonic, HARMONIC_NATURAL)
+
+    def test_an_artificial_harmonic(self):
+        self.assertIs(self._technique(
+            "<technical><harmonic><artificial/></harmonic></technical>"
+        ).harmonic, HARMONIC_ARTIFICIAL)
+
+    def test_a_pinched_harmonic(self):
+        self.assertIs(self._technique(
+            "<technical><harmonic><pinched/></harmonic></technical>"
+        ).harmonic, HARMONIC_PINCH)
+
+    def test_tap_hand_and_vibrato(self):
+        technique = self._technique("<technical><tap-hand/><vibrato/></technical>")
+        self.assertTrue(technique.tapped)
+        self.assertTrue(technique.vibrato)
+
+    def test_a_note_without_technical_has_none(self):
+        head = self.load(harmony("C", "major") + note("E"))
+        self.assertIs(head.notes[0].technique, None)
 
 
 class TestRealScores(unittest.TestCase):

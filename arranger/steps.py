@@ -40,10 +40,11 @@ from .movement import (
 )
 from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .step_prepare import StepPreparation
-from .step_types import ArrangementStep, Voicing
+from .step_types import ArrangementStep, ProgressionEntry, Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    Technique,
 )
 
 __all__ = [
@@ -83,6 +84,7 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         notes: int = 3,
         bass_voice: bool = False,
+        technique: Optional[Technique] = None,
     ) -> List[Voicing]:
         """See `grips.get_comping_voicings`."""
         return _grips.get_comping_voicings(
@@ -91,6 +93,7 @@ class VoiceLeadingEngine:
             fret_max=fret_max,
             notes=notes,
             bass_voice=bass_voice,
+            technique=technique,
         )
 
     @classmethod
@@ -100,6 +103,7 @@ class VoiceLeadingEngine:
         chord_name: str,
         top_string: int = 5,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
+        technique: Optional[Technique] = None,
     ) -> List[Voicing]:
         """See `grips.get_grip_voicings` - the full docstring is there."""
         return _grips.get_grip_voicings(
@@ -107,6 +111,7 @@ class VoiceLeadingEngine:
             chord_name=chord_name,
             top_string=top_string,
             grips=grips,
+            technique=technique,
         )
 
     @classmethod
@@ -115,10 +120,11 @@ class VoiceLeadingEngine:
         melody_note: Note,
         chord_name: str,
         top_string: int = 5,
+        technique: Optional[Technique] = None,
     ) -> List[Voicing]:
         """See `grips.get_drop2_voicings`."""
         return _grips.get_drop2_voicings(
-            melody_note, chord_name=chord_name, top_string=top_string
+            melody_note, chord_name=chord_name, top_string=top_string, technique=technique
         )
 
     @classmethod
@@ -128,6 +134,7 @@ class VoiceLeadingEngine:
         chord_name: str,
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
+        technique: Optional[Technique] = None,
     ) -> List[Voicing]:
         """See `grips.get_octave_down_candidates`."""
         return _grips.get_octave_down_candidates(
@@ -135,6 +142,7 @@ class VoiceLeadingEngine:
             chord_name=chord_name,
             top_strings=top_strings,
             grips=grips,
+            technique=technique,
         )
 
     @classmethod
@@ -144,6 +152,7 @@ class VoiceLeadingEngine:
         chord_name: str,
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
+        technique: Optional[Technique] = None,
     ) -> List[Voicing]:
         """See `grips.get_all_grip_voicings`."""
         return _grips.get_all_grip_voicings(
@@ -151,6 +160,7 @@ class VoiceLeadingEngine:
             chord_name=chord_name,
             top_strings=top_strings,
             grips=grips,
+            technique=technique,
         )
 
     @classmethod
@@ -158,16 +168,20 @@ class VoiceLeadingEngine:
         cls,
         melody_note: Note,
         prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
+        technique: Optional[Technique] = None,
     ) -> List[Voicing]:
         """See `grips.get_melody_only_voicings`."""
-        return _grips.get_melody_only_voicings(melody_note, prefer)
+        return _grips.get_melody_only_voicings(melody_note, prefer, technique=technique)
 
     @classmethod
     def sustain_inner_voices(
-        cls, previous_voicing: Voicing | dict, melody_note: Note
+        cls, previous_voicing: Voicing | dict, melody_note: Note,
+        technique: Optional[Technique] = None,
     ) -> Optional[Voicing]:
         """See `grips.sustain_inner_voices`."""
-        return _grips.sustain_inner_voices(previous_voicing, melody_note)
+        return _grips.sustain_inner_voices(
+            previous_voicing, melody_note, technique=technique
+        )
 
     @classmethod
     def is_chord_tone(
@@ -219,7 +233,7 @@ class VoiceLeadingEngine:
     @classmethod
     def arrange_progression(
         cls,
-        progression: Sequence[Tuple[Optional[str], str]],
+        progression: Sequence[ProgressionEntry],
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         non_chord_tone: str = "extension",
         fret_min: int = NECK_FRET_MIN,

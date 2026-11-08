@@ -23,6 +23,9 @@ annotates them, and both sit below `steps`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Optional
+
 from musthe import Note
 
 # Standard tuning pitches in MIDI / Pitch class equivalents
@@ -131,6 +134,65 @@ SILENCE_NO_SHAPE = "no_shape"    # no shape in the palette, and the tune cannot 
 SILENCE_OUT_OF_REACH = "out_of_reach"  # no string reaches the written melody note
 SILENCE_TUNE_SILENT = "tune_silent"    # a melody-only selection at a note-less position
 
+# Value sets for the technique fields a `Voicing` may carry. A technique describes
+# *how* a fret is played on a string, so it rides on the voicing rather than on
+# the step. Defaults are all neutral: no technique, so existing output is unchanged.
+
+LINK_HAMMER = "hammer"
+LINK_PULL = "pull"
+
+SLIDE_LEGATO = "legato"
+SLIDE_SHIFT = "shift"
+SLIDE_IN_BELOW = "below"
+SLIDE_IN_ABOVE = "above"
+SLIDE_OUT_DOWN = "down"
+SLIDE_OUT_UP = "up"
+
+HARMONIC_NATURAL = "natural"
+HARMONIC_PINCH = "pinch"
+HARMONIC_ARTIFICIAL = "artificial"
+
+STROKE_DOWN = "down"
+STROKE_UP = "up"
+
+
+@dataclass
+class Technique:
+    """How a single fretted note is played: a bend, slide, harmonic, or similar.
+
+    Mirrors PDF-to-GP5's `TabEvent`/`ScoreNote` technique fields. Every field is
+    neutral by default, so a voicing built without a technique is indistinguishable
+    from one built before this existed, and existing snapshot output is unchanged.
+
+    A technique belongs to a voicing (a bend is tied to a specific string/fret),
+    not to an `ArrangementStep`; a step holds one voicing, so the technique rides
+    along on `Voicing.technique`.
+    """
+
+    # Bend
+    bend_semitones: int = 0
+    bend_release: bool = False
+    bend_pre: bool = False
+    # Slide / link (hammer/pull)
+    link: Optional[str] = None  # LINK_HAMMER / LINK_PULL
+    slide: Optional[str] = None  # SLIDE_LEGATO / SLIDE_SHIFT
+    slide_in: Optional[str] = None  # SLIDE_IN_BELOW / SLIDE_IN_ABOVE
+    slide_out: Optional[str] = None  # SLIDE_OUT_DOWN / SLIDE_OUT_UP
+    # Harmonic / tap / vibrato / mute / ring / grace
+    harmonic: Optional[str] = None  # HARMONIC_NATURAL / HARMONIC_PINCH / HARMONIC_ARTIFICIAL
+    tapped: bool = False
+    vibrato: bool = False
+    palm_mute: bool = False
+    let_ring: bool = False
+    grace: bool = False
+    grace_fret: Optional[int] = None
+    grace_hammer: bool = False
+    staccato: bool = False
+    # Strumming / dynamics
+    stroke: Optional[str] = None  # STROKE_DOWN / STROKE_UP
+    velocity: Optional[int] = None
+
+
 __all__ = [
     "STANDARD_TUNING",
     "STRING_NAMES",
@@ -151,6 +213,20 @@ __all__ = [
     "SILENCE_NO_SHAPE",
     "SILENCE_OUT_OF_REACH",
     "SILENCE_TUNE_SILENT",
+    "LINK_HAMMER",
+    "LINK_PULL",
+    "SLIDE_LEGATO",
+    "SLIDE_SHIFT",
+    "SLIDE_IN_BELOW",
+    "SLIDE_IN_ABOVE",
+    "SLIDE_OUT_DOWN",
+    "SLIDE_OUT_UP",
+    "HARMONIC_NATURAL",
+    "HARMONIC_PINCH",
+    "HARMONIC_ARTIFICIAL",
+    "STROKE_DOWN",
+    "STROKE_UP",
+    "Technique",
 ]
 
 

@@ -113,7 +113,10 @@ BUDGETS: Dict[str, Budget] = {
     # request (`ArrangeOptions(request=Request(chord_notes="targets"))`), and the call
     # that is three words longer does not fit the dict on one line any more.
     "arranger/demo.py": Budget(14, 154, 0),
-    "arranger/annotation.py": Budget(18, 124, 2),
+    # `arranger/annotation.py` — `_technique_clause` grew one technique clause
+    # (bend / slide / harmonic / hammer-pull / vibrato / mute / ring / grace /
+    # stroke), adding branches: complexity 18 -> 22.
+    "arranger/annotation.py": Budget(22, 124, 2),
     # The pure string layout an annotation is broken into: the clause units, the word
     # chunks and the line breaker. Split out of `annotation`, measured as it stood when
     # it moved, so the ceiling is the measurement.
@@ -151,8 +154,16 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grip_place.py": Budget(15, 63, 5),
     "arranger/grip_templates.py": Budget(16, 77, 8),
     "arranger/grip_requests.py": Budget(4, 38, 6),
-    "arranger/grip_comping.py": Budget(14, 73, 5),
-    "arranger/grips.py": Budget(12, 71, 4),
+    # `grip_comping.py` — `_search_comping_voicings` grew one line to attach
+    # `request.technique` to every comping candidate, and `get_comping_voicings`
+    # gained a `technique` parameter (techniques are metadata, not cost). Line
+    # ceiling 73 -> 74, parameter ceiling 5 -> 6.
+    "arranger/grip_comping.py": Budget(14, 74, 6),
+    # `arranger/grips.py` — `get_grip_voicings` / `get_all_grip_voicings` / the
+    # octave-down and melody-only builders each gained an optional `technique`
+    # parameter (metadata, not cost), and `get_grip_voicings`'s docstring grew:
+    # parameter ceiling 4 -> 5, line ceiling 71 -> 78.
+    "arranger/grips.py": Budget(12, 78, 5),
     "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/melody_alone.py": Budget(6, 74, 7),
     # The axes are one read of the request and two `settle_input_fact` calls, so the
@@ -168,8 +179,12 @@ BUDGETS: Dict[str, Budget] = {
     # a position (stab) override to `_chord_here`, so the module's complexity ceiling
     # grew from six to eight; the duration test itself was split into the small
     # `_sustain_attacks`.
-    "arranger/slot_plan.py": Budget(8, 77, 5),
-    "arranger/step_prepare.py": Budget(6, 73, 9),
+    # `arranger/slot_plan.py` — `slot_state` unpacks each progression entry
+    # defensively (metadata, not cost): lines 77 -> 78.
+    "arranger/slot_plan.py": Budget(8, 78, 5),
+    # `step_prepare.py` — `prepare_step` grew to read and forward `technique` from
+    # each progression entry (metadata, not cost): complexity 6 -> 7, lines 73 -> 77.
+    "arranger/step_prepare.py": Budget(7, 77, 9),
     # The value types and tab-cell primitives, split out of `tuning`: `Voicing`,
     # `ArrangementStep`, `Palette` and the six-line block renderer. Measured as it
     # stood when it moved, so the ceiling is the measurement.
@@ -213,7 +228,9 @@ BUDGETS: Dict[str, Budget] = {
     # comp line needs and the context cannot hold. The branch ceiling is
     # `_comping_choice`'s seven, which is one per narrowing and per value it threads.
     "arranger/routes.py": Budget(6, 101, 7),
-    "arranger/slots.py": Budget(8, 136, 5),
+    # `arranger/slots.py` — `arrange_slots` reads `technique` from each progression
+    # entry in the diminished retry (metadata, not cost): complexity 8 -> 9.
+    "arranger/slots.py": Budget(9, 136, 5),
     # The facade's `arrange_progression` loses the same five (16 -> 10).
     "arranger/steps.py": Budget(1, 39, 10),
     # The comp line: the band, the walk, the approach, the opening and the fill, each a
@@ -245,7 +262,10 @@ BUDGETS: Dict[str, Budget] = {
     # `note_name` is the longest function at 11 lines.
     "tuning.py": Budget(4, 11, 2),
     "headxml.py": Budget(17, 117, 8),
-    "tabgp.py": Budget(19, 151, 14),
+    # `tabgp.py` — `_apply_technique` added one branch per technique kind (bend,
+    # slide, harmonic, hammer-pull, vibrato / mute / ring / staccato / grace /
+    # velocity): complexity 19 -> 20.
+    "tabgp.py": Budget(20, 151, 14),
     "tabscore.py": Budget(10, 114, 5),
     # `tabstaff.py` is now a facade over `tabstaff_ascii` and `tabstaff_html`;
     # the grid placement moved to `tabstaff_grid`. All three share the column
@@ -329,6 +349,8 @@ TEST_SEAMS: Set[str] = {
     "test_palette -> arranger.annotation._criterion_phrase",
     # The explanation invariant reads the omission clause directly.
     "meta_explanations -> arranger.annotation._omission_clause",
+    # Technique tests read the technique clause directly.
+    "test_techniques -> arranger.annotation._technique_clause",
     # Bass tests read the walking bass's private helpers.
     "test_bass -> arranger.bass._bass_harmony",
     "test_bass -> arranger.bass._walking_bass_line",

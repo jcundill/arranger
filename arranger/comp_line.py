@@ -22,6 +22,7 @@ from .step_types import (
     TOP_OPENING,
     TOP_WALK_DOWN,
     TOP_WALK_UP,
+    ProgressionEntry,
     Voicing,
 )
 from .tuning import GuitarFretboard
@@ -238,7 +239,7 @@ def interpolate(previous_register: float, target: float, n: int) -> List[float]:
 
 
 def fill_run(
-    progression: Sequence[Tuple[Optional[str], str]], index: int
+    progression: Sequence[ProgressionEntry], index: int
 ) -> Tuple[int, int]:
     """Where a slot falls in the run of melody-less positions that contains it.
 
@@ -262,7 +263,7 @@ def fill_run(
 
 
 def next_melody(
-    progression: Sequence[Tuple[Optional[str], str]], index: int
+    progression: Sequence[ProgressionEntry], index: int
 ) -> Optional[str]:
     """The first written melody note after `index`, or None when the tune has ended.
 
@@ -271,7 +272,8 @@ def next_melody(
     returns on, not the rest it is filling.
     """
     for offset in range(index + 1, len(progression)):
-        note, _name = progression[offset]
+        entry = progression[offset]
+        note, _name = entry[0], entry[1]
         if note is not None:
             return note
     return None

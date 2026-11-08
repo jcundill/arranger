@@ -818,6 +818,11 @@ MISTY = os.path.join(DATA, "synthetic_pickup_common.musicxml")
 # one pitched note (§9.3 step A'). It is the fixture a melody-only loader would refuse.
 CHORDS_ONLY = os.path.join(DATA, "synthetic_chords_only.musicxml")
 
+# A lead sheet whose every written note carries a `<technical>`, one per measure,
+# so the importer's technique read survives the whole MusicXML -> arrangement ->
+# Voicing.technique -> GP5 path.
+SYNTHETIC_TECHNIQUES = os.path.join(DATA, "synthetic_techniques.musicxml")
+
 
 def score(
     measures: str,

@@ -555,13 +555,15 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **139** of the steps it arranges give up a chord tone, and every one of them is
+        # **147** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. The three grouped fixtures (5/4, 7/4, 12/8) account for the
         # last 36: they are melody-dense and every note carries a chord. The remaining
         # 4 come from `synthetic_pickup_unmarked.musicxml` (the unmarked cut-time pickup
         # bar, the Blue Moon regression): four of its five swept steps are four-voice
-        # shapes that each give up a tone. A corpus, grip table or rule that stops
-        # reaching the clause would otherwise leave every assertion here passing on its
+        # shapes that each give up a tone. The last 8 come from
+        # `synthetic_techniques.musicxml`: across the sweep's eleven configs, eight of
+        # its swept steps are four-voice shapes that each give up a tone.
+        # A corpus, grip table or rule that stops reaching the clause would otherwise leave every assertion here passing on its
         # absence.
         #
         # The sweep's every-beat config is a **requested rhythm** (`chord_on`), and the
@@ -569,10 +571,10 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # `grid="chord:freddie"` it replaced: one places the positions the caller named
         # and the other placed the bar's, so the totals moved with it.
         self.assertEqual(
-            omitted, 139, "the number of steps owing an omitted-tone clause moved"
+            omitted, 147, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1378** of the steps it arranges sound two or more
+        # measured over this sweep, **1446** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 320, all of them from notes the old corpus did not have.
@@ -586,10 +588,12 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # (`comp_line_route.leaving_room_for_the_tune`): on the pickup head's bar 3 beat 2
         # the comping shape moved below the held `F4`, so the melody step after it is no
         # longer the *same* shape re-struck - it states its voices in full rather than
-        # reading as `repeated`.
-        self.assertEqual(named, 1378, "the number of steps naming their voices moved")
+        # reading as `repeated`. The last 68 come from `synthetic_techniques.musicxml`:
+        # across the sweep's eleven configs, sixty-eight of its swept steps sound two or
+        # more upper voices on the singing route.
+        self.assertEqual(named, 1446, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1475** of the steps it arranges state a comping shape
+        # measured over this sweep, **3256** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
         # a list of degrees again. The grouped fixtures add 413, and the 116 rest fills
         # (`--chord-fills`) are the newest addition: a fill is a comping step with no
@@ -626,12 +630,14 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # voices - one fewer than its marked twin because bar 1 no longer carries the
         # invented beat-2 fill under the held melody. Its marked twin
         # `synthetic_pickup_cut` is already in the sweep and unchanged.
-                # The count was 1271 under the bar's adaptive resolution; it is 2815 under
+                # The count was 1271 under the bar's adaptive resolution; it is 3256 under
         # the 1/12 felt-beat grid because every comping bar now has a step at each
         # grid point rather than one per beat, so more steps state their voices. The
-        # detailed per-config sum from the old grid no longer applies term-for-term;
-        # only the headline number is pinned.
-        self.assertEqual(comping, 2815, "the number of comping lines naming a voice moved")
+        # 441 beyond 2815 come from `synthetic_techniques.musicxml`: across the sweep's
+        # eleven configs, four hundred and forty-one of its swept steps state a comping
+        # shape and name its voices. The detailed per-config sum from the old grid no
+        # longer applies term-for-term; only the headline number is pinned.
+        self.assertEqual(comping, 3256, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -856,6 +862,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_slash_bass_clause",
             "_sounding_clause",
             "_substitution_clause",
+            "_technique_clause",
             "_transposition_clause",
             "_window_clause",
         }

@@ -36,7 +36,7 @@ from musthe import Note
 from . import chords as _chords
 from .bass_place import BassNote, bass_placement
 from .fingers import can_fret
-from .step_types import ArrangementStep
+from .step_types import ArrangementStep, ProgressionEntry
 from .tuning import PITCH_CLASS_NAMES
 
 
@@ -187,7 +187,7 @@ def _carry(step: ArrangementStep, ringing: _Ring) -> None:
 
 
 def next_resolution_melody(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     index: int,
     onsets: Optional[Container[int]] = None,
 ) -> Optional[str]:
@@ -207,7 +207,8 @@ def next_resolution_melody(
     for offset in range(index + 1, len(progression)):
         if onsets is not None and offset not in onsets:
             continue
-        note_str, name = progression[offset]
+        entry = progression[offset]
+        note_str, name = entry[0], entry[1]
         if note_str is None:
             continue
         if _chords.is_chord_tone(Note(note_str), name):

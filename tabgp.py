@@ -60,7 +60,7 @@ import io
 from contextlib import suppress
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from arranger.step_types import ArrangementStep
+from arranger.step_types import ArrangementStep, Technique
 from tabscore import score_events, substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
@@ -411,6 +411,101 @@ def _measure_header(
     )
 
 
+def _apply_technique(gp: Any, note: Any, technique: Optional[Technique]) -> None:
+    """Writes one voicing's technique onto a PyGuitarPro `Note`'s effect.
+
+    Does nothing when `technique` is neutral, so a step without a technique emits
+    exactly the file it always did. GP5 represents hammer-on *and* pull-off as the
+    single `hammer` flag, and a grace note's length is the note it decorates, so the
+    grace fret is written as the effect's `fret`.
+    """
+    if technique is None:
+        return
+    effect = note.effect
+
+    # Bend: peak is quarter tones (50 units per semitone), three-point alphaTab
+    # curve so Guitar Pro and TuxGuitar draw the same shape.
+    if technique.bend_semitones:
+        peak = technique.bend_semitones * 2
+        if technique.bend_pre:
+            if technique.bend_release:
+                points = [gp.BendPoint(0, peak), gp.BendPoint(12, 0)]
+                bend_type = gp.BendType.prebendRelease
+            else:
+                points = [gp.BendPoint(0, peak), gp.BendPoint(12, peak)]
+                bend_type = gp.BendType.prebend
+        elif technique.bend_release:
+            points = [
+                gp.BendPoint(0, 0),
+                gp.BendPoint(3, peak),
+                gp.BendPoint(6, peak),
+                gp.BendPoint(9, 0),
+            ]
+            bend_type = gp.BendType.bendRelease
+        else:
+            points = [gp.BendPoint(0, 0), gp.BendPoint(12, peak)]
+            bend_type = gp.BendType.bend
+        effect.bend = gp.BendEffect(
+            type=bend_type,
+            value=technique.bend_semitones * 50,
+            points=points,
+        )
+
+    # Slide: legato vs shift, into-from-below/above, out-down/up.
+    if technique.slide:
+        effect.slides.append(gp.SlideType.legatoSlideTo)
+    if technique.slide_in == "below":
+        effect.slides.append(gp.SlideType.intoFromBelow)
+    elif technique.slide_in == "above":
+        effect.slides.append(gp.SlideType.intoFromAbove)
+    if technique.slide_out == "down":
+        effect.slides.append(gp.SlideType.outDownwards)
+    elif technique.slide_out == "up":
+        effect.slides.append(gp.SlideType.outUpwards)
+
+    # Harmonic: natural / pinch / artificial.
+    if technique.harmonic == "natural":
+        effect.harmonic = gp.NaturalHarmonic()
+    elif technique.harmonic == "pinch":
+        effect.harmonic = gp.PinchHarmonic()
+    elif technique.harmonic == "artificial":
+        harmonic = gp.ArtificialHarmonic()
+        # Pre-set pitch/octave so PyGuitarPro's writer does not need
+        # `note.realValue`, which requires a measure->track back-reference that
+        # is unavailable here. The pitch class is the fretted note's; the touch
+        # point is 12 frets above, which shares its pitch class.
+        string_pc = _STRING_PITCH_CLASSES.get(note.string, 0)
+        harmonic.pitch = gp.PitchClass((note.value + string_pc) % 12)
+        harmonic.octave = gp.Octave.ottava
+        effect.harmonic = harmonic
+
+    # Hammer / pull (GP5 expresses both as the hammer flag), vibrato, mute,
+    # ring, staccato.
+    if technique.link == "hammer" or technique.link == "pull":
+        effect.hammer = True
+    effect.vibrato = technique.vibrato
+    effect.palmMute = technique.palm_mute
+    effect.letRing = technique.let_ring
+    effect.staccato = technique.staccato
+
+    # Grace note: fret is the grace note's fret, the hammer flag says it is
+    # hammered/slid into the target.
+    if technique.grace:
+        transition = (
+            gp.GraceEffectTransition.hammer
+            if technique.grace_hammer
+            else gp.GraceEffectTransition.none
+        )
+        effect.grace = gp.GraceEffect(
+            fret=technique.grace_fret or 0,
+            transition=transition,
+        )
+
+    # Dynamics: velocity overrides the chart default when one is stated.
+    if technique.velocity is not None:
+        note.velocity = technique.velocity
+
+
 def _strike_notes(
     gp: Any,
     beat: Any,
@@ -447,18 +542,19 @@ def _strike_notes(
     """
     if step is None:
         return ringing
+    technique = step.voicing.technique
     for string_index, fret in _sounding_frets(step):
         gp_string = _GP_STRING_OFFSET - string_index
-        beat.notes.append(
-            gp.Note(
-                beat,
-                value=fret,
-                string=gp_string,
-                velocity=_VELOCITY,
-                # A continuation part carries the tie from the part before it.
-                type=(gp.NoteType.tie if continued else gp.NoteType.normal),
-            )
+        note = gp.Note(
+            beat,
+            value=fret,
+            string=gp_string,
+            velocity=_VELOCITY,
+            # A continuation part carries the tie from the part before it.
+            type=(gp.NoteType.tie if continued else gp.NoteType.normal),
         )
+        _apply_technique(gp, note, technique)
+        beat.notes.append(note)
         last_on_string[gp_string] = fret
     if step.bass_held and step.voicing.bass_string is not None and step.bass is not None:
         # The held thumb, as the continuation it is. `last_on_string` decides whether the
@@ -467,15 +563,15 @@ def _strike_notes(
         gp_string = _GP_STRING_OFFSET - step.voicing.bass_string
         fret = step.voicing.frets[step.voicing.bass_string]
         held = last_on_string.get(gp_string) == fret
-        beat.notes.append(
-            gp.Note(
-                beat,
-                value=fret,
-                string=gp_string,
-                velocity=_VELOCITY,
-                type=(gp.NoteType.tie if held else gp.NoteType.normal),
-            )
+        note = gp.Note(
+            beat,
+            value=fret,
+            string=gp_string,
+            velocity=_VELOCITY,
+            type=(gp.NoteType.tie if held else gp.NoteType.normal),
         )
+        _apply_technique(gp, note, technique)
+        beat.notes.append(note)
         last_on_string[gp_string] = fret
     if step.bass_only:
         if (part > 0 or not tie) and ringing is not None:
@@ -484,15 +580,15 @@ def _strike_notes(
             ):
                 gp_string = _GP_STRING_OFFSET - string_index
                 held = last_on_string.get(gp_string) == fret
-                beat.notes.append(
-                    gp.Note(
-                        beat,
-                        value=fret,
-                        string=gp_string,
-                        velocity=_VELOCITY,
-                        type=(gp.NoteType.tie if held else gp.NoteType.normal),
-                    )
+                note = gp.Note(
+                    beat,
+                    value=fret,
+                    string=gp_string,
+                    velocity=_VELOCITY,
+                    type=(gp.NoteType.tie if held else gp.NoteType.normal),
                 )
+                _apply_technique(gp, note, technique)
+                beat.notes.append(note)
                 last_on_string[gp_string] = fret
         return ringing
     # Any other step re-states the shape in full, so it becomes the one ringing. A
@@ -1131,6 +1227,12 @@ __all__ = ["format_gp5", "write_gp5"]
 
 
 _GP_STRING_OFFSET = 6
+
+# Standard-tuning open-string pitch classes, keyed by guitarpro's string number
+# (1 = high E … 6 = low E). `note.realValue = fret + string_pitch_class` needs the
+# measure->track back-reference, which PyGuitarPro's writer does not provide here,
+# so the artificial-harmonic pitch is computed from this table instead.
+_STRING_PITCH_CLASSES: Dict[int, int] = {1: 4, 2: 11, 3: 7, 4: 2, 5: 9, 6: 4}
 
 # The shortest note value a beat can carry, as a guitarpro Duration value. A
 # sixteenth is the practical floor: nothing this library generates is shorter than

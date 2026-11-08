@@ -37,6 +37,7 @@ from .parts import (
     parts_has_melody_only,
     parts_have_melody,
 )
+from .step_types import ProgressionEntry
 
 
 @dataclass(frozen=True)
@@ -285,7 +286,7 @@ class _Policies:
 
 
 def resolve_policies(
-    progression: Sequence[Tuple[Optional[str], str]],
+    progression: Sequence[ProgressionEntry],
     *,
     parts: Tuple[str, ...],
     texture: str,
